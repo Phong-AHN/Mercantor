@@ -1,3 +1,4 @@
+import { env } from '@relay/config';
 import {
   assessHealth,
   clock,
@@ -7,6 +8,7 @@ import {
   DEFAULT_INACTIVITY_DAYS,
   detectOpenBreaches,
   formatMoney,
+  renderNotificationEmail,
   STAGES,
   type AgingThresholds,
   type Team,
@@ -424,9 +426,91 @@ async function slaSweep(): Promise<void> {
   }
 
   if (queued.length > 0) {
-    await db.notification.createMany({ data: queued, skipDuplicates: true });
+    // `APPROVAL_PENDING` is the one type this sweep raises that is also in
+    // `URGENT_NOTIFICATION_TYPES` (apps/web/src/server/record.ts - keep the
+    // two lists in sync by hand, since this worker cannot import that web-only
+    // helper). The bulk `createMany` below can't say which rows were
+    // genuinely new versus silently skipped as a same-day repeat, so urgent
+    // ones go through a per-row upsert instead, the same freshness check
+    // `notify()` already uses, and only a fresh one earns an email + Slack DM.
+    const urgent = queued.filter((n) => n.type === 'APPROVAL_PENDING');
+    const rest = queued.filter((n) => n.type !== 'APPROVAL_PENDING');
+
+    if (rest.length > 0) {
+      await db.notification.createMany({ data: rest, skipDuplicates: true });
+    }
+
+    const fresh: Prisma.NotificationCreateManyInput[] = [];
+    for (const notification of urgent) {
+      const row = await db.notification.upsert({
+        where: {
+          userId_dedupeKey: { userId: notification.userId, dedupeKey: notification.dedupeKey! },
+        },
+        create: notification,
+        update: { title: notification.title },
+        select: { createdAt: true },
+      });
+      if (row.createdAt.getTime() === now.getTime()) fresh.push(notification);
+    }
+    if (fresh.length > 0) await queueUrgentApprovalDeliveries(fresh);
   }
   logger.info({ projects: projects.length, notifications: queued.length }, 'SLA sweep complete');
+}
+
+/**
+ * A pending-approval nag that stays unread deserves the same email + Slack DM
+ * every other urgent notification gets (D-039), not only an in-app row. This
+ * mirrors `queueUrgentNotificationDeliveries` in apps/web/src/server/record.ts
+ * rather than importing it - apps/worker cannot reach into apps/web's server
+ * helpers, the same boundary D-037 already ran into for its test fixtures.
+ */
+async function queueUrgentApprovalDeliveries(
+  notifications: readonly Prisma.NotificationCreateManyInput[],
+): Promise<void> {
+  const userIds = [...new Set(notifications.map((n) => n.userId))];
+  const recipients = await db.user.findMany({
+    where: { id: { in: userIds }, isActive: true },
+    select: { id: true, email: true, name: true },
+  });
+  const byId = new Map(recipients.map((recipient) => [recipient.id, recipient]));
+
+  for (const notification of notifications) {
+    const recipient = byId.get(notification.userId);
+    if (!recipient) continue;
+
+    const projectUrl = notification.href ? `${env().APP_URL}${notification.href}` : env().APP_URL;
+    const rendered = renderNotificationEmail({
+      recipientName: recipient.name,
+      title: notification.title,
+      body: notification.body ?? null,
+      projectUrl,
+    });
+
+    await db.outboxMessage.create({
+      data: {
+        projectId: notification.projectId ?? null,
+        provider: 'EMAIL',
+        kind: 'notification',
+        payload: {
+          to: [{ name: recipient.name, email: recipient.email }],
+          subject: rendered.subject,
+          text: rendered.text,
+          html: rendered.html,
+        },
+        availableAt: clock.now(),
+      },
+    });
+
+    await db.outboxMessage.create({
+      data: {
+        projectId: notification.projectId ?? null,
+        provider: 'SLACK',
+        kind: 'notification_dm',
+        payload: { email: recipient.email, title: notification.title, body: notification.body },
+        availableAt: clock.now(),
+      },
+    });
+  }
 }
 
 async function purgeSessions(): Promise<void> {

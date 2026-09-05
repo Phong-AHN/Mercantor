@@ -110,6 +110,7 @@ export function CommentThread({
           <CommentRow
             code={code}
             comment={comment}
+            repliesByParent={repliesByParent}
             now={now}
             people={people}
             visibilities={visibilities}
@@ -117,33 +118,23 @@ export function CommentThread({
             canManage={canManage}
             canUploadFiles={canUploadFiles}
           />
-          {(repliesByParent.get(comment.id)?.length ?? 0) > 0 && (
-            <ul className="border-line ml-[2.75rem] mt-3 space-y-3 border-l pl-4">
-              {repliesByParent.get(comment.id)!.map((reply) => (
-                <li key={reply.id}>
-                  <CommentRow
-                    code={code}
-                    comment={reply}
-                    now={now}
-                    people={people}
-                    visibilities={visibilities}
-                    canReply={canReply}
-                    canManage={canManage}
-                    canUploadFiles={canUploadFiles}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
         </li>
       ))}
     </ul>
   );
 }
 
+/**
+ * Recursive on purpose: a reply is itself a comment, and D-032 means "can
+ * itself be replied to" literally, not just one level deep. Rendering only
+ * looks up `repliesByParent` for the comment it was handed - a flat,
+ * one-level lookup here silently drops any reply to a reply, since nothing
+ * would ever query that grandchild's own entry in the map.
+ */
 function CommentRow({
   code,
   comment,
+  repliesByParent,
   now,
   people,
   visibilities,
@@ -153,6 +144,7 @@ function CommentRow({
 }: {
   code: string;
   comment: ThreadComment;
+  repliesByParent: Map<string, ThreadComment[]>;
   now: Date;
   people: Person[];
   visibilities: CommentVisibility[];
@@ -160,6 +152,7 @@ function CommentRow({
   canManage: boolean;
   canUploadFiles: boolean;
 }) {
+  const replies = repliesByParent.get(comment.id) ?? [];
   const [replying, setReplying] = useState(false);
 
   return (
@@ -278,6 +271,26 @@ function CommentRow({
               onPosted={() => setReplying(false)}
             />
           </div>
+        )}
+
+        {replies.length > 0 && (
+          <ul className="border-line mt-3 space-y-3 border-l pl-4">
+            {replies.map((reply) => (
+              <li key={reply.id}>
+                <CommentRow
+                  code={code}
+                  comment={reply}
+                  repliesByParent={repliesByParent}
+                  now={now}
+                  people={people}
+                  visibilities={visibilities}
+                  canReply={canReply}
+                  canManage={canManage}
+                  canUploadFiles={canUploadFiles}
+                />
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>

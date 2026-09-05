@@ -125,6 +125,23 @@ export const confirmUploadAction = defineAction({
     }
 
     const attachment = await transaction(async (tx) => {
+      // A file attached to a comment inherits that comment's own visibility
+      // for the activity row - otherwise "File attached: ..." is written as
+      // EVERYONE regardless, and a file dropped onto an INTERNAL_AHN note
+      // (D-009's boundary) would announce its existence and label to
+      // SHOPLINE and the merchant even though the note itself stays hidden.
+      let activityVisibility: 'INTERNAL_AHN' | 'AHN_SHOPLINE' | 'EVERYONE' = 'EVERYONE';
+      if (input.commentId) {
+        const comment = await tx.comment.findUnique({
+          where: { id: input.commentId },
+          select: { projectId: true, visibility: true },
+        });
+        if (!comment || comment.projectId !== project.id) {
+          throw new ForbiddenError('That comment does not belong to this project.');
+        }
+        activityVisibility = comment.visibility;
+      }
+
       const created = await tx.attachment.create({
         data: {
           projectId: project.id,
@@ -155,7 +172,7 @@ export const confirmUploadAction = defineAction({
         actorId: ctx.principal.id,
         summary: `File attached: ${input.label}`,
         detail: `${declaredType.label} - ${formatFileSize(head.sizeBytes)}`,
-        visibility: 'EVERYONE',
+        visibility: activityVisibility,
         payload: { attachmentId: created.id },
       });
 

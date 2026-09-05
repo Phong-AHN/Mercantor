@@ -1,7 +1,12 @@
 import { env } from '@relay/config';
 import { clock, STAGES, type ProjectStage } from '@relay/core';
 import { db } from '@relay/db';
-import { clickUpStatusFor, integrations, type ProviderResult } from '@relay/integrations';
+import {
+  clickUpStatusFor,
+  integrations,
+  type ProviderError,
+  type ProviderResult,
+} from '@relay/integrations';
 import { logger } from '@relay/observability';
 import type { IntegrationJob } from '@relay/queue';
 
@@ -119,6 +124,16 @@ function backoffMs(attempts: number): number {
   return Math.min(30 * 60_000, 30_000 * 2 ** (attempts - 1));
 }
 
+/**
+ * Only a genuine "no Slack account" is a skip. A rate limit or an outage
+ * during the lookup itself is retryable like any other delivery failure -
+ * treating it as a skip would mark the row SKIPPED forever, the one
+ * terminal status the retry sweep never revisits.
+ */
+export function isPermanentSlackLookupFailure(error: ProviderError | undefined): boolean {
+  return error?.retryable === false;
+}
+
 async function deliver(
   provider: 'SLACK' | 'CLICKUP' | 'EMAIL',
   kind: string,
@@ -131,7 +146,11 @@ async function deliver(
     if (kind === 'notification_dm') {
       const lookup = await registry.slack.findUserByEmail(String(payload.email ?? ''));
       if (!lookup.ok || !lookup.data) {
-        return { ok: false, skip: true, error: lookup.error };
+        return {
+          ok: false,
+          skip: isPermanentSlackLookupFailure(lookup.error),
+          error: lookup.error,
+        };
       }
       return registry.slack.postUpdate({
         destination: { channelId: lookup.data.slackUserId },

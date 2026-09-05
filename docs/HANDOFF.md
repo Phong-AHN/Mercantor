@@ -22,8 +22,8 @@ make one of them a field somebody has to remember to update, it is the wrong cha
 
 **Working, verified, demonstrable against seeded data:**
 
-- 38 routes build; `pnpm verify` is green (format, lint, typecheck, 52 unit tests)
-- `pnpm test:integration` is green against a real Postgres and a real MinIO — 58 tests over 13
+- 38 routes build; `pnpm verify` is green (format, lint, typecheck, 55 unit tests)
+- `pnpm test:integration` is green against a real Postgres and a real MinIO — 61 tests over 13
   files, proving the blocker-handover arithmetic, the handoff readiness gate, comment visibility
   per role, the outbox's transactional atomicity, that a launch blocker (and only a launch
   blocker, not an ordinary issue) queues one notification email and one Slack DM per recipient,
@@ -85,7 +85,12 @@ make one of them a field somebody has to remember to update, it is the wrong cha
 - The worker boots, installs five schedules, and answers `/health` and `/health/deep`
 
 **Known gaps: none right now.** Every item in the original brief, including all of Phase 2, is
-built - see `REQUIREMENTS-COVERAGE.md`.
+built - see `REQUIREMENTS-COVERAGE.md`. A full manual review once nothing remained (D-043, no git
+history yet to give `/code-review` a diff) found and fixed five real bugs: a rejected approval's
+note surviving its own re-request, a reply-to-a-reply that saved correctly and then rendered to
+nobody, a file attached to an internal-only comment announcing itself on every feed anyway, a
+transient Slack lookup failure marked exactly like "no Slack account" and never retried, and the
+SLA sweep's daily approval nag never getting the urgent email/Slack delivery its own type promises.
 
 ---
 

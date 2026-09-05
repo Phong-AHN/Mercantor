@@ -351,6 +351,9 @@ export async function autoRequestApprovals(
         requestedAt: now,
         decidedById: null,
         decidedAt: null,
+        // Otherwise a prior rejection's reason survives under the new
+        // PENDING status, indistinguishable from a live comment on this cycle.
+        notes: null,
       },
     });
 

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '@relay/db';
 import { headObject } from '@relay/storage';
+import { postCommentAction } from '@/features/activity/actions';
 import {
   cleanupFixtures,
   createTestProject,
@@ -135,6 +136,88 @@ describe('file upload', () => {
       where: { storageKey: requested.data.key },
     });
     expect(attachment).toBeNull();
+  });
+
+  it('a file attached to an INTERNAL_AHN comment logs its activity row at that same visibility, never EVERYONE', async () => {
+    const posted = await postCommentAction({
+      code: projectCode,
+      body: 'INTERNAL: the merchant disputed this invoice, do not mention it yet.',
+      visibility: 'INTERNAL_AHN',
+      category: 'GENERAL_UPDATE',
+      status: 'NONE',
+      mentions: [],
+      alsoSlack: false,
+    });
+    expect(posted.ok).toBe(true);
+    const comment = await db.comment.findFirstOrThrow({
+      where: { projectId, visibility: 'INTERNAL_AHN' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+
+    const requested = await requestUploadAction({
+      code: projectCode,
+      contentType: 'image/png',
+      sizeBytes: PNG_BYTES.length,
+    });
+    expect(requested.ok).toBe(true);
+    if (!requested.ok) throw new Error('unreachable');
+    await postToPresignedUrl(requested.data.url, requested.data.fields, PNG_BYTES, 'a.png');
+
+    const confirmed = await confirmUploadAction({
+      code: projectCode,
+      key: requested.data.key,
+      label: 'credit-dispute-details.png',
+      contentType: requested.data.mimeType,
+      commentId: comment.id,
+    });
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) throw new Error('unreachable');
+
+    const activity = await db.activityEvent.findFirstOrThrow({
+      where: {
+        projectId,
+        type: 'ASSET_STATUS_CHANGED',
+        summary: 'File attached: credit-dispute-details.png',
+      },
+      orderBy: { occurredAt: 'desc' },
+      select: { visibility: true },
+    });
+    expect(activity.visibility).toBe('INTERNAL_AHN');
+  });
+
+  it('refuses to attach a file against a comment id from another project', async () => {
+    const other = await createTestProject({ as: pm, ahnProjectManagerId: pm.id });
+    const otherComment = await db.comment.create({
+      data: {
+        projectId: other.id,
+        authorId: pm.id,
+        body: 'A note on the other project.',
+        category: 'GENERAL_UPDATE',
+        visibility: 'AHN_SHOPLINE',
+      },
+      select: { id: true },
+    });
+
+    const requested = await requestUploadAction({
+      code: projectCode,
+      contentType: 'image/png',
+      sizeBytes: PNG_BYTES.length,
+    });
+    expect(requested.ok).toBe(true);
+    if (!requested.ok) throw new Error('unreachable');
+    await postToPresignedUrl(requested.data.url, requested.data.fields, PNG_BYTES, 'a.png');
+
+    const confirmed = await confirmUploadAction({
+      code: projectCode,
+      key: requested.data.key,
+      label: 'Cross-project comment',
+      contentType: requested.data.mimeType,
+      commentId: otherComment.id,
+    });
+    expect(confirmed.ok).toBe(false);
+    if (confirmed.ok) throw new Error('unreachable');
+    expect(confirmed.code).toBe('FORBIDDEN');
   });
 
   it('refuses to confirm a key presigned for a different project', async () => {

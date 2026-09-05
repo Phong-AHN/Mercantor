@@ -468,3 +468,78 @@ and hover tooltips, but neither puts the actual value in a text token near the m
 value label (selective - non-zero bars only, in `text-ink-soft`, never the series colour) was added
 above each bar, which is the fix the skill calls for and a small usability improvement on top,
 verified against a real screenshot in both themes.
+
+**D-043 — A full manual review of D-031 through D-042, once every item in the brief was built.**
+With nothing left in the original plan, and no git history yet to give `/code-review` a diff to
+work from (`git init` plus one baseline commit fixed that for future changes, but not for reviewing
+everything that led up to it), a subagent read every feature's implementation against its own
+decision entry and reported findings by hand instead. Five were real, each verified by reproducing
+the exact failure path before it was trusted, then fixed and covered by a new test - not reported
+and left for later.
+
+1. **A rejected approval's reason survived its own re-request.** `autoRequestApprovals`
+   (`apps/web/src/features/projects/mutations.ts`) reopens a `CHANGES_REQUESTED` or `REJECTED`
+   approval as `PENDING` on re-entering the stage (D-038), but its `upsert`'s `update` branch never
+   touched `notes` - unlike the manual path, `requestApprovalAction`, which always clears it. A
+   `CHANGES_REQUESTED` note ("the header logo is wrong") stayed attached and rendered under the
+   fresh `PENDING` status on both the AHN and portal approval pages, indistinguishable from a live
+   note on the new cycle. Fixed with one line (`notes: null`); the existing rework-loop integration
+   test already re-requests an approval after a rejection, so it only needed the assertion added.
+
+2. **A reply to a reply was accepted, stored, and then never rendered - to anyone, ever.** D-032
+   says a reply "can itself be replied to"; the UI's "Reply" button rendered on every comment row
+   including a reply, with no depth check, and `postCommentAction` only checks a parent is on the
+   same project. But `CommentThread` (`comment-thread.tsx`) only ever looked up
+   `repliesByParent.get(topLevelComment.id)` - a reply's own entry in that map was built correctly
+   by `groupThreads` and then never queried by anything. The write succeeded, the data was correct,
+   and the second reply simply vanished from view for every viewer, forever. Fixed by making
+   `CommentRow` recursive - it now renders its own `repliesByParent.get(comment.id)` nested inside
+   itself, at any depth, the same bordered/indented treatment one level deeper each time.
+   `scripts/thread-smoke.mjs` had already been asserting the "Reply" button exists on a reply, which
+   is exactly why this shipped unnoticed: existence of the affordance was checked, not that using it
+   actually renders something. It now posts through it and asserts the grandchild reply appears -
+   and its own `replyItem` locator turned out to need `.last()` instead of `.first()`, since a
+   reply's `<li>` nests inside its parent's, so a plain `hasText` match resolves the parent `<li>`
+   first.
+
+3. **A file attached to an `INTERNAL_AHN` comment announced itself to everyone anyway.**
+   `confirmUploadAction`'s `recordActivity` call hardcoded `visibility: 'EVERYONE'` for every
+   attachment target, comments included. D-009's whole point is that an internal note's contents
+   never reach SHOPLINE or the merchant - but the activity row for a file dropped onto one said
+   "File attached: <label>" at `EVERYONE`, appearing on every feed regardless of who could see the
+   note it was attached to. The label alone is enough to leak what an internal conversation is
+   about. Fixed by looking up the parent comment's own `visibility` inside the same transaction and
+   using that instead - which also needed a same-project check on the comment id, the same
+   ownership guard the presigned storage key already gets, since nothing had verified that before.
+
+4. **A rate limit during a Slack lookup was marked exactly like "this person has no Slack
+   account" - permanently, never retried.** `deliver()`'s `notification_dm` branch
+   (`apps/worker/src/processors/integrations.ts`) set `skip: true` for any lookup failure at all.
+   `ProviderResult.skip` exists specifically for the expected, harmless case (D-039); a transient
+   `UNAVAILABLE` from Slack's API is `retryable: true` on the exact same shape and was being treated
+   identically - `SKIPPED` is a terminal status the two-minute retry sweep never revisits, so a
+   launch-blocker DM lost to a momentary rate limit was gone for good, not merely delayed. Fixed by
+   checking `error.retryable === false` before treating a lookup failure as a skip, extracted into
+   `isPermanentSlackLookupFailure` so the one-line decision has its own name and its own unit test
+   rather than living unnamed inside a conditional.
+
+5. **`slaSweep`'s daily approval nag never got the urgent delivery its own type promises.**
+   `APPROVAL_PENDING` is in `URGENT_NOTIFICATION_TYPES` (apps/web/src/server/record.ts) - meant to
+   also reach someone by email and Slack DM, not only as an in-app row. But `slaSweep`
+   (`apps/worker/src/processors/maintenance.ts`) writes its notifications with a bulk
+   `db.notification.createMany(...)` directly, never through `notify()`, so a stale pending
+   approval nagged about daily by the sweep never got the "urgent" half of urgent at all - only the
+   one raised at request time did. `apps/worker` cannot import `apps/web`'s server helpers (the same
+   boundary D-037 already hit for its test fixtures), so rather than a cross-package refactor, the
+   sweep now splits its queued notifications, bulk-inserts the non-urgent ones unchanged, and
+   upserts `APPROVAL_PENDING` ones individually - the same freshness-by-timestamp trick `notify()`
+   uses - to learn which are genuinely new before queuing an email and a Slack DM for exactly those.
+   The duplication with `queueUrgentNotificationDeliveries` is deliberate and cross-referenced in
+   both places rather than hidden; unifying it into one shared package is a real improvement but a
+   larger, separate change than a review pass should make opportunistically.
+
+All five are covered by a new or extended test - three integration (`actions.integration.test.ts`,
+`attachments/actions.integration.test.ts`, `maintenance.integration.test.ts`), one unit
+(`integrations.test.ts`), and one live browser check (`thread-smoke.mjs`) - and `pnpm verify`,
+`pnpm test:integration`, both production builds, and the full smoke-script suite were all re-run
+clean afterward.

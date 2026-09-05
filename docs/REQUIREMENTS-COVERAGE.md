@@ -273,17 +273,20 @@ wired; each has its own decision entry above and its own smoke script in `script
 ## Known gaps, stated plainly
 
 None. Every requirement in `requirement.txt`, Phase 1 and Phase 2 both, is built and verified live.
+A full manual review once nothing remained (D-043) found and fixed five real bugs across earlier
+decisions - see D-043 for what they were and how each was verified.
 
 ## Test coverage
 
 Three layers, each testing something the other two cannot:
 
-- **Unit tests** (`pnpm test`, 52 tests) — the SLA maths, the state machine, RBAC, password
+- **Unit tests** (`pnpm test`, 55 tests) — the SLA maths, the state machine, RBAC, password
   hashing, the portfolio CSV's escaping and column rules (D-040), which SLA breaches should be
-  open, dated to the exact crossing, purely from the time model already computed (D-041), and the
-  calendar-month bucketing behind the analytics trends - including a year boundary (D-042), with
-  no infrastructure and no I/O.
-- **Integration tests** (`pnpm test:integration`, 58 tests over 13 files) — the real exported
+  open, dated to the exact crossing, purely from the time model already computed (D-041), the
+  calendar-month bucketing behind the analytics trends - including a year boundary (D-042), and
+  that a Slack lookup failure is only ever a permanent skip when it is genuinely non-retryable
+  (D-043), with no infrastructure and no I/O.
+- **Integration tests** (`pnpm test:integration`, 61 tests over 13 files) — the real exported
   server actions (and, for the first time, a real worker processor - see D-037) against a real
   Postgres, through a harness that mocks only `next/headers`, `next/cache` and `server-only` (see
   `apps/web/test/`). They prove: the blocker-handover arithmetic writes the right rows with no gap
@@ -310,9 +313,13 @@ Three layers, each testing something the other two cannot:
   exact crossing and never duplicates, a launch breach resolves once its target date is pushed out
   (and never earlier than it started, even against an earlier "now"), and `moveStage` closes a
   stage breach for the stage being left and a launch breach the moment the project completes,
-  leaving an unrelated breach alone (D-041); and analytics trends bucket started/launched projects
+  leaving an unrelated breach alone (D-041); analytics trends bucket started/launched projects
   and SLA breaches into the correct calendar month, average cycle time correctly per month, and
-  exclude a project outside the trailing window entirely (D-042).
+  exclude a project outside the trailing window entirely (D-042); and, from the D-043 review, a
+  re-requested approval's stale rejection note is cleared, a file attached to an `INTERNAL_AHN`
+  comment logs its activity at that same visibility rather than `EVERYONE`, refusing one attached
+  against a comment id from another project, and the SLA sweep's approval nag queues an email and a
+  Slack DM the first time and neither again the same day.
 - **End-to-end** (`node scripts/e2e-smoke.mjs`, 11 checks; `node scripts/upload-smoke.mjs`, 7
   checks; `node scripts/change-request-smoke.mjs`, 8 checks; `node scripts/thread-smoke.mjs`, 6
   checks; `node scripts/clickup-task-smoke.mjs`, 4 checks;

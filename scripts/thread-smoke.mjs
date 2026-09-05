@@ -21,6 +21,7 @@ const check = (name, ok, detail = '') => {
 const stamp = Date.now();
 const rootText = `Smoke thread root ${stamp}`;
 const replyText = `Smoke thread reply ${stamp}`;
+const grandchildText = `Smoke thread reply-to-reply ${stamp}`;
 
 const browser = await chromium.launch({ executablePath: CHROME });
 const context = await browser.newContext({ viewport: { width: 1560, height: 1000 } });
@@ -59,7 +60,11 @@ try {
   await replyBox.fill(replyText);
   await rootItem.getByRole('button', { name: 'Reply', exact: true }).last().click();
 
-  const replyItem = page.locator('li', { hasText: replyText }).first();
+  // `.last()`, not `.first()`: replies now render nested inside their
+  // parent's own `<li>` (D-032's recursive fix), so the parent's `<li>` also
+  // contains `replyText` as descendant text and matches this locator too -
+  // in document order the parent comes first, the reply's own `<li>` last.
+  const replyItem = page.locator('li', { hasText: replyText }).last();
   const replyVisible = await replyItem
     .waitFor({ state: 'visible', timeout: 20000 })
     .then(() => true)
@@ -67,13 +72,29 @@ try {
   check('The reply appears nested under the parent', replyVisible);
 
   if (replyVisible) {
-    // The reply's own "Reply" toggle should exist too - it is just another comment.
-    const nested = await replyItem
-      .getByRole('button', { name: 'Reply' })
+    // The reply's own "Reply" toggle should exist too - it is just another
+    // comment - and posting through it must actually render the grandchild,
+    // not only offer the button: `groupThreads` bucketing a reply-to-a-reply
+    // correctly is not the same as something ever rendering that bucket.
+    await replyItem.getByRole('button', { name: 'Reply' }).click();
+    const nestedReplyBox = replyItem.getByLabel('Write a reply');
+    const nestedBoxVisible = await nestedReplyBox
       .waitFor({ state: 'visible', timeout: 15000 })
       .then(() => true)
       .catch(() => false);
-    check('A reply can itself be replied to', nested);
+    check('A reply can itself be replied to', nestedBoxVisible);
+
+    if (nestedBoxVisible) {
+      await nestedReplyBox.fill(grandchildText);
+      await replyItem.getByRole('button', { name: 'Reply', exact: true }).last().click();
+
+      const grandchildItem = page.locator('li', { hasText: grandchildText }).last();
+      const grandchildVisible = await grandchildItem
+        .waitFor({ state: 'visible', timeout: 20000 })
+        .then(() => true)
+        .catch(() => false);
+      check('A reply to a reply actually renders, nested under it', grandchildVisible);
+    }
   }
 
   // The portal approval pipeline view - a fresh, signed-out context so the

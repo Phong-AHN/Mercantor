@@ -51,6 +51,43 @@ async function createMinimalProject(): Promise<{ projectId: string; pmId: string
   return { projectId: project.id, pmId: pm.id };
 }
 
+async function createProjectWithPendingApproval(): Promise<{
+  projectId: string;
+  pm: { id: string; email: string; name: string };
+}> {
+  const suffix = randomUUID().slice(0, 8);
+  const merchant = await db.merchant.create({
+    data: { name: `Approval Sweep Merchant ${suffix}` },
+  });
+  const pm = await db.user.create({
+    data: {
+      email: `approval-sweep-pm-${suffix}@relay.test`,
+      name: `Approval Sweep PM ${suffix}`,
+      passwordHash: 'scrypt$1$1$1$dW51c2Vk$dW51c2Vk',
+      role: 'AHN_PROJECT_MANAGER',
+      team: 'AHN',
+    },
+    select: { id: true, email: true, name: true },
+  });
+  const project = await db.project.create({
+    data: {
+      code: `PRJ-APPROVAL-${suffix}`,
+      merchantId: merchant.id,
+      ahnProjectManagerId: pm.id,
+      startDate: new Date('2026-01-01T00:00:00.000Z'),
+    },
+  });
+  await db.approval.create({
+    data: {
+      projectId: project.id,
+      type: 'DESIGN',
+      status: 'PENDING',
+      requestedAt: new Date('2026-01-01T00:00:00.000Z'),
+    },
+  });
+  return { projectId: project.id, pm };
+}
+
 async function cleanup(projectId: string): Promise<void> {
   const project = await db.project.findUnique({
     where: { id: projectId },
@@ -271,6 +308,53 @@ describe('SLA breach detection (D-041)', () => {
       expect(resolved.resolvedAt).not.toBeNull();
       expect(resolved.resolvedAt!.getTime()).toBeGreaterThanOrEqual(resolved.startedAt.getTime());
       expect(resolved.resolvedAt!.toISOString()).toBe(resolved.startedAt.toISOString());
+    } finally {
+      await cleanup(projectId);
+    }
+  });
+});
+
+/**
+ * `APPROVAL_PENDING` is the one type this sweep raises that is also urgent
+ * (`URGENT_NOTIFICATION_TYPES` in apps/web/src/server/record.ts) - a stale
+ * approval nobody has decided on deserves the same email + Slack DM every
+ * other urgent notification gets, not only an in-app row nobody may be
+ * looking at. Found during a manual review: the sweep wrote the in-app
+ * `Notification` directly via `createMany`, bypassing `notify()` entirely.
+ */
+describe('SLA sweep urgent delivery for a pending approval', () => {
+  afterEach(resetClock);
+
+  it('queues an email and a Slack DM the first time, and neither again the same day', async () => {
+    const { projectId, pm } = await createProjectWithPendingApproval();
+    try {
+      setClock(fixedClock('2026-09-20T09:00:00.000Z'));
+      await processMaintenance({ task: 'sla-sweep' });
+
+      const notification = await db.notification.findFirstOrThrow({
+        where: { userId: pm.id, projectId, type: 'APPROVAL_PENDING' },
+      });
+      expect(notification.dedupeKey).toContain('2026-09-20');
+
+      const emails = await db.outboxMessage.findMany({
+        where: { projectId, provider: 'EMAIL', kind: 'notification' },
+      });
+      const dms = await db.outboxMessage.findMany({
+        where: { projectId, provider: 'SLACK', kind: 'notification_dm' },
+      });
+      expect(emails).toHaveLength(1);
+      expect(dms).toHaveLength(1);
+      expect((dms[0]?.payload as { email: string }).email).toBe(pm.email);
+      expect((emails[0]?.payload as { to: { email: string }[] }).to[0]?.email).toBe(pm.email);
+
+      // Later the same day: the same dedupe key, no second delivery queued.
+      setClock(fixedClock('2026-09-20T21:00:00.000Z'));
+      await processMaintenance({ task: 'sla-sweep' });
+
+      const emailsAfter = await db.outboxMessage.findMany({
+        where: { projectId, provider: 'EMAIL', kind: 'notification' },
+      });
+      expect(emailsAfter).toHaveLength(1);
     } finally {
       await cleanup(projectId);
     }

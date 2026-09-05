@@ -123,6 +123,9 @@ describe('automated approval requests', () => {
     development = await approvalOf('DEVELOPMENT');
     expect(development?.status).toBe('PENDING');
     expect(development?.requestedById).toBeNull();
+    // Otherwise "The checkout flow regressed" would still show under the
+    // new PENDING status, indistinguishable from a live note on this cycle.
+    expect(development?.notes).toBeNull();
   });
 });
 
