@@ -1,0 +1,36 @@
+{
+  "name": "@relay/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@relay/auth": "workspace:*",
+    "@relay/config": "workspace:*",
+    "@relay/core": "workspace:*",
+    "@relay/db": "workspace:*",
+    "@relay/integrations": "workspace:*",
+    "@relay/observability": "workspace:*",
+    "@relay/queue": "workspace:*",
+    "@relay/rbac": "workspace:*",
+    "@relay/storage": "workspace:*",
+    "@relay/ui": "workspace:*",
+    "lucide-react": "^0.545.0",
+    "next": "^15.5.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^3.25.76",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.16",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.1",
+    "tailwindcss": "^4.1.16"
+  }
+}

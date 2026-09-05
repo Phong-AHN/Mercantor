@@ -1,0 +1,6 @@
+node_modules
+.next
+dist
+pnpm-lock.yaml
+docs/_legacy-ahn-orbit
+packages/db/prisma/migrations

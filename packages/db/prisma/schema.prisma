@@ -1,0 +1,1083 @@
+// Relay - AHN x SHOPLINE Migration Portal
+//
+// One merchant = one Project = one source of truth. Slack, ClickUp and email
+// hang off that record as integrations; none of them owns status.
+//
+// Conventions carried over from AHN Orbit:
+//   - UUIDv7 primary keys, so ids sort by creation time
+//   - Timestamptz(3) everywhere, all values stored in UTC
+//   - soft delete via deletedAt where a record must survive being removed
+//   - money as integer minor units, never a float
+//   - check constraints live in the migration and are load-bearing
+
+// No custom `output`: the client is generated into `node_modules/.prisma`.
+// A generated client outside node_modules makes Next's file tracer walk up
+// looking for `schema.prisma` and glob the user's home directory.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Team {
+  AHN
+  SHOPLINE
+  MERCHANT
+  OTHER
+}
+
+enum UserRole {
+  PLATFORM_ADMIN
+  AHN_ADMIN
+  AHN_PROJECT_MANAGER
+  AHN_DEVELOPER
+  SHOPLINE_ADMIN
+  SHOPLINE_ACCOUNT_MANAGER
+  SHOPLINE_SOLUTIONS_ENGINEER
+  MERCHANT
+}
+
+enum ProjectStage {
+  INTRODUCTION
+  MERCHANT_CONTACTED
+  KICKOFF_SCHEDULED
+  WAITING_FOR_ACCESS
+  ASSETS_COLLECTION
+  MIGRATION
+  DESIGN
+  MERCHANT_DESIGN_REVIEW
+  DEVELOPMENT
+  INTERNAL_QA
+  MERCHANT_QA
+  MIGRATION_VALIDATION
+  READY_FOR_SHOPLINE_REVIEW
+  SHOPLINE_REVIEW
+  READY_FOR_DEPLOYMENT
+  DEPLOYED_LIVE
+  COMPLETED
+  ON_HOLD_BLOCKED
+}
+
+/// STAGE_OVERRUN: the current stage has run longer than its target. LAUNCH_OVERRUN:
+/// the project has passed its target launch date. See `SlaBreach`.
+enum SlaBreachKind {
+  STAGE_OVERRUN
+  LAUNCH_OVERRUN
+}
+
+enum MigrationType {
+  ONE_TO_ONE
+  CUSTOM_BUILD
+  HYBRID
+}
+
+enum ProjectHealth {
+  ON_TRACK
+  AT_RISK
+  BLOCKED
+}
+
+enum BlockerCategory {
+  NONE
+  WAITING_ON_MERCHANT
+  WAITING_ON_AHN
+  WAITING_ON_SHOPLINE
+  ACCESS
+  ASSETS
+  DESIGN_APPROVAL
+  TECHNICAL_ANSWER
+  PAYMENT
+  QA
+  DEPLOYMENT
+  SCOPE_CLARIFICATION
+}
+
+enum IssueSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  LAUNCH_BLOCKER
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_ON_OTHERS
+  RESOLVED
+  WONT_FIX
+}
+
+enum AccessStatus {
+  NOT_REQUESTED
+  REQUESTED
+  RECEIVED
+  VERIFIED
+  ISSUE
+}
+
+enum AccessKind {
+  SHOPLINE_ADMIN
+  SOURCE_PLATFORM
+  DOMAIN_DNS
+  APPS_INTEGRATIONS
+  PRODUCT_DATA
+  ORDER_DATA
+  CUSTOMER_DATA
+  BRAND_ASSETS
+  PAYMENT_GATEWAY
+  EMAIL_MARKETING
+  ANALYTICS
+  OTHER
+}
+
+enum AssetStatus {
+  NOT_REQUESTED
+  REQUESTED
+  RECEIVED
+  APPROVED
+  ISSUE
+}
+
+enum AssetKind {
+  LOGO
+  BRAND_GUIDELINES
+  FONTS
+  COLORS
+  PRODUCT_IMAGES
+  PRODUCT_DATA
+  SITEMAP
+  URL_STRUCTURE
+  REDIRECT_MAP
+  POLICIES
+  SHIPPING_INFO
+  TAX_INFO
+  PAYMENT_INFO
+  LEGAL_INFO
+  STORE_CREDENTIALS
+  OTHER
+}
+
+enum ScopeCategory {
+  PRODUCTS
+  VARIANTS
+  IMAGES
+  COLLECTIONS
+  CUSTOMERS
+  ORDERS
+  PAGES
+  NAVIGATION
+  POLICIES
+  THEME_DESIGN
+  REDIRECTS
+  APPS_INTEGRATIONS
+  OTHER
+}
+
+enum ScopeDisposition {
+  IN_SCOPE
+  OUT_OF_SCOPE
+  CHANGE_REQUEST
+}
+
+enum ScopeStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  MIGRATED
+  VERIFIED
+  BLOCKED
+}
+
+enum CommentCategory {
+  GENERAL_UPDATE
+  MERCHANT_REQUEST
+  AHN_QUESTION
+  SHOPLINE_QUESTION
+  TECHNICAL_ISSUE
+  DESIGN_FEEDBACK
+  MIGRATION_ISSUE
+  QA_ISSUE
+  DEPLOYMENT_ISSUE
+  SCOPE_CHANGE
+}
+
+enum CommentVisibility {
+  INTERNAL_AHN
+  AHN_SHOPLINE
+  EVERYONE
+}
+
+enum CommentStatus {
+  NONE
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum CommentSource {
+  PORTAL
+  SLACK
+  EMAIL
+  CLICKUP
+}
+
+enum InvoiceStatus {
+  NOT_INVOICED
+  INVOICE_SENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+}
+
+enum ApprovalType {
+  DESIGN
+  DEVELOPMENT
+  QA
+  MERCHANT_FINAL
+  SHOPLINE_DEPLOYMENT
+}
+
+enum ApprovalStatus {
+  NOT_REQUESTED
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+}
+
+enum HandoffDecision {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+  ISSUE_REPORTED
+}
+
+enum IntroEmailStatus {
+  DRAFT
+  SENT
+  RESPONDED
+  BOUNCED
+}
+
+enum IntegrationProvider {
+  SLACK
+  CLICKUP
+  EMAIL
+}
+
+enum OutboxStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  SKIPPED
+}
+
+enum ActivityType {
+  PROJECT_CREATED
+  STAGE_CHANGED
+  BLOCKER_OPENED
+  BLOCKER_OWNER_CHANGED
+  BLOCKER_RESOLVED
+  COMMENT_POSTED
+  ACCESS_STATUS_CHANGED
+  ASSET_STATUS_CHANGED
+  SCOPE_CHANGED
+  ISSUE_REPORTED
+  ISSUE_RESOLVED
+  APPROVAL_REQUESTED
+  APPROVAL_DECIDED
+  INTRODUCTION_SENT
+  INTRODUCTION_RESPONSE
+  INVOICE_UPDATED
+  HANDOFF_SUBMITTED
+  HANDOFF_DECIDED
+  ASSIGNMENT_CHANGED
+  SLACK_MESSAGE_RECORDED
+  CLICKUP_SYNCED
+  PROJECT_UPDATED
+}
+
+enum NotificationType {
+  INTRODUCTION_UNANSWERED
+  ACCESS_MISSING
+  ASSETS_MISSING
+  PROJECT_INACTIVE
+  APPROVAL_PENDING
+  MERCHANT_FEEDBACK
+  TECHNICAL_ASSISTANCE
+  LAUNCH_BLOCKER
+  INVOICE_OVERDUE
+  QA_READY
+  SHOPLINE_READY
+  DEPLOYMENT_APPROVAL
+  MENTIONED
+  ASSIGNED
+}
+
+enum AttachmentKind {
+  FILE
+  LINK
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         UserRole
+  team         Team
+  title        String?
+  phone        String?
+  avatarColor  String? // deterministic fallback avatar, no upload required
+  timezone     String   @default("UTC")
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime? @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+  deletedAt    DateTime? @db.Timestamptz(3)
+
+  sessions              Session[]
+  projectMemberships    ProjectMember[]
+  managedProjects       Project[]           @relation("ProjectAhnPm")
+  developedProjects     Project[]           @relation("ProjectAhnDev")
+  accountManagedProject Project[]           @relation("ProjectShoplineAm")
+  engineeredProjects    Project[]           @relation("ProjectShoplineSe")
+  nextActionProjects    Project[]           @relation("ProjectNextActionOwner")
+  comments              Comment[]
+  mentions              CommentMention[]
+  stageChanges          StageEvent[]
+  blockersOwned         Blocker[]           @relation("BlockerOwner")
+  blockersCreated       Blocker[]           @relation("BlockerCreator")
+  blockerOwnerships     BlockerOwnership[]
+  issuesOwned           Issue[]             @relation("IssueOwner")
+  issuesReported        Issue[]             @relation("IssueReporter")
+  approvalsRequested    Approval[]          @relation("ApprovalRequester")
+  approvalsDecided      Approval[]          @relation("ApprovalDecider")
+  handoffsSubmitted     HandoffSubmission[] @relation("HandoffSubmitter")
+  handoffsDecided       HandoffSubmission[] @relation("HandoffDecider")
+  activities            ActivityEvent[]
+  notifications         Notification[]
+  attachments           Attachment[]
+  auditLogs             AuditLog[]
+  savedViews            SavedView[]
+  introEmailsSent       IntroductionEmail[]
+
+  @@index([role])
+  @@index([team])
+  @@index([deletedAt])
+}
+
+model Session {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @db.Uuid
+  // Sessions are stored hashed: a database dump cannot be replayed as a login.
+  tokenHash String   @unique
+  expiresAt DateTime @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3)
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  lastSeenAt DateTime @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Merchant & contacts
+// ---------------------------------------------------------------------------
+
+model Merchant {
+  id              String  @id @default(uuid(7)) @db.Uuid
+  name            String
+  website         String?
+  shoplineStoreId String?
+  currentPlatform String?
+  country         String?
+  industry        String?
+  notes           String?
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+  deletedAt       DateTime? @db.Timestamptz(3)
+
+  contacts MerchantContact[]
+  projects Project[]
+
+  @@index([name])
+  @@index([shoplineStoreId])
+}
+
+model MerchantContact {
+  id         String  @id @default(uuid(7)) @db.Uuid
+  merchantId String  @db.Uuid
+  name       String
+  email      String
+  phone      String?
+  title      String?
+  isPrimary  Boolean @default(false)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([email])
+}
+
+// ---------------------------------------------------------------------------
+// The project record
+// ---------------------------------------------------------------------------
+
+model Project {
+  id         String        @id @default(uuid(7)) @db.Uuid
+  code       String        @unique // PRJ-0001, safe to say on a call
+  merchantId String        @db.Uuid
+
+  stage         ProjectStage  @default(INTRODUCTION)
+  migrationType MigrationType @default(ONE_TO_ONE)
+  scopeSummary  String?
+
+  ahnProjectManagerId String? @db.Uuid
+  ahnDeveloperId      String? @db.Uuid
+  shoplineAmId        String? @db.Uuid
+  shoplineSeId        String? @db.Uuid
+
+  startDate        DateTime  @db.Timestamptz(3)
+  targetLaunchDate DateTime? @db.Timestamptz(3)
+  actualLaunchDate DateTime? @db.Timestamptz(3)
+  completedAt      DateTime? @db.Timestamptz(3)
+
+  // The clock. lastActivityAt is written by every mutation that a human would
+  // call "activity", which is what the inactivity alert reads.
+  lastActivityAt DateTime @default(now()) @db.Timestamptz(3)
+
+  // Denormalised so the portfolio list can sort and filter without a join
+  // storm. Recomputed inside the same transaction as whatever changed it.
+  health           ProjectHealth @default(ON_TRACK)
+  currentBlockerId String?       @db.Uuid @unique
+
+  nextAction            String?
+  nextActionOwnerId     String?   @db.Uuid
+  nextActionOwnerTeam   Team?
+  nextActionDueDate     DateTime? @db.Timestamptz(3)
+
+  contractTotalMinor Int    @default(0)
+  currency           String @default("USD")
+
+  deploymentNotes String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  merchant            Merchant @relation(fields: [merchantId], references: [id])
+  ahnProjectManager   User?    @relation("ProjectAhnPm", fields: [ahnProjectManagerId], references: [id])
+  ahnDeveloper        User?    @relation("ProjectAhnDev", fields: [ahnDeveloperId], references: [id])
+  shoplineAm          User?    @relation("ProjectShoplineAm", fields: [shoplineAmId], references: [id])
+  shoplineSe          User?    @relation("ProjectShoplineSe", fields: [shoplineSeId], references: [id])
+  nextActionOwner     User?    @relation("ProjectNextActionOwner", fields: [nextActionOwnerId], references: [id])
+  currentBlocker      Blocker? @relation("ProjectCurrentBlocker", fields: [currentBlockerId], references: [id])
+
+  members       ProjectMember[]
+  stageEvents   StageEvent[]
+  slaBreaches   SlaBreach[]
+  blockers      Blocker[]           @relation("ProjectBlockers")
+  scopeItems    ScopeItem[]
+  accessItems   AccessItem[]
+  assetItems    AssetItem[]
+  attachments   Attachment[]
+  comments      Comment[]
+  activities    ActivityEvent[]
+  issues        Issue[]
+  invoices      Invoice[]
+  approvals     Approval[]
+  handoffs      HandoffSubmission[]
+  introEmails   IntroductionEmail[]
+  integrations  IntegrationLink[]
+  outbox        OutboxMessage[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  @@index([stage])
+  @@index([health])
+  @@index([merchantId])
+  @@index([ahnProjectManagerId])
+  @@index([shoplineAmId])
+  @@index([targetLaunchDate])
+  @@index([lastActivityAt])
+  @@index([deletedAt])
+}
+
+/// Explicit access grants. A merchant user reaches exactly the projects they
+/// have a row for, and nothing else - the isolation boundary of this product.
+model ProjectMember {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  projectId String   @db.Uuid
+  userId    String   @db.Uuid
+  /// Free-text role on this project, shown in the people panel.
+  note      String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+/// One visit to one stage. The open row (exitedAt = null) is the current stage.
+/// Every SLA number in the product is computed from this table.
+model StageEvent {
+  id        String       @id @default(uuid(7)) @db.Uuid
+  projectId String       @db.Uuid
+  stage     ProjectStage
+  /// Overrides the stage's default owning team when a project agrees otherwise.
+  ownerTeam Team?
+  enteredAt DateTime     @db.Timestamptz(3)
+  exitedAt  DateTime?    @db.Timestamptz(3)
+  /// Cached on exit so historical reporting does not recompute the whole table.
+  durationMs BigInt?
+  changedById String?    @db.Uuid
+  reason      String?
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  changedBy User?   @relation(fields: [changedById], references: [id])
+
+  @@index([projectId, enteredAt])
+  @@index([projectId, exitedAt])
+  @@index([stage])
+}
+
+/// A formal, historical record of a project or stage running past its SLA
+/// target - not the live "is it over target right now" flag `ProjectTime`
+/// already computes, but a durable row saying when a breach began and, once
+/// it is no longer true, when it ended. `resolvedAt: null` means still open;
+/// the two partial unique indexes in the constraints migration guarantee at
+/// most one open breach per project per stage (STAGE_OVERRUN) and at most one
+/// open launch breach per project (LAUNCH_OVERRUN), the same pattern
+/// `StageEvent`/`BlockerOwnership` already use for "exactly one open span".
+model SlaBreach {
+  id        String        @id @default(uuid(7)) @db.Uuid
+  projectId String        @db.Uuid
+  kind      SlaBreachKind
+  /// The stage that overran. Set for STAGE_OVERRUN, always null for LAUNCH_OVERRUN.
+  stage     ProjectStage?
+  /// The target (days) that was crossed. Null for LAUNCH_OVERRUN, whose
+  /// target is the project's own `targetLaunchDate` rather than a fixed number.
+  targetDays Int?
+  startedAt  DateTime     @db.Timestamptz(3)
+  resolvedAt DateTime?    @db.Timestamptz(3)
+  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, startedAt])
+  @@index([resolvedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Blockers - the prominent field, with its own timer
+// ---------------------------------------------------------------------------
+
+model Blocker {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  projectId   String          @db.Uuid
+  category    BlockerCategory
+  title       String
+  description String?
+  ownerTeam   Team
+  ownerUserId String?         @db.Uuid
+  nextAction  String?
+  dueDate     DateTime?       @db.Timestamptz(3)
+  startedAt   DateTime        @db.Timestamptz(3)
+  resolvedAt  DateTime?       @db.Timestamptz(3)
+  resolution  String?
+  createdById String?         @db.Uuid
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+
+  project   Project @relation("ProjectBlockers", fields: [projectId], references: [id], onDelete: Cascade)
+  owner     User?   @relation("BlockerOwner", fields: [ownerUserId], references: [id])
+  createdBy User?   @relation("BlockerCreator", fields: [createdById], references: [id])
+
+  currentOfProject Project?           @relation("ProjectCurrentBlocker")
+  ownerships       BlockerOwnership[]
+
+  @@index([projectId, resolvedAt])
+  @@index([ownerTeam])
+  @@index([category])
+}
+
+/// When ownership of a blocker changes the previous owner's timer stops and the
+/// new owner's begins. That is this table; `computeProjectTime` reads it.
+model BlockerOwnership {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  blockerId  String    @db.Uuid
+  ownerTeam  Team
+  ownerUserId String?  @db.Uuid
+  startedAt  DateTime  @db.Timestamptz(3)
+  endedAt    DateTime? @db.Timestamptz(3)
+  durationMs BigInt?
+  note       String?
+
+  blocker Blocker @relation(fields: [blockerId], references: [id], onDelete: Cascade)
+  owner   User?   @relation(fields: [ownerUserId], references: [id])
+
+  @@index([blockerId, startedAt])
+  @@index([endedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Scope, access, assets
+// ---------------------------------------------------------------------------
+
+model ScopeItem {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  projectId   String           @db.Uuid
+  category    ScopeCategory
+  label       String
+  disposition ScopeDisposition @default(IN_SCOPE)
+  status      ScopeStatus      @default(NOT_STARTED)
+  sourceCount Int?
+  migratedCount Int?
+  notes       String?
+  /// Set when a change request has been priced and agreed.
+  changeRequestAmountMinor Int?
+  changeRequestApprovedAt  DateTime? @db.Timestamptz(3)
+  sortOrder   Int              @default(0)
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(3)
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// The invoice line an approved change request became. Set once, by
+  /// `approveChangeRequestAction`, in the same transaction as the approval -
+  /// an approved change request is never left without a billable line.
+  invoice Invoice?
+
+  @@unique([projectId, category, label])
+  @@index([projectId, disposition])
+}
+
+model AccessItem {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  projectId   String       @db.Uuid
+  kind        AccessKind
+  label       String
+  status      AccessStatus @default(NOT_REQUESTED)
+  /// A blocking item that is not VERIFIED is what "blocked waiting for merchant
+  /// access" means on the dashboard.
+  blocking    Boolean      @default(false)
+  ownerTeam   Team         @default(MERCHANT)
+  requestedAt DateTime?    @db.Timestamptz(3)
+  receivedAt  DateTime?    @db.Timestamptz(3)
+  verifiedAt  DateTime?    @db.Timestamptz(3)
+  notes       String?
+  sortOrder   Int          @default(0)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+
+  @@unique([projectId, kind, label])
+  @@index([projectId, status])
+}
+
+model AssetItem {
+  id        String      @id @default(uuid(7)) @db.Uuid
+  projectId String      @db.Uuid
+  kind      AssetKind
+  label     String
+  status    AssetStatus @default(NOT_REQUESTED)
+  required  Boolean     @default(true)
+  dueDate   DateTime?   @db.Timestamptz(3)
+  receivedAt DateTime?  @db.Timestamptz(3)
+  approvedAt DateTime?  @db.Timestamptz(3)
+  notes     String?
+  sortOrder Int         @default(0)
+  createdAt DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime    @updatedAt @db.Timestamptz(3)
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+
+  @@unique([projectId, kind, label])
+  @@index([projectId, status])
+}
+
+model Attachment {
+  id           String         @id @default(uuid(7)) @db.Uuid
+  projectId    String         @db.Uuid
+  kind         AttachmentKind
+  label        String
+  /// For LINK. For FILE this is the download route, never a raw storage key.
+  url          String
+  storageKey   String?
+  mimeType     String?
+  sizeBytes    Int?
+  uploadedById String?        @db.Uuid
+  accessItemId String?        @db.Uuid
+  assetItemId  String?        @db.Uuid
+  commentId    String?        @db.Uuid
+  issueId      String?        @db.Uuid
+  createdAt    DateTime       @default(now()) @db.Timestamptz(3)
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy User?       @relation(fields: [uploadedById], references: [id])
+  accessItem AccessItem? @relation(fields: [accessItemId], references: [id], onDelete: Cascade)
+  assetItem  AssetItem?  @relation(fields: [assetItemId], references: [id], onDelete: Cascade)
+  comment    Comment?    @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  issue      Issue?      @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([assetItemId])
+  @@index([commentId])
+}
+
+// ---------------------------------------------------------------------------
+// Activity feed
+// ---------------------------------------------------------------------------
+
+model Comment {
+  id           String            @id @default(uuid(7)) @db.Uuid
+  projectId    String            @db.Uuid
+  authorId     String            @db.Uuid
+  parentId     String?           @db.Uuid
+  body         String
+  category     CommentCategory   @default(GENERAL_UPDATE)
+  /// The mechanism behind "internal AHN notes must remain private".
+  visibility   CommentVisibility @default(AHN_SHOPLINE)
+  status       CommentStatus     @default(NONE)
+  assignedToId String?           @db.Uuid
+  resolvedAt   DateTime?         @db.Timestamptz(3)
+  source       CommentSource     @default(PORTAL)
+  /// Provenance when source is SLACK - permalink back to the thread.
+  sourceUrl    String?
+  sourceRef    String?
+  createdAt    DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime          @updatedAt @db.Timestamptz(3)
+  deletedAt    DateTime?         @db.Timestamptz(3)
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author      User             @relation(fields: [authorId], references: [id])
+  parent      Comment?         @relation("CommentThread", fields: [parentId], references: [id])
+  replies     Comment[]        @relation("CommentThread")
+  mentions    CommentMention[]
+  attachments Attachment[]
+
+  @@index([projectId, createdAt])
+  @@index([projectId, visibility])
+  @@index([status])
+}
+
+model CommentMention {
+  id        String @id @default(uuid(7)) @db.Uuid
+  commentId String @db.Uuid
+  userId    String @db.Uuid
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([userId])
+}
+
+/// The chronological source of truth: introduction, response, kickoff, access,
+/// assets, design, feedback, development, QA, review, deployment. System
+/// generated - people write Comments, the portal writes these.
+model ActivityEvent {
+  id          String            @id @default(uuid(7)) @db.Uuid
+  projectId   String            @db.Uuid
+  type        ActivityType
+  actorId     String?           @db.Uuid
+  summary     String
+  detail      String?
+  visibility  CommentVisibility @default(AHN_SHOPLINE)
+  payload     Json?
+  occurredAt  DateTime          @default(now()) @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actor   User?   @relation(fields: [actorId], references: [id])
+
+  @@index([projectId, occurredAt])
+  @@index([type])
+}
+
+// ---------------------------------------------------------------------------
+// Issues & escalations
+// ---------------------------------------------------------------------------
+
+model Issue {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  projectId   String        @db.Uuid
+  reference   String // ISS-12 within the project, for talking about it
+  title       String
+  description String
+  severity    IssueSeverity @default(MEDIUM)
+  status      IssueStatus   @default(OPEN)
+  ownerTeam   Team          @default(AHN)
+  ownerUserId String?       @db.Uuid
+  reportedById String?      @db.Uuid
+  reportedAt  DateTime      @default(now()) @db.Timestamptz(3)
+  dueDate     DateTime?     @db.Timestamptz(3)
+  resolution  String?
+  resolvedAt  DateTime?     @db.Timestamptz(3)
+  /// Set once, by `createClickUpTaskAction`. Created as a subtask of the
+  /// project's linked task, so there is nowhere to configure a list id.
+  clickUpTaskId  String?
+  clickUpTaskUrl String?
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner      User?   @relation("IssueOwner", fields: [ownerUserId], references: [id])
+  reportedBy User?   @relation("IssueReporter", fields: [reportedById], references: [id])
+
+  attachments Attachment[]
+
+  @@unique([projectId, reference])
+  @@index([projectId, status])
+  @@index([severity, status])
+}
+
+// ---------------------------------------------------------------------------
+// Money
+// ---------------------------------------------------------------------------
+
+/// Milestone billing: a project has many invoices, and the project rollup is
+/// the sum. Amounts are integer minor units of `currency`.
+model Invoice {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  projectId      String        @db.Uuid
+  number         String?
+  milestone      String
+  status         InvoiceStatus @default(NOT_INVOICED)
+  amountMinor    Int           @default(0)
+  paidMinor      Int           @default(0)
+  currency       String        @default("USD")
+  invoiceDate    DateTime?     @db.Timestamptz(3)
+  dueDate        DateTime?     @db.Timestamptz(3)
+  paidDate       DateTime?     @db.Timestamptz(3)
+  notes          String?
+  sortOrder      Int           @default(0)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
+  /// Set only for a line created by approving a change request. Nothing else
+  /// ever writes it, and it is at most one invoice per scope item.
+  scopeItemId    String?       @unique @db.Uuid
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scopeItem ScopeItem? @relation(fields: [scopeItemId], references: [id])
+
+  @@index([projectId, status])
+  @@index([dueDate])
+}
+
+// ---------------------------------------------------------------------------
+// Approvals & handoff
+// ---------------------------------------------------------------------------
+
+/// Formal, timestamped checkpoints. One row per type per project; the history
+/// of decisions lives in ActivityEvent.
+model Approval {
+  id           String         @id @default(uuid(7)) @db.Uuid
+  projectId    String         @db.Uuid
+  type         ApprovalType
+  status       ApprovalStatus @default(NOT_REQUESTED)
+  requestedById String?       @db.Uuid
+  requestedAt  DateTime?      @db.Timestamptz(3)
+  decidedById  String?        @db.Uuid
+  decidedAt    DateTime?      @db.Timestamptz(3)
+  notes        String?
+  createdAt    DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @db.Timestamptz(3)
+
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedBy User?   @relation("ApprovalRequester", fields: [requestedById], references: [id])
+  decidedBy   User?   @relation("ApprovalDecider", fields: [decidedById], references: [id])
+
+  @@unique([projectId, type])
+  @@index([status])
+}
+
+/// The SUBMIT TO SHOPLINE package. The checklist snapshot is stored so a later
+/// argument about what was true at submission time has an answer.
+model HandoffSubmission {
+  id              String          @id @default(uuid(7)) @db.Uuid
+  projectId       String          @db.Uuid
+  submittedById   String          @db.Uuid
+  submittedAt     DateTime        @default(now()) @db.Timestamptz(3)
+  checklist       Json
+  deploymentNotes String?
+  decision        HandoffDecision @default(PENDING)
+  decidedById     String?         @db.Uuid
+  decidedAt       DateTime?       @db.Timestamptz(3)
+  decisionNotes   String?
+
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  submittedBy User    @relation("HandoffSubmitter", fields: [submittedById], references: [id])
+  decidedBy   User?   @relation("HandoffDecider", fields: [decidedById], references: [id])
+
+  @@index([projectId, submittedAt])
+  @@index([decision])
+}
+
+// ---------------------------------------------------------------------------
+// Introduction email
+// ---------------------------------------------------------------------------
+
+model IntroductionEmail {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  projectId   String           @db.Uuid
+  status      IntroEmailStatus @default(DRAFT)
+  subject     String
+  bodyText    String
+  bodyHtml    String
+  /// Snapshot of the addresses, so the record survives a contact being edited.
+  recipients  Json
+  sentById    String?          @db.Uuid
+  sentAt      DateTime?        @db.Timestamptz(3)
+  respondedAt DateTime?        @db.Timestamptz(3)
+  responseNote String?
+  providerMessageId String?
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sentBy  User?   @relation(fields: [sentById], references: [id])
+
+  @@index([projectId, createdAt])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Integrations
+// ---------------------------------------------------------------------------
+
+model IntegrationLink {
+  id          String              @id @default(uuid(7)) @db.Uuid
+  projectId   String              @db.Uuid
+  provider    IntegrationProvider
+  /// Slack channel id, ClickUp task id.
+  externalId  String
+  externalUrl String?
+  displayName String?
+  config      Json?
+  isActive    Boolean             @default(true)
+  lastSyncAt  DateTime?           @db.Timestamptz(3)
+  lastError   String?
+  createdAt   DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime            @updatedAt @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, provider])
+  @@index([provider])
+}
+
+/// Outbound integration traffic. Writing the row is part of the same
+/// transaction as the change it describes, so a Slack outage can never lose an
+/// update - it only delays it.
+model OutboxMessage {
+  id         String              @id @default(uuid(7)) @db.Uuid
+  projectId  String?             @db.Uuid
+  provider   IntegrationProvider
+  kind       String
+  payload    Json
+  status     OutboxStatus        @default(PENDING)
+  attempts   Int                 @default(0)
+  lastError  String?
+  availableAt DateTime           @default(now()) @db.Timestamptz(3)
+  deliveredAt DateTime?          @db.Timestamptz(3)
+  externalRef String?
+  createdAt  DateTime            @default(now()) @db.Timestamptz(3)
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@index([projectId])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications, audit, settings
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String           @id @default(uuid(7)) @db.Uuid
+  userId    String           @db.Uuid
+  projectId String?          @db.Uuid
+  type      NotificationType
+  title     String
+  body      String?
+  href      String?
+  readAt    DateTime?        @db.Timestamptz(3)
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+  /// Stops the nightly sweep sending the same nag twice.
+  dedupeKey String?
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  actorId    String?  @db.Uuid
+  projectId  String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  reason     String?
+  ip         String?
+  occurredAt DateTime @default(now()) @db.Timestamptz(3)
+
+  actor   User?    @relation(fields: [actorId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, occurredAt])
+  @@index([actorId, occurredAt])
+  @@index([entityType, entityId])
+}
+
+/// Portal-wide configuration: ageing thresholds, inactivity limits, default
+/// checklists. Key/value so retuning is a form, not a deploy.
+model PortalSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+}
+
+/// A named filter set on the portfolio list. Personal by default; `isShared`
+/// makes it visible to everyone on the same team.
+model SavedView {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @db.Uuid
+  name      String
+  query     Json
+  isShared  Boolean  @default(false)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, name])
+  @@index([isShared])
+}

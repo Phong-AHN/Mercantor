@@ -1,0 +1,71 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: relay-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: relay
+      POSTGRES_DB: relay
+    ports:
+      - '5433:5432'
+    volumes:
+      - relay-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U relay -d relay']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: relay-redis
+    restart: unless-stopped
+    ports:
+      - '6380:6379'
+    volumes:
+      - relay-redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: relay-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9011"
+    environment:
+      MINIO_ROOT_USER: relayminio
+      MINIO_ROOT_PASSWORD: relayminio
+    ports:
+      - '9010:9000'
+      - '9011:9011'
+    volumes:
+      - relay-miniodata:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: creates the attachment bucket if it does not already exist, then
+  # exits. MinIO itself does not do this on boot - a fresh volume otherwise
+  # 404s the first upload with nothing in the app logs to explain why.
+  minio-init:
+    image: minio/mc:latest
+    container_name: relay-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 relayminio relayminio &&
+      mc mb --ignore-existing local/relay-media-dev
+      "
+
+volumes:
+  relay-pgdata:
+  relay-redisdata:
+  relay-miniodata:

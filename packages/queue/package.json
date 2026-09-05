@@ -1,0 +1,24 @@
+{
+  "name": "@relay/queue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./consumer": "./src/consumer.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@relay/config": "workspace:*",
+    "@relay/core": "workspace:*",
+    "@relay/observability": "workspace:*",
+    "bullmq": "^5.63.0",
+    "ioredis": "^5.9.0",
+    "zod": "^3.25.76"
+  }
+}

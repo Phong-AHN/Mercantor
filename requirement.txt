@@ -1,0 +1,164 @@
+SHOPLINE MIGRATION PROJECT MANAGEMENT PORTAL — REQUIREMENTS
+
+Objective
+Build a centralized portal for AHN and SHOPLINE to manage every merchant migration from introduction through deployment. The goal is to eliminate project-status confusion, reduce email/Slack back-and-forth, clearly identify blockers and ownership, and give SHOPLINE a real-time view of every migration project.
+
+PROJECT DASHBOARD
+Every SHOPLINE merchant should have its own project record.
+Required fields:
+
+Merchant/company name
+Merchant website
+Merchant primary contact name/email/phone
+SHOPLINE account/store ID
+Current ecommerce platform
+AHN project manager
+AHN developer
+SHOPLINE account manager
+SHOPLINE solutions engineer/technical contact
+Project start date
+Target launch date
+Migration type
+Project status
+Last activity date
+Current blocker
+Person/team responsible for next action
+AUTOMATED MERCHANT INTRODUCTION
+SHOPLINE enters/selects merchant contact information and the platform generates a standardized introduction email connecting SHOPLINE, the merchant, and AHN.
+Include a “Send Introduction” button. Auto-populate merchant name/contact, AHN contact, SHOPLINE contact, migration type, next steps, required access, and project portal link. Track email sent date, response, and completion.
+
+MIGRATION TYPE / SCOPE
+Clearly identify 1:1 Migration vs Custom Build/Additional Scope.
+Track products, variants, images, collections, customers, orders, pages, navigation, policies, theme/design, redirects, and other data.
+Anything outside agreed scope should be flagged OUT OF SCOPE / CHANGE REQUEST.
+
+PROJECT STAGES
+
+Introduction
+Merchant Contacted
+Kickoff Scheduled
+Waiting for Access
+Assets / Requirements Collection
+Migration
+Design
+Merchant Design Review
+Development
+Internal QA
+Merchant QA
+Migration Validation
+Ready for SHOPLINE Review
+SHOPLINE Review
+Ready for Deployment
+Deployed / Live
+Completed
+On Hold / Blocked
+ACCESS & CREDENTIALS CHECKLIST
+Track SHOPLINE, Shopify/Wix/WooCommerce, domain/DNS, apps, product/order/customer data and brand asset access.
+Statuses: Not Requested → Requested → Received → Verified → Issue.
+Clearly flag projects blocked waiting for merchant access.
+
+REQUIRED MERCHANT ASSETS
+Standard onboarding checklist including logo, brand guidelines, product images/data, fonts, colors, sitemap, URL structure, approved redirect map, policies, shipping/tax/payment/legal information, and store credentials/access. Support file/link attachments.
+
+PROJECT COMMENTS / ACTIVITY FEED
+Centralized feed supporting general updates, merchant requests, AHN/SHOPLINE questions, technical issues, design feedback, migration issues, QA issues, deployment issues and scope changes.
+Support @mentions, attachments, screenshots, links, timestamps, authors, issue status and assigned owner.
+
+SLACK INTEGRATION
+Each project should connect to the appropriate SHOPLINE Slack destination. Portal updates can automatically post to Slack with a direct project link. Important Slack messages should be recordable back into the project activity history.
+
+CLICKUP INTEGRATION
+Each project connects to the appropriate ClickUp project/task. Stage changes update ClickUp status; technical issues and merchant feedback can create/update ClickUp tasks. ClickUp remains AHN’s internal execution layer while the portal is the shared AHN/SHOPLINE visibility layer.
+
+BLOCKER MANAGEMENT
+Prominent Current Blocker field with categories: waiting for merchant, AHN, SHOPLINE, access, assets, design approval, technical answer, payment, QA, deployment, scope clarification, or no blocker.
+Each blocker must include owner, date created, next action and due date.
+
+ISSUES / ESCALATIONS
+Track issue title, description, screenshot/file, severity, owner, date reported, status, resolution and date resolved.
+Severity: Low / Medium / High / Launch Blocker.
+
+INVOICE TRACKING
+Track total project amount, invoiced amount, invoice number/date, payment due date, amount paid, outstanding balance and status.
+Statuses: Not Invoiced / Invoice Sent / Partially Paid / Paid / Overdue.
+Support milestone billing.
+
+APPROVALS
+Record formal, timestamped Design Approved, Development Approved, QA Approved and SHOPLINE Deployment Approved checkpoints instead of leaving approvals buried in email.
+
+SHOPLINE HANDOFF / DEPLOYMENT
+Include a SUBMIT TO SHOPLINE button. Before submission verify migration, design approval, development, QA, merchant approval, blockers, required access and deployment notes.
+SHOPLINE can Approve Deployment / Request Changes / Report Issue.
+
+NOTIFICATIONS
+Notify appropriate owners for unanswered introductions, missing access/assets, inactivity, pending approvals, merchant feedback, technical assistance, launch blockers, overdue invoices, QA readiness, SHOPLINE readiness and deployment approval.
+
+COMMUNICATION HISTORY
+Maintain a chronological source-of-truth timeline from SHOPLINE Introduction → Merchant Response → Kickoff → Access → Assets → Design → Feedback → Development → QA → SHOPLINE Review → Deployment.
+
+SHOPLINE PORTFOLIO DASHBOARD
+Show total projects, projects by stage, health (On Track / At Risk / Blocked), average migration time, average merchant/SHOPLINE wait times, design approval time, development time, active blockers and launches this month.
+
+SEARCH & FILTERS
+Filter by merchant, project stage, SHOPLINE account manager, AHN PM, developer, migration type, payment status, blocker owner, launch date and project health.
+
+ROLES & PERMISSIONS
+SHOPLINE: project status/timeline/issues/blockers/communications/deployment readiness.
+AHN: project/tasks/updates/development/QA/issues/merchant communication.
+Merchant (optional limited access): upload assets, provide access, review designs, feedback and approvals.
+Internal AHN notes must remain private.
+
+MVP PRIORITY
+Phase 1: project dashboard, contact database, automated introduction email, migration scope, project stages, access/asset checklists, activity feed, blockers, issue tracking, Slack integration, ClickUp integration, invoice/payment tracking and SHOPLINE handoff.
+Phase 2: merchant portal, automated approvals, advanced notifications, analytics, SLA tracking, inactivity alerts, portfolio reporting and change-request workflow.
+
+PROJECT TIME TRACKING & SLA
+Every project should automatically track elapsed time from official project start/introduction until final deployment.
+
+Display prominently:
+
+Project Age (days/hours)
+Start date
+Target launch date
+Current stage
+Current stage duration
+Days ahead/behind target
+Track time spent in every stage, including Introduction, Waiting for Access, Migration, Design, Waiting for Design Approval, Development, QA, SHOPLINE Review and Deployment.
+
+Delay ownership should be tracked separately:
+
+AHN execution time
+Merchant waiting time
+SHOPLINE waiting time
+Other/unassigned time
+Every blocker should have its own timer showing when it started and how long it has been open. When blocker ownership changes, the previous owner’s timer stops and the new owner’s timer begins.
+
+Dashboard time metrics should include:
+
+Average total project duration
+Average AHN execution time
+Average merchant waiting time
+Average SHOPLINE waiting time
+Longest active project
+Projects over target
+Projects on schedule
+Add configurable aging indicators such as:
+
+0–30 days: On Track
+31–45 days: Attention
+46–60 days: Delayed
+60+ days: Critical
+CORE PRODUCT PRINCIPLE
+At any moment SHOPLINE should be able to open one screen and answer:
+
+Where is this project?
+How long has it been running?
+How long has it been in the current stage?
+Who owns the next step?
+What are we waiting for?
+Who is responsible for the current delay?
+Is anything blocking launch?
+Has the merchant approved it?
+Has AHN been paid?
+When will it be ready for SHOPLINE?
+One merchant = one project record = one source of truth. Slack, email and ClickUp should be integrations around that record rather than separate places where project status lives.

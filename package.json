@@ -1,0 +1,55 @@
+{
+  "name": "relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AHN x SHOPLINE Migration Portal - one merchant, one project record, one source of truth.",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v && docker compose up -d",
+    "db:generate": "pnpm --filter @relay/db generate",
+    "db:migrate:deploy": "pnpm --filter @relay/db migrate:deploy",
+    "db:migrate:dev": "pnpm --filter @relay/db migrate:dev",
+    "db:seed": "pnpm --filter @relay/db seed",
+    "db:studio": "pnpm --filter @relay/db studio",
+    "dev": "pnpm --filter @relay/web dev",
+    "dev:worker": "pnpm --filter @relay/worker dev",
+    "build": "pnpm -r build",
+    "start": "pnpm --filter @relay/web start",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json,css}\"",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:watch": "vitest --config vitest.integration.config.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^22.20.0",
+    "eslint": "^9.39.0",
+    "eslint-config-prettier": "^10.1.8",
+    "playwright-core": "^1.62.1",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.6.14",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^3.2.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "sharp"
+    ]
+  }
+}

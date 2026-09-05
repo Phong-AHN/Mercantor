@@ -1,0 +1,11 @@
+/*
+ * Automatic source detection is disabled on purpose: this is a pnpm workspace,
+ * and letting Tailwind discover its own sources makes it walk up past the
+ * repository root. The two directories that actually contain classes are named
+ * explicitly instead.
+ */
+@import 'tailwindcss' source(none);
+@import '@relay/ui/tokens.css';
+
+@source '../../src';
+@source '../../../../packages/ui/src';
