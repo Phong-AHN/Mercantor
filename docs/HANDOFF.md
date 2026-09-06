@@ -1,7 +1,9 @@
 # Relay — Handoff
 
 > Read this first. Then `ARCHITECTURE.md`, then `DECISIONS.md`, then the doc for whatever you are
-> about to touch.
+> about to touch. Going live with real merchants? Read `TODO.md` (things only you can do — account
+> access, credentials, provisioning) and `FUTURE-WORK.md` (things that need more building later)
+> too.
 
 ---
 
@@ -84,13 +86,18 @@ make one of them a field somebody has to remember to update, it is the wrong cha
   schema (D-042). Verified live with `node scripts/analytics-smoke.mjs`.
 - The worker boots, installs five schedules, and answers `/health` and `/health/deep`
 
-**Known gaps: none right now.** Every item in the original brief, including all of Phase 2, is
-built - see `REQUIREMENTS-COVERAGE.md`. A full manual review once nothing remained (D-043, no git
-history yet to give `/code-review` a diff) found and fixed five real bugs: a rejected approval's
-note surviving its own re-request, a reply-to-a-reply that saved correctly and then rendered to
-nobody, a file attached to an internal-only comment announcing itself on every feed anyway, a
-transient Slack lookup failure marked exactly like "no Slack account" and never retried, and the
-SLA sweep's daily approval nag never getting the urgent email/Slack delivery its own type promises.
+**Known gaps against the brief: none.** Every item in the original brief, including all of Phase 2,
+is built - see `REQUIREMENTS-COVERAGE.md`. A full manual review once nothing remained (D-043, no
+git history yet to give `/code-review` a diff) found and fixed five real bugs: a rejected
+approval's note surviving its own re-request, a reply-to-a-reply that saved correctly and then
+rendered to nobody, a file attached to an internal-only comment announcing itself on every feed
+anyway, a transient Slack lookup failure marked exactly like "no Slack account" and never retried,
+and the SLA sweep's daily approval nag never getting the urgent email/Slack delivery its own type
+promises.
+
+**Known gaps against going live with real merchants: a few, all in `FUTURE-WORK.md`.** The biggest
+one - no UI creates a user or a project's Slack/ClickUp link yet, only `pnpm db:seed` and direct
+database writes do - is worth reading before promising anyone real onboarding.
 
 ---
 

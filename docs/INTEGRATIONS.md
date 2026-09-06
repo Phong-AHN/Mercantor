@@ -111,8 +111,10 @@ Used today for the standardised merchant introduction, generated from the projec
 needed to start, next steps and a link to the portal. The exact body sent is stored on the
 `IntroductionEmail` row, so what went out is never in doubt.
 
-**To go live:** set `RESEND_API_KEY` and `EMAIL_FROM` with a verified sending domain.
+Four in-app notification types urgent enough to reach someone away from the portal also go out as
+email through the same outbox - a launch blocker, a pending approval, a project ready for SHOPLINE
+review, and a deployment decision (D-027). `notify()` in `apps/web/src/server/record.ts` is the one
+place that decides which types qualify; every call site stays unaware of the decision.
 
-> **Gap, stated plainly:** notification rows are not yet delivered as email. The provider and the
-> outbox are both in place; wiring the four notification types that deserve an email is a small,
-> deliberate follow-up.
+**To go live:** set `RESEND_API_KEY` and `EMAIL_FROM` with a verified sending domain (Resend will
+ask you to add SPF/DKIM DNS records for it).
