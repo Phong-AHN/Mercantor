@@ -1,8 +1,10 @@
 import { INTRO_EMAIL_STATUS_LABEL, formatDateTime } from '@relay/core';
+import { integrations } from '@relay/integrations';
 import { can } from '@relay/rbac';
-import { Card, CardBody, CardHeader, Empty, PermissionDenied, StatusPill } from '@relay/ui';
+import { Card, CardHeader, Empty, PermissionDenied, StatusPill } from '@relay/ui';
 import { getProject, listAssignableUsers } from '@/features/projects/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import { IntegrationsPanel } from './integration-forms';
 import { AssignmentForm, ProjectDetailsForm } from './settings-forms';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +22,27 @@ export default async function ProjectSettingsPage({
   }
 
   const [project, people] = await Promise.all([getProject(principal, code), listAssignableUsers()]);
+
+  const slackLink = project.integrations.find((link) => link.provider === 'SLACK') ?? null;
+  const clickupLink = project.integrations.find((link) => link.provider === 'CLICKUP') ?? null;
+
+  // Fetched only when there is nothing linked yet: once a channel is picked
+  // there is no reason to hold this page's render on a live Slack call every
+  // time someone opens Settings. Bounded either way by the 8s timeout every
+  // live integrations call carries (D-044) rather than able to hang.
+  let slackChannels: { channelId: string; channelName: string }[] = [];
+  let slackChannelsError: string | null = null;
+  if (!slackLink) {
+    const result = await integrations().slack.listChannels();
+    if (result.ok && result.data) {
+      slackChannels = result.data.map((channel) => ({
+        channelId: channel.channelId,
+        channelName: channel.channelName ?? channel.channelId,
+      }));
+    } else {
+      slackChannelsError = result.error?.userMessage ?? 'Slack channels could not be listed.';
+    }
+  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -100,52 +123,29 @@ export default async function ProjectSettingsPage({
         )}
       </Card>
 
-      <Card className="lg:col-span-2">
-        <CardHeader
-          title="Integrations"
-          description="Slack and ClickUp hang off this record. Neither of them owns the project status."
-        />
-        <CardBody>
-          {project.integrations.length === 0 ? (
-            <Empty
-              title="Nothing connected"
-              description="Link a Slack channel and a ClickUp task from the Integrations page."
-              className="py-6"
-            />
-          ) : (
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {project.integrations.map((link) => (
-                <li key={link.id} className="border-line rounded-[var(--radius-md)] border p-3">
-                  <p className="text-faint text-[11px] font-semibold uppercase tracking-wide">
-                    {link.provider}
-                  </p>
-                  <p className="text-ink mt-0.5 text-[13px] font-medium">
-                    {link.displayName ?? link.externalId}
-                  </p>
-                  {link.externalUrl && (
-                    <a
-                      href={link.externalUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="text-accent-ink mt-1 inline-block text-[12px] underline-offset-4 hover:underline"
-                    >
-                      Open in {link.provider === 'SLACK' ? 'Slack' : 'ClickUp'}
-                    </a>
-                  )}
-                  {link.lastSyncAt && (
-                    <p className="text-faint mt-1 text-[11px]">
-                      last synced {formatDateTime(link.lastSyncAt)}
-                    </p>
-                  )}
-                  {link.lastError && (
-                    <p className="text-danger-ink mt-1 text-[11px]">{link.lastError}</p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
+      <IntegrationsPanel
+        code={project.code}
+        slackLink={
+          slackLink && {
+            externalId: slackLink.externalId,
+            externalUrl: slackLink.externalUrl,
+            displayName: slackLink.displayName,
+            lastSyncAt: slackLink.lastSyncAt?.toISOString() ?? null,
+            lastError: slackLink.lastError,
+          }
+        }
+        clickupLink={
+          clickupLink && {
+            externalId: clickupLink.externalId,
+            externalUrl: clickupLink.externalUrl,
+            displayName: clickupLink.displayName,
+            lastSyncAt: clickupLink.lastSyncAt?.toISOString() ?? null,
+            lastError: clickupLink.lastError,
+          }
+        }
+        slackChannels={slackChannels}
+        slackChannelsError={slackChannelsError}
+      />
     </div>
   );
 }

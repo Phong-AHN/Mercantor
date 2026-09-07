@@ -253,6 +253,8 @@ export const ACTIVITY_TYPES = [
   'SLACK_MESSAGE_RECORDED',
   'CLICKUP_SYNCED',
   'PROJECT_UPDATED',
+  'INTEGRATION_LINKED',
+  'INTEGRATION_UNLINKED',
 ] as const;
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 

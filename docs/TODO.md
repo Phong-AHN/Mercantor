@@ -31,17 +31,21 @@ against seeded data; it only blocks going live with real merchants.
 ## 2. Integrations — each is optional and mocked until you set its keys (`INTEGRATIONS.md`)
 
 - [ ] **Slack.** Create a Slack app in your workspace with scopes `chat:write`, `channels:read`,
-      `groups:read`, `channels:history`, `users:read.email`; install it; invite the bot to the
-      channels you want project updates posted to. Set `SLACK_BOT_TOKEN`.
+      `groups:read`, `mpim:read`, `im:read`, `channels:history`, `users:read.email`; install it;
+      invite the bot to the channels you want project updates posted to. Set `SLACK_BOT_TOKEN`.
+      **The token currently in `.env` is missing `channels:read`, `groups:read`, `mpim:read` and
+      `im:read`** — add them in the app's OAuth & Permissions page and reinstall the app, or the
+      channel picker on a project's Settings page will show "missing an OAuth scope" instead of a
+      channel list (everything else Slack does - posting updates, pulling a message in - already
+      works with the current token).
 - [ ] **ClickUp.** Generate a personal or workspace API token from ClickUp's settings. Set
       `CLICKUP_API_TOKEN` (and `CLICKUP_TEAM_ID` if you use team-scoped endpoints).
 - [ ] **Email.** Sign up for Resend (or swap the adapter — see `packages/integrations/src/email.ts`),
       verify a sending domain (Resend will give you SPF/DKIM DNS records to add), then set
       `RESEND_API_KEY` and `EMAIL_FROM`.
-- [ ] **Link each real project to its Slack channel and ClickUp task.** There is no UI for this yet
-      (see `FUTURE-WORK.md` §1) — it is a direct `IntegrationLink` row per project per provider.
-      Tell me the project code, channel ID, and ClickUp task ID and I can write a one-off script to
-      set it, the same way the demo seed does.
+- [ ] **Link each real project to its Slack channel and ClickUp task.** Each project's own Settings
+      page now has a connect/disconnect form for both (D-045) — open `/projects/<code>/settings` and
+      use it directly; no script or database write needed any more.
 
 ## 3. People — there is no self-service account creation yet (`FUTURE-WORK.md` §1)
 

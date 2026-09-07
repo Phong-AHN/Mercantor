@@ -276,7 +276,10 @@ None. Every requirement in `requirement.txt`, Phase 1 and Phase 2 both, is built
 A full manual review once nothing remained (D-043) found and fixed five real bugs across earlier
 decisions - see D-043 for what they were and how each was verified. A separate navbar report led to
 D-044: an unbounded live `fetch()` in the Slack/ClickUp/Resend adapters could hang the whole
-`/integrations` page, invisible until real provider credentials were configured.
+`/integrations` page, invisible until real provider credentials were configured. D-045 closed the
+one gap `FUTURE-WORK.md` had flagged in this area - connecting a project to Slack or ClickUp had no
+UI, only a direct database write - with a connect/disconnect form on each project's Settings page,
+verified live before saving.
 
 ## Test coverage
 
@@ -290,7 +293,7 @@ Three layers, each testing something the other two cannot:
   and that every live Slack/ClickUp/Resend call carries a timeout signal, including a real
   8-second proof that a hung connection resolves rather than hangs (D-044), with no infrastructure
   and no I/O.
-- **Integration tests** (`pnpm test:integration`, 61 tests over 13 files) — the real exported
+- **Integration tests** (`pnpm test:integration`, 69 tests over 14 files) — the real exported
   server actions (and, for the first time, a real worker processor - see D-037) against a real
   Postgres, through a harness that mocks only `next/headers`, `next/cache` and `server-only` (see
   `apps/web/test/`). They prove: the blocker-handover arithmetic writes the right rows with no gap

@@ -25,14 +25,11 @@ nothing wrong with that model, but nothing in the UI can create either one:
   introduction" flow the brief already asks for) rather than added as an afterthought.
 - **No password reset.** No forgot-password request, no reset email, no expiring token. A locked-out
   user needs their `passwordHash` updated directly today.
-- **No per-project integration linking UI.** `/integrations` (`apps/web/src/app/(app)/integrations/page.tsx`)
-  is a read-only status view; connecting a project to a Slack channel or a ClickUp task is a direct
-  `IntegrationLink` write, the same as user provisioning above. A small settings form per project is
-  a contained addition once the pattern for "admin writes a config row" from the other three above
-  exists.
 
-These four are really one theme — administrative write actions for rows that today are seed-only —
-and are probably worth designing and building together rather than one at a time.
+These three are really one theme — administrative write actions for rows that today are seed-only —
+and are probably worth designing and building together rather than one at a time. Connecting a
+project to a Slack channel or a ClickUp task no longer belongs on this list: each project's own
+Settings page now has a connect/disconnect form for both, verified live before saving (D-045).
 
 ## 2. Architectural cleanup flagged during the D-043 review
 

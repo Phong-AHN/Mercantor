@@ -521,6 +521,59 @@ to schedule jobs (`OOM command not allowed when used memory > 'maxmemory'`) - li
 above was run with the worker pointed at the local Docker Redis instead. That instance's capacity is
 a real, separate operational issue for whoever owns the Redis Cloud account to look at.
 
+**D-045 — Connecting a project to Slack and ClickUp finally has a UI, not just a database write.**
+`FUTURE-WORK.md` §1 had flagged this from early on: `/integrations` is a read-only status view, a
+project's Settings page only ever displayed whatever `IntegrationLink` rows already existed, and the
+only way to create one was `pnpm db:seed` or writing the row by hand. Requested directly once real
+Slack and ClickUp credentials made the gap concrete rather than theoretical.
+
+Placed on each project's own Settings page rather than the global `/integrations` page - an
+`IntegrationLink` is scoped to one project (`@@unique([projectId, provider])`), and that page
+already gates on `project:update`, the same permission `AssignmentForm` and `ProjectDetailsForm` use
+a few lines above it. Two new actions in `apps/web/src/features/integrations/actions.ts`
+(`linkClickUpTaskAction`, `linkSlackChannelAction`) plus one shared `unlinkIntegrationAction`, all
+`project:update`, all verified live before writing:
+
+- **ClickUp** takes a bare task id or a pasted `app.clickup.com/t/...` link (either shape ClickUp
+  itself produces depending on where you copy from) and calls `getTask` before saving - the same
+  "verify first" shape `recordSlackMessageAction` already uses for a Slack permalink. Nothing else
+  needed to change: `createClickUpTaskAction` (issues) already reads the list off whichever task is
+  linked here, so a project only ever needs the one link, not a separate "which list" setting.
+- **Slack** offers a picker built from a live `conversations.list` call rather than a free-text
+  channel id, and the action re-fetches that same list server-side and matches by id before saving
+  - a copy-pasted id typed wrong would otherwise fail silently until the first `postUpdate`, not at
+    link time. The page only makes this call when nothing is linked yet, so opening Settings on an
+    already-linked project costs nothing extra; either way it is bounded by the same 8-second timeout
+    D-044 put on every live integrations call, not able to hang the page.
+
+Relinking either provider replaces the existing row (`upsert` on the `[projectId, provider]`
+key) rather than erroring or duplicating; unlinking is a plain delete, since nothing downstream
+treats a link as anything more permanent than "currently set" - `createClickUpTaskAction` already
+refuses cleanly with none, and the worker's delivery processors already skip a provider with none.
+Two new `ActivityType` values, `INTEGRATION_LINKED` and `INTEGRATION_UNLINKED`, record the change on
+the project's own history rather than folding it into an existing type that means something more
+specific (`CLICKUP_SYNCED` is a stage-push, not a link event).
+
+Covered by `apps/web/src/features/integrations/actions.integration.test.ts` (8 tests, against the
+mock adapters - no live token in the test environment): linking, relinking replacing rather than
+duplicating, both ClickUp URL shapes parsing to the bare id, a merchant refused for lack of
+`project:update`, and unlinking including the refusal on a second attempt. Writing the URL-parsing
+test caught a real bug before it shipped: the first regex's id capture excluded hyphens, so a
+hyphenated task id inside a full URL (a shape a real ClickUp "custom task ID" can produce) fell
+through to the raw-string fallback and saved the entire URL as the id instead of just the id.
+
+Verified live afterward against the real workspace configured in `.env`: a non-existent ClickUp
+task is refused with a clear message rather than thrown (`scripts/integration-link-smoke.mjs`), and
+that live run surfaced a second, real, separate finding - the configured Slack bot token is missing
+the OAuth scopes `conversations.list` needs (`channels:read`, `groups:read`, `mpim:read`,
+`im:read`), so the channel picker showed Slack's generic delivery-failure copy
+("rejected the update... queued and will be retried") for what is actually a permanent
+configuration problem, not a transient one. Fixed in `slack.ts`'s error normaliser with a
+`missing_scope` case (`AUTHENTICATION`, non-retryable, names the scopes and says to reinstall the
+app) rather than worked around in this feature alone, since the same call now explains itself
+correctly wherever else it might fail the same way. Noted in `TODO.md` and `RUNBOOK.md` as a real
+operational item for whoever administers the Slack app; not something code can fix.
+
 1. **A rejected approval's reason survived its own re-request.** `autoRequestApprovals`
    (`apps/web/src/features/projects/mutations.ts`) reopens a `CHANGES_REQUESTED` or `REJECTED`
    approval as `PENDING` on re-entering the stage (D-038), but its `upsert`'s `update` branch never

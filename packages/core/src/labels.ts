@@ -313,6 +313,8 @@ export const ACTIVITY_TYPE_LABEL: Record<ActivityType, Descriptor> = {
   SLACK_MESSAGE_RECORDED: { label: 'Slack message recorded', tone: 'muted' },
   CLICKUP_SYNCED: { label: 'ClickUp synced', tone: 'muted' },
   PROJECT_UPDATED: { label: 'Project updated', tone: 'neutral' },
+  INTEGRATION_LINKED: { label: 'Integration connected', tone: 'info' },
+  INTEGRATION_UNLINKED: { label: 'Integration disconnected', tone: 'muted' },
 };
 
 export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, Descriptor> = {

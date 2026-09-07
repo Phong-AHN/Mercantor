@@ -33,6 +33,7 @@ node scripts/auto-approval-smoke.mjs   # real browser: stage move auto-requests 
 node scripts/portfolio-export-smoke.mjs # real browser: CSV export, its RBAC gate, and filters
 node scripts/sla-breach-smoke.mjs      # real browser: a breach opens on save, resolves when fixed
 node scripts/analytics-smoke.mjs       # real browser: trend charts render with visible marks
+node scripts/integration-link-smoke.mjs # real browser: connect/disconnect Slack and ClickUp from Settings
 ```
 
 `change-request-smoke.mjs` creates its own throwaway project rather than touching seeded demo
@@ -133,6 +134,13 @@ workspace — don't just re-run and assume a fresh failure is a regression.
 jobs** (`OOM command not allowed when used memory > 'maxmemory'`), which reads in the worker log
 as a boot failure with no obvious cause. If `REDIS_URL` points at a shared/cloud instance and the
 worker won't come up, check memory usage on that instance before anything else.
+
+**Linking a project to Slack (project Settings page) needs OAuth scopes beyond what posting a
+message needs**: `conversations.list` (used to populate the channel picker) requires
+`channels:read`, `groups:read`, `mpim:read` and `im:read` on the bot token. A token scoped only for
+sending (`chat:write`, `channels:history`, etc.) will get `missing_scope` back - the form shows this
+clearly rather than hanging, but the channel picker stays unusable until the scope is added in the
+Slack app's OAuth & Permissions page and the app is reinstalled to the workspace.
 
 `loadRootEnv()` deliberately does nothing in production: the platform supplies real environment
 variables there, and reading a committed file would be a way to ship the wrong ones.

@@ -236,6 +236,13 @@ function normalise(code: string | undefined): ProviderError {
         userMessage: 'The bot is not in that Slack channel. Invite it and try again.',
         retryable: false,
       };
+    case 'missing_scope':
+      return {
+        code: 'AUTHENTICATION',
+        userMessage:
+          'The Slack app is missing an OAuth scope it needs for this. Add it in the Slack app settings and reinstall the app.',
+        retryable: false,
+      };
     case 'users_not_found':
       return {
         code: 'NOT_FOUND',

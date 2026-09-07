@@ -25,7 +25,7 @@ make one of them a field somebody has to remember to update, it is the wrong cha
 **Working, verified, demonstrable against seeded data:**
 
 - 38 routes build; `pnpm verify` is green (format, lint, typecheck, 59 unit tests)
-- `pnpm test:integration` is green against a real Postgres and a real MinIO — 61 tests over 13
+- `pnpm test:integration` is green against a real Postgres and a real MinIO — 69 tests over 14
   files, proving the blocker-handover arithmetic, the handoff readiness gate, comment visibility
   per role, the outbox's transactional atomicity, that a launch blocker (and only a launch
   blocker, not an ordinary issue) queues one notification email and one Slack DM per recipient,
@@ -101,9 +101,18 @@ hanging its whole server render on an unbounded `fetch()` to Slack/ClickUp/Resen
 every live call in `packages/integrations`, verified with a ten-run shuffled click stress test
 (10/100 stuck clicks before, 140/140 clean after).
 
+Connecting a project to Slack and ClickUp had no UI path at all - only `pnpm db:seed` and direct
+database writes did. Each project's Settings page now has a connect/disconnect form for both,
+verified live before saving: a ClickUp task by id or pasted link through `getTask`, a Slack channel
+picked from a live `conversations.list` (D-045). That run against the real workspace also surfaced
+a real, separate config gap: the Slack bot token is missing the OAuth scopes
+`conversations.list` needs, so the form correctly explains why rather than hanging or crashing -
+someone with access to the Slack app needs to add `channels:read, groups:read, mpim:read, im:read`
+and reinstall it.
+
 **Known gaps against going live with real merchants: a few, all in `FUTURE-WORK.md`.** The biggest
-one - no UI creates a user or a project's Slack/ClickUp link yet, only `pnpm db:seed` and direct
-database writes do - is worth reading before promising anyone real onboarding.
+one - no UI creates a user account or a merchant's project membership yet, only `pnpm db:seed` and
+direct database writes do - is worth reading before promising anyone real onboarding.
 
 ---
 
