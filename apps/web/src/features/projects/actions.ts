@@ -16,7 +16,7 @@ import { randomToken } from '@relay/core/server';
 import { createPasswordToken, hashPassword } from '@relay/auth';
 import { env } from '@relay/config';
 import { db, transaction } from '@relay/db';
-import { integrations } from '@relay/integrations';
+import { integrationsFor } from '@relay/integrations';
 import { logger } from '@relay/observability';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, notify, recordActivity } from '@/server/record';
@@ -510,10 +510,11 @@ export const inviteMerchantAction = defineAction({
     const { token } = await createPasswordToken(user.id, 'INVITE');
     const rendered = renderAccountInviteEmail({
       recipientName: user.name,
-      invitedBy: `${ctx.principal.name} at AHN Media`,
+      invitedBy: `${ctx.principal.name} at ${project.organizationName}`,
       setPasswordUrl: `${env().APP_URL}/set-password?token=${token}`,
     });
-    const result = await integrations().email.send({
+    const registry = await integrationsFor(project.organizationId);
+    const result = await registry.email.send({
       to: [{ name: user.name, email: user.email }],
       subject: rendered.subject,
       text: rendered.text,

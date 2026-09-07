@@ -3,7 +3,7 @@ import { clock, STAGES, type ProjectStage } from '@relay/core';
 import { db } from '@relay/db';
 import {
   clickUpStatusFor,
-  integrations,
+  integrationsFor,
   type ProviderError,
   type ProviderResult,
 } from '@relay/integrations';
@@ -27,7 +27,14 @@ export async function processIntegration(job: IntegrationJob): Promise<void> {
       payload: true,
       status: true,
       attempts: true,
-      project: { select: { id: true, code: true, merchant: { select: { name: true } } } },
+      project: {
+        select: {
+          id: true,
+          code: true,
+          organizationId: true,
+          merchant: { select: { name: true } },
+        },
+      },
     },
   });
 
@@ -47,6 +54,7 @@ export async function processIntegration(job: IntegrationJob): Promise<void> {
     result = await deliver(message.provider, message.kind, payload, {
       projectUrl,
       projectCode: message.project?.code ?? 'RELAY',
+      organizationId: message.project?.organizationId ?? null,
     });
   } catch (error) {
     result = {
@@ -138,9 +146,9 @@ async function deliver(
   provider: 'SLACK' | 'CLICKUP' | 'EMAIL',
   kind: string,
   payload: Record<string, unknown>,
-  context: { projectUrl: string; projectCode: string },
+  context: { projectUrl: string; projectCode: string; organizationId: string | null },
 ): Promise<ProviderResult<unknown>> {
-  const registry = integrations();
+  const registry = await integrationsFor(context.organizationId);
 
   if (provider === 'SLACK') {
     if (kind === 'notification_dm') {

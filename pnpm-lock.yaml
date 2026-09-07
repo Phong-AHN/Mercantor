@@ -188,6 +188,9 @@ importers:
       '@relay/core':
         specifier: workspace:*
         version: link:../core
+      '@relay/db':
+        specifier: workspace:*
+        version: link:../db
       zod:
         specifier: ^3.25.76
         version: 3.25.76

@@ -48,7 +48,33 @@ login.
       `packages/auth/src/rate-limit.ts` (not an env var yet), worth revisiting if a real attacker
       or a real support complaint says the curve is wrong.
 
-## 3. Product decisions already open before this pass
+## 3. Multi-tenancy (D-052) — a scoping call made without stopping to ask, worth reviewing
+
+- [ ] **The `AHN`/`SHOPLINE` role vocabulary was not renamed.** D-052 made the _agency_ side a
+      real `Organization` any company can sign up as — its own people, its own projects, its own
+      encrypted Slack/ClickUp/Resend credentials, invisible to every other tenant. What it did
+      **not** do is rename `AHN_ADMIN`, `AHN_PROJECT_MANAGER`, the `AHN_SHOPLINE` comment
+      visibility, or any of the copy that still says "AHN" and "SHOPLINE" by name — a second
+      agency signing up today would see role labels and comment-visibility names that mean nothing
+      to them. Renaming that vocabulary to something tenant-neutral ("your organization" / "your
+      migration partner") is a real product decision — what the roles should be called, whether
+      the SHOPLINE-side roles even make sense for a company not migrating merchants onto SHOPLINE
+      — not a schema change, and was judged out of scope for this pass. Fine to keep running
+      single-tenant (AHN only) indefinitely without ever touching this; it only matters the day a
+      second company is actually meant to sign up and use the product under its own name.
+- [ ] **Nothing yet lets a `PLATFORM_ADMIN` actually create a second organization.** The data
+      model and every isolation boundary are in place and tested (see D-052), but there is no
+      "Add organization" UI or action yet — today a new tenant can only be created by a direct
+      database write (the same gap `FUTURE-WORK.md` §1 named for staff/merchant accounts before
+      D-051 built invite flows for those). Worth building before actually onboarding a second
+      company, not before that.
+- [ ] **`CREDENTIAL_ENCRYPTION_KEY` rotation has no procedure yet.** Losing or rotating this key
+      makes every organization's stored Slack/ClickUp/Resend credentials silently fail closed to
+      the mock adapter (by design — `packages/integrations/src/registry.ts` never throws on a bad
+      decrypt) rather than error loudly. Fine for now; worth a documented rotation runbook before
+      there are real customers' real tokens sitting encrypted in production.
+
+## 4. Product decisions already open before this pass
 
 Carried forward, unchanged, from `TODO.md` §5 (O1–O3) — still nobody's real call but AHN/SHOPLINE's
 own: whether an AHN PM can record a merchant's approval on their behalf, whether a SHOPLINE

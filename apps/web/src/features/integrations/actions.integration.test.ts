@@ -14,9 +14,9 @@ import { linkClickUpTaskAction, linkSlackChannelAction, unlinkIntegrationAction 
  * be connected by `pnpm db:seed` or a direct database write - the
  * `/integrations` page only ever showed provider health and the outbox, and
  * a project's own Settings page just displayed whatever was already there.
- * No `CLICKUP_API_TOKEN` or `SLACK_BOT_TOKEN` is set in the test
- * environment, so every call here goes through the mock adapter - the same
- * arrangement `createClickUpTaskAction`'s tests already rely on.
+ * The fixture organization has no configured `OrganizationIntegration` row,
+ * so every call here goes through the mock adapter - the same arrangement
+ * `createClickUpTaskAction`'s tests already rely on.
  */
 describe('linking a project to ClickUp', () => {
   let pm: TestUser;

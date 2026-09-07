@@ -15,7 +15,10 @@ export default async function ProjectActivityPage({
 }) {
   const { code } = await params;
   const principal = await requirePrincipalOrRedirect(`/projects/${code}/activity`);
-  const [project, people] = await Promise.all([getProject(principal, code), listAssignableUsers()]);
+  const [project, people] = await Promise.all([
+    getProject(principal, code),
+    listAssignableUsers(principal.organizationId),
+  ]);
 
   const now = project.snapshot.time.now;
   const canComment = can(principal, 'comment:create');

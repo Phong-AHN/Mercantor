@@ -1,4 +1,10 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+  timingSafeEqual,
+} from 'node:crypto';
 
 /**
  * Node-only helpers. Kept out of the package barrel on purpose: importing
@@ -34,6 +40,47 @@ export function contentHash(value: string): string {
 /** `PRJ-0042` - short, sortable, and safe to say out loud on a call. */
 export function projectCode(sequence: number): string {
   return `PRJ-${String(sequence).padStart(4, '0')}`;
+}
+
+/**
+ * AES-256-GCM, keyed by `CREDENTIAL_ENCRYPTION_KEY` (the caller's job to
+ * supply - this package stays free of `@relay/config` per D-004's boundary,
+ * so it takes the key as a plain base64 string rather than reading `env()`
+ * itself). Used for `OrganizationIntegration.encryptedConfig`: every
+ * organization's own Slack/ClickUp/Resend credentials, stored per-tenant
+ * instead of in one shared process-wide `.env`.
+ *
+ * A fresh random IV every call, GCM's own auth tag carried alongside the
+ * ciphertext (so a tampered or truncated blob fails to decrypt loudly
+ * rather than producing silently-wrong plaintext), all three joined as
+ * `iv:authTag:ciphertext` - each segment independently base64, `:` never
+ * appears inside a base64 alphabet so splitting is unambiguous.
+ */
+export function encryptSecret(plaintext: string, keyBase64: string): string {
+  const key = Buffer.from(keyBase64, 'base64').subarray(0, 32);
+  const iv = randomBytes(12); // GCM's recommended IV length
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return [iv.toString('base64'), authTag.toString('base64'), ciphertext.toString('base64')].join(
+    ':',
+  );
+}
+
+/** Throws if the blob is malformed or the key is wrong - never returns garbage. */
+export function decryptSecret(encoded: string, keyBase64: string): string {
+  const [ivB64, authTagB64, ciphertextB64] = encoded.split(':');
+  if (!ivB64 || !authTagB64 || !ciphertextB64) {
+    throw new Error('Malformed encrypted value.');
+  }
+  const key = Buffer.from(keyBase64, 'base64').subarray(0, 32);
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
+  decipher.setAuthTag(Buffer.from(authTagB64, 'base64'));
+  const plaintext = Buffer.concat([
+    decipher.update(Buffer.from(ciphertextB64, 'base64')),
+    decipher.final(),
+  ]);
+  return plaintext.toString('utf8');
 }
 
 export function slugify(value: string): string {

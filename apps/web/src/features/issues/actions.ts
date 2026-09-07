@@ -12,7 +12,7 @@ import {
   type IssueSeverity,
 } from '@relay/core';
 import { db, transaction } from '@relay/db';
-import { integrations } from '@relay/integrations';
+import { integrationsFor } from '@relay/integrations';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, notify, recordActivity } from '@/server/record';
 import {
@@ -268,7 +268,7 @@ export const createClickUpTaskAction = defineAction({
       throw new ConflictError('This project has no ClickUp task linked yet.');
     }
 
-    const registry = integrations();
+    const registry = await integrationsFor(project.organizationId);
     const parent = await registry.clickup.getTask(link.externalId);
     if (!parent.ok || !parent.data?.listId) {
       throw new ConflictError(

@@ -24,8 +24,8 @@ make one of them a field somebody has to remember to update, it is the wrong cha
 
 **Working, verified, demonstrable against seeded data:**
 
-- 38 routes build; `pnpm verify` is green (format, lint, typecheck, 61 unit tests)
-- `pnpm test:integration` is green against a real Postgres and a real MinIO — 99 tests over 21
+- 38 routes build; `pnpm verify` is green (format, lint, typecheck, 69 unit tests)
+- `pnpm test:integration` is green against a real Postgres and a real MinIO — 105 tests over 22
   files, proving the blocker-handover arithmetic, the handoff readiness gate, comment visibility
   per role, the outbox's transactional atomicity, that a launch blocker (and only a launch
   blocker, not an ordinary issue) queues one notification email and one Slack DM per recipient,
@@ -35,10 +35,12 @@ make one of them a field somebody has to remember to update, it is the wrong cha
   automated approval requests (D-038), Slack DM delivery resolving the recipient by email
   (D-039), the portfolio CSV export's RBAC gates and merchant scoping (D-040), formal SLA
   breach records opening the instant a mutation or the 15-minute sweep learns of one and closing
-  at the exact moment `moveStage` learns the other (D-041), and the analytics trends correctly
-  bucketing started/launched projects and SLA breaches by calendar month (D-042) - all through
-  the actual exported server actions, route handlers, queries, or worker processors, not a copy
-  of their logic. See `apps/web/test/` for the harness.
+  at the exact moment `moveStage` learns the other (D-041), the analytics trends correctly
+  bucketing started/launched projects and SLA breaches by calendar month (D-042), and multi-tenant
+  isolation - one organization's projects, merchant search, assignable staff, and integration
+  credentials never reachable from another's, `PLATFORM_ADMIN` still reaching every organization
+  (D-052) - all through the actual exported server actions, route handlers, queries, or worker
+  processors, not a copy of their logic. See `apps/web/test/` for the harness.
 - `node scripts/e2e-smoke.mjs` passes 11/11 in a real browser, including the cross-role
   visibility boundaries
 - The full chain works end to end: a UI action commits the change, the activity row, the audit row
@@ -148,9 +150,25 @@ staff member and a real merchant through the actual UI, using a freshly minted t
 `/set-password` to sign in with a new password, and the forgot-password round trip returning the
 identical message for a real and a made-up address.
 
+Corrected directly - the previous pass made AHN's own staff and merchants self-service but left
+the _agency_ side hardcoded, one shared `.env` of Slack/ClickUp/Resend credentials for the whole
+deployment. D-052 made `Organization` the top-level tenant: any agency signing up gets its own
+people, its own projects (invisible to any other tenant - enforced in one place,
+`projectScopeWhere`), and its own encrypted integration credentials, self-configured at
+`/integrations` (verified live against the real provider before being saved, then AES-256-GCM
+encrypted at rest) rather than read from the environment. `PLATFORM_ADMIN` (the SaaS operator, not
+a tenant) still sees and operates across every organization. What this deliberately did **not** do
+is rename the `AHN`/`SHOPLINE` role and comment-visibility vocabulary to something tenant-neutral -
+a real product decision, not a schema change, out of scope for this pass and listed in
+`GOING-LIVE-DECISIONS.md` §3 for when a second company is actually meant to sign up. Also open:
+there is no UI yet for a `PLATFORM_ADMIN` to actually create a second organization - today that is
+a direct database write, the same gap staff/merchant invites closed for `User`/`ProjectMember`
+before this.
+
 **Known gaps against going live with real merchants: everything left is a credential, a business
-call, or infrastructure - not code.** `GOING-LIVE-DECISIONS.md` is the checklist; `TODO.md` covers
-the same ground with more operational detail.
+call, infrastructure, or (as of D-052) the tenant-facing vocabulary rename - not a missing feature
+or a known bug.** `GOING-LIVE-DECISIONS.md` is the checklist; `TODO.md` covers the same ground with
+more operational detail.
 
 ---
 

@@ -121,9 +121,9 @@ describe('urgent notification delivery', () => {
 /**
  * Task creation reuses the project's existing ClickUp link rather than a
  * separate "which list" setting: it reads the linked task's list (through
- * the mock adapter here - no `CLICKUP_API_TOKEN` in the test environment,
- * same as every other provider call in this suite) and creates the new task
- * as a subtask of it.
+ * the mock adapter here - the fixture organization has no configured
+ * `OrganizationIntegration` row, same as every other provider call in this
+ * suite) and creates the new task as a subtask of it.
  */
 describe('creating a ClickUp task from an issue', () => {
   let pm: TestUser;

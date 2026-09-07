@@ -1,5 +1,5 @@
 import { INTRO_EMAIL_STATUS_LABEL, formatDateTime } from '@relay/core';
-import { integrations } from '@relay/integrations';
+import { integrationsFor } from '@relay/integrations';
 import { can } from '@relay/rbac';
 import { Card, CardHeader, Empty, PermissionDenied, StatusPill } from '@relay/ui';
 import { getProject, listAssignableUsers } from '@/features/projects/queries';
@@ -21,7 +21,10 @@ export default async function ProjectSettingsPage({
     return <PermissionDenied />;
   }
 
-  const [project, people] = await Promise.all([getProject(principal, code), listAssignableUsers()]);
+  const [project, people] = await Promise.all([
+    getProject(principal, code),
+    listAssignableUsers(principal.organizationId),
+  ]);
 
   const slackLink = project.integrations.find((link) => link.provider === 'SLACK') ?? null;
   const clickupLink = project.integrations.find((link) => link.provider === 'CLICKUP') ?? null;
@@ -33,7 +36,8 @@ export default async function ProjectSettingsPage({
   let slackChannels: { channelId: string; channelName: string }[] = [];
   let slackChannelsError: string | null = null;
   if (!slackLink) {
-    const result = await integrations().slack.listChannels();
+    const registry = await integrationsFor(project.organizationId);
+    const result = await registry.slack.listChannels();
     if (result.ok && result.data) {
       slackChannels = result.data.map((channel) => ({
         channelId: channel.channelId,

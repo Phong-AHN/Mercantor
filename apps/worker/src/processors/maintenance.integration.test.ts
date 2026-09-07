@@ -17,8 +17,28 @@ import { processMaintenance } from './maintenance';
  * make sense inside `apps/web`. A minimal project with one unmet blocking
  * access item is all `slaSweep`'s `ACCESS_MISSING` branch needs.
  */
+let testOrgId: string | null = null;
+/**
+ * One shared tenant for this file's fixtures (D-052 made `organizationId`
+ * required on `Project`) - upserted by a fixed slug rather than created and
+ * torn down per test, since `cleanup()` below never deletes the `pm` user
+ * that references it and `Project.organizationId` is `onDelete: Restrict`.
+ */
+async function testOrganization(): Promise<string> {
+  if (testOrgId) return testOrgId;
+  const org = await db.organization.upsert({
+    where: { slug: 'maintenance-sweep-test' },
+    create: { name: 'Maintenance Sweep Test Org', slug: 'maintenance-sweep-test' },
+    update: {},
+    select: { id: true },
+  });
+  testOrgId = org.id;
+  return testOrgId;
+}
+
 async function createMinimalProject(): Promise<{ projectId: string; pmId: string }> {
   const suffix = randomUUID().slice(0, 8);
+  const organizationId = await testOrganization();
 
   const merchant = await db.merchant.create({ data: { name: `Sweep Test Merchant ${suffix}` } });
   const pm = await db.user.create({
@@ -28,11 +48,13 @@ async function createMinimalProject(): Promise<{ projectId: string; pmId: string
       passwordHash: 'scrypt$1$1$1$dW51c2Vk$dW51c2Vk',
       role: 'AHN_PROJECT_MANAGER',
       team: 'AHN',
+      organizationId,
     },
   });
   const project = await db.project.create({
     data: {
       code: `PRJ-SWEEP-${suffix}`,
+      organizationId,
       merchantId: merchant.id,
       ahnProjectManagerId: pm.id,
       startDate: new Date('2026-01-01T00:00:00.000Z'),
@@ -56,6 +78,7 @@ async function createProjectWithPendingApproval(): Promise<{
   pm: { id: string; email: string; name: string };
 }> {
   const suffix = randomUUID().slice(0, 8);
+  const organizationId = await testOrganization();
   const merchant = await db.merchant.create({
     data: { name: `Approval Sweep Merchant ${suffix}` },
   });
@@ -66,12 +89,14 @@ async function createProjectWithPendingApproval(): Promise<{
       passwordHash: 'scrypt$1$1$1$dW51c2Vk$dW51c2Vk',
       role: 'AHN_PROJECT_MANAGER',
       team: 'AHN',
+      organizationId,
     },
     select: { id: true, email: true, name: true },
   });
   const project = await db.project.create({
     data: {
       code: `PRJ-APPROVAL-${suffix}`,
+      organizationId,
       merchantId: merchant.id,
       ahnProjectManagerId: pm.id,
       startDate: new Date('2026-01-01T00:00:00.000Z'),
@@ -110,6 +135,7 @@ async function createProjectInStage(input: {
   targetLaunchDate?: Date;
 }): Promise<{ projectId: string }> {
   const suffix = randomUUID().slice(0, 8);
+  const organizationId = await testOrganization();
   const merchant = await db.merchant.create({ data: { name: `Breach Test Merchant ${suffix}` } });
   const pm = await db.user.create({
     data: {
@@ -118,11 +144,13 @@ async function createProjectInStage(input: {
       passwordHash: 'scrypt$1$1$1$dW51c2Vk$dW51c2Vk',
       role: 'AHN_PROJECT_MANAGER',
       team: 'AHN',
+      organizationId,
     },
   });
   const project = await db.project.create({
     data: {
       code: `PRJ-BREACH-${suffix}`,
+      organizationId,
       merchantId: merchant.id,
       ahnProjectManagerId: pm.id,
       startDate: input.enteredAt,

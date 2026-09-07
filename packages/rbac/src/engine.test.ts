@@ -18,6 +18,7 @@ const principal = (role: UserRole, overrides: Partial<Principal> = {}): Principa
   role,
   team: 'AHN',
   isActive: true,
+  organizationId: 'org-1',
   ...overrides,
 });
 
@@ -71,9 +72,10 @@ describe('projectScopeWhere', () => {
     });
   });
 
-  it('lets internal roles see the portfolio, minus deleted records', () => {
+  it("lets internal roles see their own organization's portfolio, minus deleted records", () => {
     expect(projectScopeWhere(principal('SHOPLINE_ACCOUNT_MANAGER', { team: 'SHOPLINE' }))).toEqual({
       deletedAt: null,
+      organizationId: 'org-1',
     });
   });
 
@@ -81,6 +83,19 @@ describe('projectScopeWhere', () => {
     // Role says MERCHANT; the row still carries an AHN team from before a change.
     const stale = principal('MERCHANT', { team: 'AHN' });
     expect(projectScopeWhere(stale)).toMatchObject({ members: { some: { userId: 'user-1' } } });
+  });
+
+  it('lets PLATFORM_ADMIN (no organization of its own) see every tenant', () => {
+    const admin = principal('PLATFORM_ADMIN', { organizationId: null });
+    expect(projectScopeWhere(admin)).toEqual({ deletedAt: null });
+  });
+
+  it("scopes a second organization's staff to their own portfolio, never another tenant's", () => {
+    const otherOrg = principal('AHN_PROJECT_MANAGER', { organizationId: 'org-2' });
+    expect(projectScopeWhere(otherOrg)).toEqual({
+      deletedAt: null,
+      organizationId: 'org-2',
+    });
   });
 });
 

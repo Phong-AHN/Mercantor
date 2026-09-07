@@ -90,6 +90,7 @@ export async function resolveSession(token: string | undefined): Promise<Resolve
           team: true,
           isActive: true,
           deletedAt: true,
+          organizationId: true,
         },
       },
     },
@@ -115,6 +116,7 @@ export async function resolveSession(token: string | undefined): Promise<Resolve
       // The role is authoritative; the column is a denormalised convenience.
       team: USER_ROLE_TEAM[session.user.role] ?? session.user.team,
       isActive: session.user.isActive,
+      organizationId: session.user.organizationId,
     },
   };
 }

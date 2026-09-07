@@ -16,6 +16,7 @@
   "dependencies": {
     "@relay/config": "workspace:*",
     "@relay/core": "workspace:*",
+    "@relay/db": "workspace:*",
     "zod": "^3.25.76"
   }
 }

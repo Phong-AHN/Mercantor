@@ -26,7 +26,10 @@ const OPEN = ['OPEN', 'IN_PROGRESS', 'WAITING_ON_OTHERS'];
 export default async function ProjectIssuesPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const principal = await requirePrincipalOrRedirect(`/projects/${code}/issues`);
-  const [project, people] = await Promise.all([getProject(principal, code), listAssignableUsers()]);
+  const [project, people] = await Promise.all([
+    getProject(principal, code),
+    listAssignableUsers(principal.organizationId),
+  ]);
 
   const now = project.snapshot.time.now;
   const canReport = can(principal, 'issue:create');

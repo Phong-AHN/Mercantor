@@ -56,7 +56,15 @@ export async function signInAction(_prev: unknown, form: FormData): Promise<Acti
 
     const user = await db.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { id: true, email: true, name: true, role: true, team: true, isActive: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        team: true,
+        isActive: true,
+        organizationId: true,
+      },
     });
 
     const fallback = landingPathFor(user);

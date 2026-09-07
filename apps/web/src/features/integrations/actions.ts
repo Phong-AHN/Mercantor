@@ -1,9 +1,16 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { ConflictError } from '@relay/core';
+import { ConflictError, ForbiddenError } from '@relay/core';
 import { db, transaction } from '@relay/db';
-import { integrations } from '@relay/integrations';
+import {
+  createClickUpProvider,
+  createResendProvider,
+  createSlackProvider,
+  integrationsFor,
+  setOrganizationIntegration,
+} from '@relay/integrations';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, recordActivity } from '@/server/record';
 import { resolveProject, revalidateProject } from '@/features/projects/mutations';
@@ -38,7 +45,8 @@ export const linkClickUpTaskAction = defineAction({
     const project = await resolveProject(ctx.principal, input.code);
     const taskId = parseClickUpTaskId(input.task);
 
-    const result = await integrations().clickup.getTask(taskId);
+    const registry = await integrationsFor(project.organizationId);
+    const result = await registry.clickup.getTask(taskId);
     if (!result.ok || !result.data) {
       throw new ConflictError(result.error?.userMessage ?? 'That ClickUp task could not be found.');
     }
@@ -103,7 +111,8 @@ export const linkSlackChannelAction = defineAction({
   async handler(input, ctx) {
     const project = await resolveProject(ctx.principal, input.code);
 
-    const result = await integrations().slack.listChannels();
+    const registry = await integrationsFor(project.organizationId);
+    const result = await registry.slack.listChannels();
     if (!result.ok || !result.data) {
       throw new ConflictError(result.error?.userMessage ?? 'Slack channels could not be listed.');
     }
@@ -209,5 +218,95 @@ export const unlinkIntegrationAction = defineAction({
       undefined,
       `Disconnected from ${input.provider === 'SLACK' ? 'Slack' : 'ClickUp'}.`,
     );
+  },
+});
+
+/**
+ * Self-service, per-organization credentials (D-052) - what used to be one
+ * shared `.env` selecting a single global adapter for every tenant. Verified
+ * live before it is ever saved, the same "prove it works first" shape
+ * `linkClickUpTaskAction`/`linkSlackChannelAction` already use for a
+ * project's own links - a typo'd token would otherwise sit encrypted and
+ * silently broken until the next thing tried to use it.
+ */
+const configureInput = z.discriminatedUnion('provider', [
+  z.object({
+    provider: z.literal('SLACK'),
+    botToken: z.string().trim().min(1, 'Paste the bot token.'),
+  }),
+  z.object({
+    provider: z.literal('CLICKUP'),
+    apiToken: z.string().trim().min(1, 'Paste the API token.'),
+    teamId: z.string().trim().optional(),
+  }),
+  z.object({
+    provider: z.literal('EMAIL'),
+    apiKey: z.string().trim().min(1, 'Paste the Resend API key.'),
+    from: z.string().trim().min(1, 'Set a from address.'),
+  }),
+]);
+
+export const setOrganizationIntegrationAction = defineAction({
+  name: 'integration.configure',
+  permission: 'integration:manage',
+  input: configureInput,
+  async handler(input, ctx) {
+    if (!ctx.principal.organizationId) {
+      throw new ForbiddenError('Platform admins manage organizations, not their integrations.');
+    }
+
+    let config:
+      | { botToken: string }
+      | { apiToken: string; teamId?: string }
+      | { apiKey: string; from: string };
+    let health: { reachable: boolean; detail: string };
+
+    if (input.provider === 'SLACK') {
+      config = { botToken: input.botToken };
+      health = await createSlackProvider(config.botToken).health();
+    } else if (input.provider === 'CLICKUP') {
+      config = { apiToken: input.apiToken, teamId: input.teamId || undefined };
+      health = await createClickUpProvider(config.apiToken).health();
+    } else {
+      config = { apiKey: input.apiKey, from: input.from };
+      health = await createResendProvider(config.apiKey, config.from).health();
+    }
+
+    if (!health.reachable) {
+      throw new ConflictError(health.detail || 'Those credentials could not be verified.');
+    }
+
+    await setOrganizationIntegration({
+      organizationId: ctx.principal.organizationId,
+      provider: input.provider,
+      config,
+      configuredById: ctx.principal.id,
+    });
+
+    const label =
+      input.provider === 'SLACK' ? 'Slack' : input.provider === 'CLICKUP' ? 'ClickUp' : 'Email';
+    revalidatePath('/integrations');
+    return actionOk(undefined, `${label} connected.`);
+  },
+});
+
+export const clearOrganizationIntegrationAction = defineAction({
+  name: 'integration.disconnect_organization',
+  permission: 'integration:manage',
+  input: z.object({ provider: z.enum(['SLACK', 'CLICKUP', 'EMAIL']) }),
+  async handler(input, ctx) {
+    if (!ctx.principal.organizationId) {
+      throw new ForbiddenError('Platform admins manage organizations, not their integrations.');
+    }
+
+    await setOrganizationIntegration({
+      organizationId: ctx.principal.organizationId,
+      provider: input.provider,
+      config: null,
+      configuredById: ctx.principal.id,
+    });
+
+    revalidatePath('/integrations');
+    return actionOk(undefined, 'Disconnected - back to the mock adapter.');
   },
 });

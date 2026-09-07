@@ -20,6 +20,13 @@ export interface Principal {
   role: UserRole;
   team: Team;
   isActive: boolean;
+  /**
+   * The tenant this principal belongs to. Null for `PLATFORM_ADMIN` (the
+   * SaaS operator, not a tenant) and `MERCHANT` (scoped by `ProjectMember`,
+   * never by organization) - see `Organization`'s own comment in
+   * `schema.prisma`.
+   */
+  organizationId: string | null;
 }
 
 export function principalTeam(principal: Principal): Team {
@@ -88,16 +95,25 @@ export function canDecideApproval(principal: Principal, type: ApprovalType): boo
 
 /**
  * Project visibility. A merchant reaches exactly the projects they hold a
- * `ProjectMember` row for; everyone else sees the portfolio. Returned as a
- * Prisma `where` fragment so the restriction is part of the query, not a
- * filter applied after the rows have already been read.
+ * `ProjectMember` row for; `PLATFORM_ADMIN` (no `organizationId` - the SaaS
+ * operator, not a tenant) reaches every organization's portfolio; everyone
+ * else - every AHN/SHOPLINE-shaped role, in whichever organization they
+ * belong to - reaches only their own organization's portfolio. This is the
+ * one place tenant isolation is actually enforced: every screen and every
+ * action that lists or resolves a project goes through this, so a project
+ * in another organization is not filtered out after being read, it is never
+ * fetched at all. Returned as a Prisma `where` fragment for exactly that
+ * reason.
  */
 export function projectScopeWhere(principal: Principal): Record<string, unknown> {
   const base: Record<string, unknown> = { deletedAt: null };
   if (principalTeam(principal) === 'MERCHANT') {
     return { ...base, members: { some: { userId: principal.id } } };
   }
-  return base;
+  if (principal.role === 'PLATFORM_ADMIN') {
+    return base;
+  }
+  return { ...base, organizationId: principal.organizationId };
 }
 
 /** True when this principal is confined to their own project records. */

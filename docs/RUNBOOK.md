@@ -120,15 +120,21 @@ Required in production. `.env.example` documents every one.
 | `CREDENTIAL_ENCRYPTION_KEY` | Same. Rotating it invalidates stored credentials.                                                     |
 | `APP_URL`                   | Used in every outbound link. Getting it wrong is the most common cause of "the Slack link is broken". |
 | `S3_*`                      | MinIO locally, S3 in production. `S3_BUCKET` must already exist — nothing creates it at boot.         |
-| `SLACK_BOT_TOKEN` etc.      | Optional. Absent means the mock adapter answers.                                                      |
+| `SLACK_BOT_TOKEN` etc.      | Legacy/unused (see below) — still declared, optional, read by nothing.                                |
 
 `env()` validates everything at first access and lists **all** problems at once, so a missing
 secret fails the boot rather than the first request that happens to need it.
 
-**Setting real `SLACK_BOT_TOKEN` / `CLICKUP_API_TOKEN` / `RESEND_API_KEY` switches
-`pnpm test:integration` from mocks to the real APIs**, which then correctly reject the suite's
-fixture IDs. Blank them for that run (mocks), or give the suite fixtures matching a real
-workspace — don't just re-run and assume a fresh failure is a regression.
+**Since D-052, `SLACK_BOT_TOKEN` / `CLICKUP_API_TOKEN` / `RESEND_API_KEY` in `.env` do nothing.**
+Every organization now self-configures its own credentials at `/integrations` (encrypted at rest,
+`packages/integrations/src/registry.ts`'s `integrationsFor(organizationId)`), resolved fresh from
+the database per organization rather than from the process environment. These three env vars are
+still declared in `packages/config/src/env.ts` (harmless, optional, unread) only because removing
+a declared env var is a separate cleanup with no functional upside — nothing breaks by leaving
+them. `pnpm test:integration` now always runs against the mock adapter regardless of what is in
+`.env`, since no test fixture organization has a configured `OrganizationIntegration` row unless a
+test deliberately creates one — a fresh failure there is a regression, not a live-API false
+positive, and there is no env var left to blank before re-running.
 
 **A Redis instance at its `maxmemory` cap rejects the Lua scripts BullMQ needs to schedule
 jobs** (`OOM command not allowed when used memory > 'maxmemory'`), which reads in the worker log

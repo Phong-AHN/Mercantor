@@ -12,7 +12,7 @@ export default async function NewProjectPage() {
   const principal = await requirePrincipalOrRedirect('/projects/new');
   if (!can(principal, 'project:create')) return <PermissionDenied />;
 
-  const people = await listAssignableUsers();
+  const people = await listAssignableUsers(principal.organizationId);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">

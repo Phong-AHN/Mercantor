@@ -83,6 +83,8 @@ async function clear() {
     db.merchant.deleteMany(),
     db.session.deleteMany(),
     db.user.deleteMany(),
+    db.organizationIntegration.deleteMany(),
+    db.organization.deleteMany(),
     db.portalSetting.deleteMany(),
   ]);
 }
@@ -1222,9 +1224,21 @@ async function main() {
   console.log('Clearing existing data...');
   await clear();
 
+  console.log('Creating organization...');
+  // The one agency tenant this demo data belongs to (D-052) - matches the
+  // bootstrap row the multi-tenant migration seeds for real deployments, so
+  // a fresh `pnpm db:seed` and a migrated existing database end up with the
+  // same slug either way.
+  const organization = await db.organization.create({
+    data: { name: 'AHN Media', slug: 'ahn-media' },
+    select: { id: true },
+  });
+
   console.log('Creating users...');
   const userIds = new Map<UserKey, string>();
   for (const spec of USERS) {
+    // MERCHANT accounts are scoped by `ProjectMember`, not organization -
+    // matches how `inviteMerchantAction` creates one for real.
     const user = await db.user.create({
       data: {
         email: spec.email,
@@ -1234,6 +1248,7 @@ async function main() {
         team: spec.team,
         title: spec.title,
         lastLoginAt: ago(1),
+        organizationId: spec.team === 'MERCHANT' ? null : organization.id,
       },
       select: { id: true },
     });
@@ -1286,6 +1301,7 @@ async function main() {
     const project = await db.project.create({
       data: {
         code: spec.code,
+        organizationId: organization.id,
         merchantId: merchant.id,
         stage: spec.stage,
         migrationType: spec.migrationType,

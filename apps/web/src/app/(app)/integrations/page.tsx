@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Mail, MessageSquare, SquareKanban } from 'lucide-react';
 import { clock, formatDateTime, formatRelative } from '@relay/core';
-import { integrationHealth } from '@relay/integrations';
+import { integrationHealthFor } from '@relay/integrations';
 import { can } from '@relay/rbac';
 import {
   Alert,
@@ -22,6 +22,11 @@ import {
 } from '@relay/ui';
 import { listOutbox } from '@/features/workspace/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import {
+  ClickUpCredentialsForm,
+  EmailCredentialsForm,
+  SlackCredentialsForm,
+} from './credentials-panel';
 
 export const metadata: Metadata = { title: 'Integrations' };
 export const dynamic = 'force-dynamic';
@@ -41,8 +46,12 @@ const OUTBOX_TONE = {
 export default async function IntegrationsPage() {
   const principal = await requirePrincipalOrRedirect('/integrations');
   if (!can(principal, 'integration:manage')) return <PermissionDenied />;
+  if (!principal.organizationId) return <PermissionDenied />;
 
-  const [health, outbox] = await Promise.all([integrationHealth(), listOutbox(principal)]);
+  const [health, outbox] = await Promise.all([
+    integrationHealthFor(principal.organizationId),
+    listOutbox(principal),
+  ]);
   const now = clock.now();
 
   const providers = [
@@ -53,7 +62,7 @@ export default async function IntegrationsPage() {
       health: health.slack,
       blurb:
         'Project updates post to the linked channel with a link straight back to the record. Important Slack messages can be pulled back into the project history.',
-      env: 'SLACK_BOT_TOKEN',
+      form: <SlackCredentialsForm connected={health.slack.mode === 'live'} />,
     },
     {
       key: 'clickup' as const,
@@ -61,8 +70,8 @@ export default async function IntegrationsPage() {
       icon: <SquareKanban className="size-4" />,
       health: health.clickup,
       blurb:
-        'Stage changes push a status to the linked task. ClickUp stays AHN’s execution layer; the portal stays the shared source of truth.',
-      env: 'CLICKUP_API_TOKEN',
+        'Stage changes push a status to the linked task. ClickUp stays your execution layer; the portal stays the shared source of truth.',
+      form: <ClickUpCredentialsForm connected={health.clickup.mode === 'live'} />,
     },
     {
       key: 'email' as const,
@@ -70,7 +79,7 @@ export default async function IntegrationsPage() {
       icon: <Mail className="size-4" />,
       health: health.email,
       blurb: 'Delivers the standardised merchant introduction, generated from the project record.',
-      env: 'RESEND_API_KEY',
+      form: <EmailCredentialsForm connected={health.email.mode === 'live'} />,
     },
   ];
 
@@ -86,9 +95,9 @@ export default async function IntegrationsPage() {
 
       {mocked.length > 0 && (
         <Alert tone="info" title={`${mocked.length} integration(s) running in mock mode`}>
-          Messages are recorded in the outbox but not delivered. Set{' '}
-          {mocked.map((provider) => provider.env).join(', ')} in the environment to go live -
-          nothing else changes.
+          Messages are recorded in the outbox but not delivered. Connect{' '}
+          {mocked.map((provider) => provider.name).join(', ')} below to go live - nothing else
+          changes.
         </Alert>
       )}
 
@@ -129,7 +138,7 @@ export default async function IntegrationsPage() {
               <p className="bg-surface-2 text-ink-soft rounded-[var(--radius-sm)] px-3 py-2 text-[12px] leading-4">
                 {provider.health.detail}
               </p>
-              <p className="text-faint font-mono text-[11px]">{provider.env}</p>
+              {provider.form}
             </CardBody>
           </Card>
         ))}

@@ -16,7 +16,7 @@ import {
 import { env } from '@relay/config';
 import { renderPasswordResetEmail } from '@relay/core';
 import { db } from '@relay/db';
-import { integrations } from '@relay/integrations';
+import { integrationsFor } from '@relay/integrations';
 import { logger } from '@relay/observability';
 import { actionError, actionOk, type ActionResult } from '@/server/action';
 import { requestMeta } from '@/server/session';
@@ -59,7 +59,7 @@ export async function requestPasswordResetAction(
     const email = parsed.data.email.trim().toLowerCase();
     const user = await db.user.findFirst({
       where: { email, deletedAt: null, isActive: true },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, organizationId: true },
     });
 
     if (user) {
@@ -68,7 +68,8 @@ export async function requestPasswordResetAction(
         recipientName: user.name,
         resetUrl: `${env().APP_URL}/set-password?token=${token}`,
       });
-      const result = await integrations().email.send({
+      const registry = await integrationsFor(user.organizationId);
+      const result = await registry.email.send({
         to: [{ name: user.name, email: user.email }],
         subject: rendered.subject,
         text: rendered.text,

@@ -288,22 +288,30 @@ who had the direct link, and the portfolio CSV export was vulnerable to formula 
   dependencies) are noted rather than fixed - see D-050 and `TODO.md` §2. D-051 then closed the
   three account-provisioning gaps `FUTURE-WORK.md` §1 had described since Phase 2 - self-service
   password reset, staff invitations, and merchant invitations - and closed D-050's deferred
-  rate-limiting gap with an IP-keyed delay. Everything left before inviting a real merchant is a
-  credential, a business call, or infrastructure, not code - see `GOING-LIVE-DECISIONS.md`.
+  rate-limiting gap with an IP-keyed delay. A direct correction then followed: D-051 had made
+  AHN's own staff and merchants self-service but left the agency side itself hardcoded, one shared
+  `.env` of integration credentials for the whole deployment. D-052 made `Organization` the
+  top-level tenant - any agency signing up gets its own people, its own projects, and its own
+  encrypted, self-configured Slack/ClickUp/Resend credentials, none of it visible to another
+  tenant - without renaming the `AHN`/`SHOPLINE` role vocabulary itself, a real product decision
+  named plainly rather than folded in quietly (see D-052 and `GOING-LIVE-DECISIONS.md` §3).
+  Everything left before inviting a real merchant is a credential, a business call, infrastructure,
+  or that vocabulary decision, not missing code - see `GOING-LIVE-DECISIONS.md`.
 
 ## Test coverage
 
 Three layers, each testing something the other two cannot:
 
-- **Unit tests** (`pnpm test`, 59 tests) — the SLA maths, the state machine, RBAC, password
+- **Unit tests** (`pnpm test`, 69 tests) — the SLA maths, the state machine, RBAC, password
   hashing, the portfolio CSV's escaping and column rules (D-040), which SLA breaches should be
   open, dated to the exact crossing, purely from the time model already computed (D-041), the
   calendar-month bucketing behind the analytics trends - including a year boundary (D-042), that
   a Slack lookup failure is only ever a permanent skip when it is genuinely non-retryable (D-043),
   and that every live Slack/ClickUp/Resend call carries a timeout signal, including a real
-  8-second proof that a hung connection resolves rather than hangs (D-044), with no infrastructure
-  and no I/O.
-- **Integration tests** (`pnpm test:integration`, 99 tests over 21 files) — the real exported
+  8-second proof that a hung connection resolves rather than hangs (D-044), and
+  `projectScopeWhere`'s organization filter plus its `PLATFORM_ADMIN` bypass (D-052), with no
+  infrastructure and no I/O.
+- **Integration tests** (`pnpm test:integration`, 105 tests over 22 files) — the real exported
   server actions (and, for the first time, a real worker processor - see D-037) against a real
   Postgres, through a harness that mocks only `next/headers`, `next/cache` and `server-only` (see
   `apps/web/test/`). They prove: the blocker-handover arithmetic writes the right rows with no gap

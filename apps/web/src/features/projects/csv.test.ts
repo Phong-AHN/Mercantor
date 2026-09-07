@@ -35,6 +35,7 @@ function fixture(overrides: Partial<ProjectListItem> = {}): ProjectListItem {
   return {
     id: 'project-1',
     code: 'PRJ-001',
+    organizationId: 'org-1',
     merchant: {
       id: 'merchant-1',
       name: 'Acme, Inc.',

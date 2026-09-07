@@ -864,3 +864,95 @@ a real and a made-up address, and the demo-account picker's absence from a real 
 `purge-expired-sessions` (the nightly worker sweep) now also clears expired `PasswordToken` rows,
 on the same schedule as expired sessions - not a security fix (`consumePasswordToken` already
 refuses an expired token on its own), just no reason to let them accumulate.
+
+**D-052 — Multi-tenant: any agency can run this as its own tenant, with its own encrypted
+integration credentials. A direct correction of how D-051 was read, executed the same way.**
+The instruction behind D-051 was "make this customer-facing"; what got built made _AHN's own
+staff and merchant_ self-service, but the agency side stayed the one hardcoded tenant everything
+else hung off - `.env`'s `SLACK_BOT_TOKEN`/`CLICKUP_API_TOKEN`/`RESEND_API_KEY` were one shared,
+process-wide set of credentials for the whole deployment, editable only by whoever could touch the
+server's environment. That is not what "other companies can use this" means. Corrected directly:
+**Organization** is now the top-level tenant, self-service credentials included, so a second
+agency signing up brings its own Slack workspace, its own ClickUp workspace, its own sending
+domain, and its own staff roster, none of it visible to or resolvable from AHN's.
+
+1. **`Organization`** (`packages/db/prisma/schema.prisma`, new "Tenancy" section) - `id`, `name`,
+   `slug`. `User.organizationId` is nullable (`null` only for `PLATFORM_ADMIN`, the SaaS operator
+   with no tenant of its own, and `MERCHANT`, scoped by `ProjectMember` exactly as before - a
+   merchant's access was never "belongs to AHN", it was always "belongs to this one project", and
+   staying that way means a merchant's login keeps working unchanged regardless of which agency
+   runs the migration). `Project.organizationId` is required - every project belongs to exactly
+   one agency. A hand-written migration (`prisma migrate dev --create-only` cannot backfill a
+   NOT-NULL column on a non-empty table, only warn and write broken SQL - caught by a stray failed
+   migration `prisma migrate resolve --rolled-back` had to clear) adds both columns nullable,
+   backfills every existing row into one seeded "AHN Media" / `ahn-media` organization, then sets
+   NOT NULL - no data loss, no downtime-unsafe lock.
+
+2. **Tenant isolation is enforced in exactly one place**, the same shape `readableVisibilities`
+   already gave comment visibility: `projectScopeWhere` (`packages/rbac/src/engine.ts`) now filters
+   every non-merchant role by `organizationId`, with a `PLATFORM_ADMIN` bypass (no organization of
+   its own, sees every tenant's portfolio - the operator, not a tenant). Every screen and action
+   that lists or resolves a project goes through this helper, so a project in another organization
+   is never fetched, not merely filtered out after being read. Three more leaks needed closing by
+   hand because they read `User`/`Merchant` directly rather than through a project: `searchMerchantsAction`
+   (a merchant search could otherwise reveal that a competing agency is also migrating "Acme
+   Corp"), `listAssignableUsers` (could otherwise list, and let you assign, another agency's staff
+   to your own project), and `inviteUserAction` (created new staff with no `organizationId` at
+   all, silently landing them in `PLATFORM_ADMIN`'s "no tenant" bucket instead of the inviter's
+   own organization).
+
+3. **Self-service integration credentials** (`/integrations`, new Configure/Disconnect forms per
+   provider in `apps/web/src/app/(app)/integrations/credentials-panel.tsx`) replace the shared
+   `.env` set entirely for provider resolution. `setOrganizationIntegrationAction` verifies a
+   submitted credential live - constructs the real adapter and calls `.health()` - before it is
+   ever encrypted or saved, the same "prove it works first" shape D-045's
+   `linkClickUpTaskAction`/`linkSlackChannelAction` already use for a project's own Slack/ClickUp
+   links; a typo'd token is rejected on the spot rather than sitting encrypted and silently broken.
+   Credentials are AES-256-GCM encrypted at rest (`encryptSecret`/`decryptSecret`,
+   `packages/core/src/server.ts`, keyed by `CREDENTIAL_ENCRYPTION_KEY` - reserved in
+   `packages/config/src/env.ts` since early in the project, unused until now, the same
+   "reserved but unbuilt" shape `checkPasswordStrength` had before D-051) with a fresh IV per call
+   and GCM's own tamper detection; a blob that fails to decrypt (wrong or rotated key, corruption)
+   falls back to the mock adapter rather than throwing, the same fail-open posture D-051's rate
+   limiter uses. `integrations()`'s old module-level cached singleton is gone - `integrationsFor(organizationId)`
+   resolves fresh from the database on every call, deliberately never cached, because a self-service
+   settings page means a token can change at any moment and a stale cached adapter serving the
+   _previous_ one is a worse bug than the extra database read. Every one of the ten call sites that
+   used the old `integrations()`/`integrationHealth()` (five `apps/web` feature files, the
+   `/integrations` and a project's Settings pages, and the worker's outbox delivery processor,
+   which now resolves `organizationId` off the outbox message's own project) now thread
+   `organizationId` through instead.
+
+4. **A scoping decision, made without stopping to ask, is worth stating plainly rather than
+   leaving implicit:** the `Team`/`UserRole` vocabulary (`AHN_ADMIN`, `SHOPLINE_ADMIN`,
+   `AHN_SHOPLINE` comment visibility, and so on) was **not** renamed to something tenant-neutral.
+   Doing that properly - a real "your organization" / "your migration partner" vocabulary
+   throughout permissions, comment visibility, email copy and the UI - is a large, product-facing
+   rewrite, not a schema change, and was judged out of scope for this pass. What "another agency
+   can use this" means here is narrower and load-bearing rather than cosmetic: the _agency_ side
+   (whichever company plays the structural role the enum names call "AHN") is now a real,
+   data-driven `Organization` rather than a hardcoded singleton, with its own people, its own
+   projects, and its own credentials, invisible to every other tenant. SHOPLINE stays the one
+   fixed migration-target platform - inherent to what this product does, not a hardcoded tenant.
+   A second agency signing up today would see role labels and internal comment-visibility names
+   that still read "AHN" and "SHOPLINE" even though neither name means anything to them; that is a
+   real limitation, not a hidden one, and belongs on the list of what to do before actually selling
+   this to a second company, not folded quietly into "multi-tenant, done."
+
+Covered by 6 new integration tests in a new file
+(`projects/tenant-isolation.integration.test.ts`) proving the isolation directly: a project list,
+a merchant search, and an assignable-staff list drawn as organization A's principal never contain
+anything from organization B; a `PLATFORM_ADMIN` still sees every tenant; a `PLATFORM_ADMIN`
+cannot create a project (no organization to put one in); and organization A's encrypted Slack
+credential never leaks into organization B's provider resolution, which keeps returning the mock
+adapter regardless of which organization configured something first. Two rbac unit tests added
+(`packages/rbac/src/engine.test.ts`) prove `projectScopeWhere`'s org filter and its
+`PLATFORM_ADMIN` bypass directly - 105 integration tests now, up from 99, over 22 files, up from
+21; 69 unit tests, up from 66, over 8 files. `pnpm verify` (format, lint, typecheck, unit tests),
+`pnpm test:integration`, and production builds of both apps all pass clean. Verified live in a
+real browser, not only through the test suite: signed in as an AHN admin, `/integrations` renders
+a Configure form per provider with mock-mode badges on a freshly reseeded database (`pnpm db:seed`
+now seeds the bootstrap "AHN Media" organization and assigns every non-merchant demo user to it),
+submitting a deliberately bogus Slack bot token is rejected live against the real Slack API rather
+than silently saved, and the provider stays in mock mode after a reload - nothing persisted on a
+failed verification.

@@ -29,12 +29,49 @@ export type TestUser = Principal;
 const createdUserIds: string[] = [];
 const createdMerchantIds: string[] = [];
 const createdProjectIds: string[] = [];
+const createdOrganizationIds: string[] = [];
+
+/**
+ * Every `AHN_*`/`SHOPLINE_*` fixture user needs an organization now
+ * (D-052) - most tests only care that project-level RBAC still works, not
+ * about tenancy itself, so a lazily-created default keeps every existing
+ * `createTestUser(role)` call site (with no explicit org) landing in the
+ * *same* organization, exactly as it did before organizations existed. A
+ * test that specifically exercises tenant isolation asks for a second one
+ * with `createTestOrganization()` and passes its id explicitly.
+ */
+let defaultOrganizationId: string | null = null;
+
+export async function createTestOrganization(name?: string): Promise<{ id: string }> {
+  const suffix = randomUUID().slice(0, 8);
+  const org = await db.organization.create({
+    data: { name: name ?? `IT Org ${suffix}`, slug: `it-org-${suffix}` },
+    select: { id: true },
+  });
+  createdOrganizationIds.push(org.id);
+  return org;
+}
+
+async function defaultOrganization(): Promise<string> {
+  if (defaultOrganizationId) return defaultOrganizationId;
+  const org = await createTestOrganization();
+  defaultOrganizationId = org.id;
+  return org.id;
+}
 
 export async function createTestUser(
   role: UserRole,
-  overrides: Partial<{ name: string }> = {},
+  overrides: Partial<{ name: string; organizationId: string | null }> = {},
 ): Promise<TestUser> {
   const suffix = randomUUID().slice(0, 8);
+  const needsOrganization = role !== 'PLATFORM_ADMIN' && role !== 'MERCHANT';
+  const organizationId =
+    'organizationId' in overrides
+      ? overrides.organizationId
+      : needsOrganization
+        ? await defaultOrganization()
+        : null;
+
   const user = await db.user.create({
     data: {
       email: `it-${suffix}@relay.test`,
@@ -43,8 +80,17 @@ export async function createTestUser(
       role,
       team: USER_ROLE_TEAM[role],
       isActive: true,
+      organizationId,
     },
-    select: { id: true, email: true, name: true, role: true, team: true, isActive: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      team: true,
+      isActive: true,
+      organizationId: true,
+    },
   });
   createdUserIds.push(user.id);
   return user;
@@ -101,10 +147,11 @@ export async function createTestProject(input: {
 /**
  * Removes everything this module created, in FK-safe order: projects first
  * (cascades every child row - blockers, comments, invoices, the outbox...),
- * then merchants (now unreferenced), then users (cascades their sessions).
- * `Project.merchant` is a required relation with no cascade, so the order
- * matters - deleting a merchant first is a foreign-key violation on purpose,
- * it is the same guard that stops the app orphaning a project.
+ * then merchants (now unreferenced), then users (cascades their sessions),
+ * then organizations (`User.organizationId` and `Project.organizationId`
+ * are both `onDelete: Restrict` on purpose - a tenant with people or
+ * projects still in it cannot be deleted out from under them, in fixtures
+ * any more than in the real app).
  */
 export async function cleanupFixtures(): Promise<void> {
   if (createdProjectIds.length > 0) {
@@ -119,4 +166,9 @@ export async function cleanupFixtures(): Promise<void> {
     await db.user.deleteMany({ where: { id: { in: createdUserIds } } });
     createdUserIds.length = 0;
   }
+  if (createdOrganizationIds.length > 0) {
+    await db.organization.deleteMany({ where: { id: { in: createdOrganizationIds } } });
+    createdOrganizationIds.length = 0;
+  }
+  defaultOrganizationId = null;
 }

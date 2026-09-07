@@ -47,23 +47,34 @@ against seeded data; it only blocks going live with real merchants.
       own registry mirror lagging the public one (`15.5.25` exists in the same `^15.5.0` range) -
       worth confirming with a real update + re-audit before the next deploy, not urgent before then.
 
-## 3. Integrations — each is optional and mocked until you set its keys (`INTEGRATIONS.md`)
+## 3. Integrations — each is optional and mocked until your organization configures it (`INTEGRATIONS.md`)
+
+**Since D-052, this is self-service through the product, not an env var.** `SLACK_BOT_TOKEN` /
+`CLICKUP_API_TOKEN` / `RESEND_API_KEY` in `.env` do nothing any more — every organization
+(AHN Media's bootstrap org included) configures its own credentials at `/integrations`
+(`integration:manage`, e.g. `AHN_ADMIN`), encrypted at rest and verified live before being saved.
+The credential requirements below are unchanged; only where they get typed in has moved.
 
 - [ ] **Slack.** Create a Slack app in your workspace with scopes `chat:write`, `channels:read`,
       `groups:read`, `mpim:read`, `im:read`, `channels:history`, `users:read.email`; install it;
-      invite the bot to the channels you want project updates posted to. Set `SLACK_BOT_TOKEN`.
-      **The token currently in `.env` is still missing `users:read.email`** (the other four were
-      added) — without it, a personal Slack DM for an urgent notification (`notification_dm`) is
-      silently `SKIPPED` with "missing an OAuth scope" as the reason. Add it in the app's OAuth &
-      Permissions page and reinstall the app; everything else Slack does already works.
-- [ ] **ClickUp.** Generate a personal or workspace API token from ClickUp's settings. Set
-      `CLICKUP_API_TOKEN` (and `CLICKUP_TEAM_ID` if you use team-scoped endpoints).
+      invite the bot to the channels you want project updates posted to. Paste the bot token into
+      the Slack card at `/integrations`. **The token previously kept in `.env` was still missing
+      `users:read.email`** (the other four were added) — without it, a personal Slack DM for an
+      urgent notification (`notification_dm`) is silently `SKIPPED` with "missing an OAuth scope"
+      as the reason. Add it in the app's OAuth & Permissions page and reinstall the app before
+      pasting the token in; everything else Slack does already works.
+- [ ] **ClickUp.** Generate a personal or workspace API token from ClickUp's settings. Paste it
+      into the ClickUp card at `/integrations` (Team ID is optional there, for team-scoped
+      endpoints).
 - [ ] **Email.** Sign up for Resend (or swap the adapter — see `packages/integrations/src/email.ts`),
-      verify a sending domain (Resend will give you SPF/DKIM DNS records to add), then set
-      `RESEND_API_KEY` and `EMAIL_FROM`. **The Resend account configured in `.env` currently has zero
-      verified domains** (`GET /domains` returns an empty list) while `EMAIL_FROM` is set to an
-      `@ahnmedia.com` address — every email in the outbox is failing permanently as a result. Add and
-      verify `ahnmedia.com` (or whichever domain `EMAIL_FROM` uses) in the Resend dashboard first.
+      verify a sending domain (Resend will give you SPF/DKIM DNS records to add), then paste the
+      API key and the verified from-address into the Email card at `/integrations`. **The Resend
+      account previously configured in `.env` had zero verified domains** (`GET /domains` returned
+      an empty list) while `EMAIL_FROM` was set to an `@ahnmedia.com` address — every email in the
+      outbox was failing permanently as a result. Verify `ahnmedia.com` (or whichever domain you
+      use as the from-address) in the Resend dashboard first — `setOrganizationIntegrationAction`
+      verifies the key live before saving it, so an unverified domain is rejected on the spot
+      rather than silently broken later.
 - [ ] **Link each real project to its Slack channel and ClickUp task.** Each project's own Settings
       page now has a connect/disconnect form for both (D-045) — open `/projects/<code>/settings` and
       use it directly; no script or database write needed any more.

@@ -21,7 +21,10 @@ export default async function ProjectBlockersPage({
 }) {
   const { code } = await params;
   const principal = await requirePrincipalOrRedirect(`/projects/${code}/blockers`);
-  const [project, people] = await Promise.all([getProject(principal, code), listAssignableUsers()]);
+  const [project, people] = await Promise.all([
+    getProject(principal, code),
+    listAssignableUsers(principal.organizationId),
+  ]);
 
   const manage = can(principal, 'blocker:manage');
   const now = project.snapshot.time.now;

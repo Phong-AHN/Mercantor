@@ -7,6 +7,7 @@ import {
   DEFAULT_ASSET_CHECKLIST,
   DEFAULT_SCOPE_TEMPLATE,
   MIGRATION_TYPES,
+  ValidationError,
   type MigrationType,
 } from '@relay/core';
 import { projectCode } from '@relay/core/server';
@@ -47,6 +48,17 @@ export const createProjectAction = defineAction({
     shoplineSeId: z.string().uuid().optional(),
   }),
   async handler(input, ctx) {
+    // `PLATFORM_ADMIN` operates the whole product, not one tenant - it has
+    // every permission (`packages/rbac/src/matrix.ts`), but no organization
+    // of its own to put a project in. Guarded here rather than left to a
+    // NOT NULL constraint error, which would say nothing about why.
+    if (!ctx.principal.organizationId) {
+      throw new ValidationError('Your account is not part of an organization.', {
+        _: ['Platform admins manage organizations, not projects, directly.'],
+      });
+    }
+    const organizationId = ctx.principal.organizationId;
+
     const now = clock.now();
     const targetLaunchDate = parseDate(input.targetLaunchDate, 'targetLaunchDate');
 
@@ -86,6 +98,7 @@ export const createProjectAction = defineAction({
       const project = await tx.project.create({
         data: {
           code: candidate,
+          organizationId,
           merchantId: merchant.id,
           stage: 'INTRODUCTION',
           migrationType: input.migrationType,
@@ -185,16 +198,27 @@ export const createProjectAction = defineAction({
   },
 });
 
-/** Existing merchants, so a second project does not duplicate the record. */
+/**
+ * Existing merchants, so a second project does not duplicate the record.
+ * Scoped to organizations that already have a project with this merchant -
+ * without it, one organization could search and learn that another
+ * organization is also migrating "Acme Corp", which is exactly the kind of
+ * cross-tenant leak `projectScopeWhere` exists to prevent everywhere else.
+ * `PLATFORM_ADMIN` (no organization of its own) sees every organization's,
+ * the same exception `projectScopeWhere` makes.
+ */
 export const searchMerchantsAction = defineAction({
   name: 'project.search_merchants',
   permission: 'merchant:read',
   input: z.object({ q: z.string().trim().max(120).default('') }),
-  async handler(input) {
+  async handler(input, ctx) {
     const merchants = await db.merchant.findMany({
       where: {
         deletedAt: null,
         name: input.q ? { contains: input.q, mode: 'insensitive' } : undefined,
+        ...(ctx.principal.organizationId
+          ? { projects: { some: { organizationId: ctx.principal.organizationId } } }
+          : {}),
       },
       select: { id: true, name: true, website: true, shoplineStoreId: true },
       orderBy: { name: 'asc' },

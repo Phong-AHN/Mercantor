@@ -7,12 +7,12 @@ import { processIntegration } from './integrations';
 /**
  * D-039: an urgent notification also DMs the recipient in Slack, resolved
  * fresh by email at delivery time (`findUserByEmail`) rather than a stored
- * id - nothing about Slack identity is ever queued. No `SLACK_BOT_TOKEN` in
- * the test environment, so this runs through the mock adapter, the same way
- * every other integration test exercises a provider without live
- * credentials; what it proves is real either way - the outbox row reaches
- * `DELIVERED`, and the lookup ran against the actual email on the row, not
- * a stub of the whole delivery path.
+ * id - nothing about Slack identity is ever queued. The fixture project has
+ * no configured `OrganizationIntegration` row, so this runs through the
+ * mock adapter, the same way every other integration test exercises a
+ * provider without live credentials; what it proves is real either way -
+ * the outbox row reaches `DELIVERED`, and the lookup ran against the actual
+ * email on the row, not a stub of the whole delivery path.
  */
 describe('Slack DM delivery for urgent notifications', () => {
   afterEach(() => {

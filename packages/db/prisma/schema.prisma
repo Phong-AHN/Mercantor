@@ -329,53 +329,110 @@ enum AttachmentKind {
 }
 
 // ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+/// The agency tenant - what used to be "AHN" hardcoded everywhere is now one
+/// row here, structurally no different from any other agency that signs up.
+/// SHOPLINE stays what it always was (the platform every organization here
+/// migrates merchants onto); MERCHANT users are not tied to an organization
+/// directly, only to the projects a `ProjectMember` row names - a merchant's
+/// access was never "belongs to AHN", it was always "belongs to this one
+/// project", and that stays true regardless of which agency runs it.
+model Organization {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  users        User[]
+  projects     Project[]
+  integrations OrganizationIntegration[]
+}
+
+/// Each organization's own Slack/ClickUp/Resend credentials, self-configured
+/// rather than read from one shared process-wide `.env` - `config` is never
+/// stored in the clear (see `packages/core/src/server.ts`'s
+/// `encryptSecret`/`decryptSecret`, keyed by `CREDENTIAL_ENCRYPTION_KEY`, the
+/// same env var `TODO.md` had reserved for exactly this since before this
+/// feature existed). A missing row for a provider means that organization
+/// runs the mock adapter for it, the same meaning an absent env var used to
+/// carry.
+model OrganizationIntegration {
+  id              String              @id @default(uuid(7)) @db.Uuid
+  organizationId  String              @db.Uuid
+  provider        IntegrationProvider
+  /// `iv:authTag:ciphertext`, each base64 - see `encryptSecret`. Decrypts to
+  /// a JSON object shaped per provider (e.g. Slack: `{botToken}`; ClickUp:
+  /// `{apiToken, teamId?}`; Email: `{apiKey, from}`).
+  encryptedConfig String
+  isActive        Boolean             @default(true)
+  configuredById  String?             @db.Uuid
+  createdAt       DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  configuredBy User?        @relation(fields: [configuredById], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, provider])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
 // Identity
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String    @id @default(uuid(7)) @db.Uuid
-  email        String    @unique
-  name         String
-  passwordHash String
-  role         UserRole
-  team         Team
-  title        String?
-  phone        String?
-  avatarColor  String? // deterministic fallback avatar, no upload required
-  timezone     String    @default("UTC")
-  isActive     Boolean   @default(true)
-  lastLoginAt  DateTime? @db.Timestamptz(3)
-  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
-  deletedAt    DateTime? @db.Timestamptz(3)
+  id             String        @id @default(uuid(7)) @db.Uuid
+  /// Null only for `PLATFORM_ADMIN` (the SaaS operator, not a tenant) and
+  /// `MERCHANT` (scoped by `ProjectMember`, never by organization).
+  organizationId String?       @db.Uuid
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  email          String        @unique
+  name           String
+  passwordHash   String
+  role           UserRole
+  team           Team
+  title          String?
+  phone          String?
+  avatarColor    String? // deterministic fallback avatar, no upload required
+  timezone       String        @default("UTC")
+  isActive       Boolean       @default(true)
+  lastLoginAt    DateTime?     @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
+  deletedAt      DateTime?     @db.Timestamptz(3)
 
-  sessions              Session[]
-  passwordTokens        PasswordToken[]
-  projectMemberships    ProjectMember[]
-  managedProjects       Project[]           @relation("ProjectAhnPm")
-  developedProjects     Project[]           @relation("ProjectAhnDev")
-  accountManagedProject Project[]           @relation("ProjectShoplineAm")
-  engineeredProjects    Project[]           @relation("ProjectShoplineSe")
-  nextActionProjects    Project[]           @relation("ProjectNextActionOwner")
-  comments              Comment[]
-  mentions              CommentMention[]
-  stageChanges          StageEvent[]
-  blockersOwned         Blocker[]           @relation("BlockerOwner")
-  blockersCreated       Blocker[]           @relation("BlockerCreator")
-  blockerOwnerships     BlockerOwnership[]
-  issuesOwned           Issue[]             @relation("IssueOwner")
-  issuesReported        Issue[]             @relation("IssueReporter")
-  approvalsRequested    Approval[]          @relation("ApprovalRequester")
-  approvalsDecided      Approval[]          @relation("ApprovalDecider")
-  handoffsSubmitted     HandoffSubmission[] @relation("HandoffSubmitter")
-  handoffsDecided       HandoffSubmission[] @relation("HandoffDecider")
-  activities            ActivityEvent[]
-  notifications         Notification[]
-  attachments           Attachment[]
-  auditLogs             AuditLog[]
-  savedViews            SavedView[]
-  introEmailsSent       IntroductionEmail[]
+  sessions               Session[]
+  passwordTokens         PasswordToken[]
+  configuredIntegrations OrganizationIntegration[]
+  projectMemberships     ProjectMember[]
+  managedProjects        Project[]                 @relation("ProjectAhnPm")
+  developedProjects      Project[]                 @relation("ProjectAhnDev")
+  accountManagedProject  Project[]                 @relation("ProjectShoplineAm")
+  engineeredProjects     Project[]                 @relation("ProjectShoplineSe")
+  nextActionProjects     Project[]                 @relation("ProjectNextActionOwner")
+  comments               Comment[]
+  mentions               CommentMention[]
+  stageChanges           StageEvent[]
+  blockersOwned          Blocker[]                 @relation("BlockerOwner")
+  blockersCreated        Blocker[]                 @relation("BlockerCreator")
+  blockerOwnerships      BlockerOwnership[]
+  issuesOwned            Issue[]                   @relation("IssueOwner")
+  issuesReported         Issue[]                   @relation("IssueReporter")
+  approvalsRequested     Approval[]                @relation("ApprovalRequester")
+  approvalsDecided       Approval[]                @relation("ApprovalDecider")
+  handoffsSubmitted      HandoffSubmission[]       @relation("HandoffSubmitter")
+  handoffsDecided        HandoffSubmission[]       @relation("HandoffDecider")
+  activities             ActivityEvent[]
+  notifications          Notification[]
+  attachments            Attachment[]
+  auditLogs              AuditLog[]
+  savedViews             SavedView[]
+  introEmailsSent        IntroductionEmail[]
 
+  @@index([organizationId])
   @@index([role])
   @@index([team])
   @@index([deletedAt])
@@ -488,9 +545,15 @@ model MerchantContact {
 // ---------------------------------------------------------------------------
 
 model Project {
-  id         String @id @default(uuid(7)) @db.Uuid
-  code       String @unique // PRJ-0001, safe to say on a call
-  merchantId String @db.Uuid
+  id             String       @id @default(uuid(7)) @db.Uuid
+  code           String       @unique // PRJ-0001, safe to say on a call
+  /// The agency running this migration. Everything that hangs off a project
+  /// (blockers, comments, invoices, attachments...) inherits this boundary
+  /// implicitly - `projectScopeWhere` is the one place tenant isolation is
+  /// actually enforced, and it only ever needs to check this one field.
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  merchantId     String       @db.Uuid
 
   stage         ProjectStage  @default(INTRODUCTION)
   migrationType MigrationType @default(ONE_TO_ONE)
@@ -559,6 +622,7 @@ model Project {
 
   @@index([stage])
   @@index([health])
+  @@index([organizationId])
   @@index([merchantId])
   @@index([ahnProjectManagerId])
   @@index([shoplineAmId])

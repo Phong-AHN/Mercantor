@@ -18,6 +18,7 @@ const projectIds: string[] = [];
 const merchantIds: string[] = [];
 
 async function createProjectWithDates(input: {
+  organizationId: string;
   startDate: Date;
   actualLaunchDate?: Date;
   completedAt?: Date;
@@ -31,6 +32,7 @@ async function createProjectWithDates(input: {
   const project = await db.project.create({
     data: {
       code: `PRJ-ANALYTICS-${suffix}`,
+      organizationId: input.organizationId,
       merchantId: merchant.id,
       startDate: input.startDate,
       actualLaunchDate: input.actualLaunchDate ?? null,
@@ -76,16 +78,21 @@ describe('getAnalyticsTrends', () => {
 
     // Started December, launched January - a 40-day cycle.
     const projectA = await createProjectWithDates({
+      organizationId: pm.organizationId!,
       startDate: new Date('2029-12-01T00:00:00.000Z'),
       actualLaunchDate: new Date('2030-01-10T00:00:00.000Z'),
     });
     // Started January, completed February (no actualLaunchDate) - a 27-day cycle.
     await createProjectWithDates({
+      organizationId: pm.organizationId!,
       startDate: new Date('2030-01-05T00:00:00.000Z'),
       completedAt: new Date('2030-02-01T00:00:00.000Z'),
     });
     // Started years before the trailing window - must not count as "started".
-    await createProjectWithDates({ startDate: new Date('2020-01-01T00:00:00.000Z') });
+    await createProjectWithDates({
+      organizationId: pm.organizationId!,
+      startDate: new Date('2020-01-01T00:00:00.000Z'),
+    });
 
     await db.slaBreach.create({
       data: {

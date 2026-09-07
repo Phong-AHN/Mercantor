@@ -1,12 +1,17 @@
 'use server';
 
 import { z } from 'zod';
-import { renderAccountInviteEmail, USER_ROLE_TEAM, ValidationError } from '@relay/core';
+import {
+  ForbiddenError,
+  renderAccountInviteEmail,
+  USER_ROLE_TEAM,
+  ValidationError,
+} from '@relay/core';
 import { randomToken } from '@relay/core/server';
 import { createPasswordToken, hashPassword } from '@relay/auth';
 import { env } from '@relay/config';
 import { db, transaction } from '@relay/db';
-import { integrations } from '@relay/integrations';
+import { integrationsFor } from '@relay/integrations';
 import { logger } from '@relay/observability';
 import { actionOk, defineAction } from '@/server/action';
 import { audit } from '@/server/record';
@@ -36,6 +41,10 @@ export const inviteUserAction = defineAction({
     title: z.string().trim().max(200).optional(),
   }),
   async handler(input, ctx) {
+    if (!ctx.principal.organizationId) {
+      throw new ForbiddenError('Platform admins manage organizations, not their staff.');
+    }
+    const organizationId = ctx.principal.organizationId;
     const email = input.email.trim().toLowerCase();
     const team = USER_ROLE_TEAM[input.role];
 
@@ -63,6 +72,7 @@ export const inviteUserAction = defineAction({
               team,
               title: input.title ?? null,
               passwordHash: placeholderHash,
+              organizationId,
             },
           })
         : await tx.user.create({
@@ -74,6 +84,7 @@ export const inviteUserAction = defineAction({
               title: input.title ?? null,
               passwordHash: placeholderHash,
               isActive: true,
+              organizationId,
             },
           });
 
@@ -95,7 +106,8 @@ export const inviteUserAction = defineAction({
       invitedBy: ctx.principal.name,
       setPasswordUrl: `${env().APP_URL}/set-password?token=${token}`,
     });
-    const result = await integrations().email.send({
+    const registry = await integrationsFor(organizationId);
+    const result = await registry.email.send({
       to: [{ name: user.name, email: user.email }],
       subject: rendered.subject,
       text: rendered.text,

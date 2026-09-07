@@ -10,7 +10,7 @@ import {
   ValidationError,
 } from '@relay/core';
 import { db, transaction } from '@relay/db';
-import { integrations } from '@relay/integrations';
+import { integrationsFor } from '@relay/integrations';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, notify, recordActivity } from '@/server/record';
 import {
@@ -132,7 +132,8 @@ export const sendIntroductionAction = defineAction({
 
     const text = input.note ? `${draft.rendered.text}\n\n---\n${input.note}` : draft.rendered.text;
 
-    const result = await integrations().email.send({
+    const registry = await integrationsFor(project.organizationId);
+    const result = await registry.email.send({
       to: draft.contacts,
       cc: [
         { name: draft.ahn.name, email: draft.ahn.email },
@@ -228,7 +229,7 @@ export const sendIntroductionAction = defineAction({
     await nudgeWorker(outboxIds);
     revalidateProject(input.code);
 
-    const mode = (await integrations().email.health()).mode;
+    const mode = (await registry.email.health()).mode;
     return actionOk(
       undefined,
       mode === 'mock'

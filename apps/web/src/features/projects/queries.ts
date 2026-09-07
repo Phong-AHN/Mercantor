@@ -38,6 +38,7 @@ export interface ProjectFilters {
 const listSelect = {
   id: true,
   code: true,
+  organizationId: true,
   stage: true,
   migrationType: true,
   health: true,
@@ -100,6 +101,7 @@ export interface PersonRef {
 export interface ProjectListItem {
   id: string;
   code: string;
+  organizationId: string;
   merchant: {
     id: string;
     name: string;
@@ -191,6 +193,7 @@ function toListItem(row: ProjectListRecord, now: Date): ProjectListItem {
   return {
     id: row.id,
     code: row.code,
+    organizationId: row.organizationId,
     merchant: {
       id: row.merchant.id,
       name: row.merchant.name,
@@ -558,9 +561,23 @@ export const getProject = cache(async (principal: Principal, code: string) => {
 export type ProjectDetail = Awaited<ReturnType<typeof getProject>>;
 
 /** Assignable people, grouped by side, for the assignment controls. */
-export const listAssignableUsers = cache(async () => {
+/**
+ * Candidates for the four assignment fields on a project. Scoped to the
+ * caller's own organization - without it, a project manager in one
+ * organization could see, and assign, staff from a completely different
+ * tenant company, which is exactly the kind of cross-tenant leak
+ * `projectScopeWhere` exists to prevent for projects themselves.
+ * `organizationId: null` (only `PLATFORM_ADMIN` reaches this with one) sees
+ * every organization's staff, the same exception `projectScopeWhere` makes.
+ */
+export const listAssignableUsers = cache(async (organizationId: string | null) => {
   const users = await db.user.findMany({
-    where: { deletedAt: null, isActive: true, role: { not: 'MERCHANT' } },
+    where: {
+      deletedAt: null,
+      isActive: true,
+      role: { not: 'MERCHANT' },
+      ...(organizationId ? { organizationId } : {}),
+    },
     select: { id: true, name: true, email: true, role: true, title: true },
     orderBy: { name: 'asc' },
   });

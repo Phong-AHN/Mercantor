@@ -12,7 +12,7 @@ import {
 } from '@relay/core';
 import { db, transaction } from '@relay/db';
 import { writableVisibilities } from '@relay/rbac';
-import { integrations } from '@relay/integrations';
+import { integrationsFor } from '@relay/integrations';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, notify, recordActivity } from '@/server/record';
 import {
@@ -207,7 +207,8 @@ export const recordSlackMessageAction = defineAction({
       throw new ForbiddenError('You cannot record a message at that visibility.');
     }
 
-    const result = await integrations().slack.fetchMessage(input.permalink);
+    const registry = await integrationsFor(project.organizationId);
+    const result = await registry.slack.fetchMessage(input.permalink);
     if (!result.ok || !result.data) {
       throw new ConflictError(result.error?.userMessage ?? 'That Slack message could not be read.');
     }

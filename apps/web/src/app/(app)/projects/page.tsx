@@ -30,7 +30,7 @@ export default async function ProjectsPage({
 
   const [projects, people] = await Promise.all([
     listProjects(principal, filters),
-    listAssignableUsers(),
+    listAssignableUsers(principal.organizationId),
   ]);
 
   const now = clock.now();

@@ -33,6 +33,8 @@ export async function resolveProject(
   stage: ProjectStage;
   merchantName: string;
   currency: string;
+  organizationId: string;
+  organizationName: string;
 }> {
   const project = await db.project.findFirst({
     where: { ...(projectScopeWhere(principal) as Prisma.ProjectWhereInput), code },
@@ -41,6 +43,8 @@ export async function resolveProject(
       code: true,
       stage: true,
       currency: true,
+      organizationId: true,
+      organization: { select: { name: true } },
       merchant: { select: { name: true } },
     },
   });
@@ -52,6 +56,8 @@ export async function resolveProject(
     stage: project.stage,
     merchantName: project.merchant.name,
     currency: project.currency,
+    organizationId: project.organizationId,
+    organizationName: project.organization.name,
   };
 }
 
