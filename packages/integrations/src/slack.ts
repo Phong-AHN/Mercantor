@@ -10,6 +10,14 @@ import type {
 
 const SLACK_API = 'https://slack.com/api';
 
+// A `health()` call runs synchronously while `/integrations` renders (D-044) -
+// with no bound, a slow or unreachable Slack blocks that page's render
+// indefinitely, which reads to a person as "the menu stopped working"
+// rather than "Slack is down". Every live call gets the same bound, not only
+// health: a hung delivery call would sit past the worker's own retry sweep
+// too, the exact outcome the outbox pattern exists to avoid.
+const REQUEST_TIMEOUT_MS = 8_000;
+
 const TONE_COLOR: Record<SlackUpdate['tone'], string> = {
   info: '#3b82f6',
   success: '#10b981',
@@ -32,6 +40,7 @@ export function createSlackProvider(botToken: string): SlackProvider {
           'content-type': 'application/json; charset=utf-8',
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch (cause) {
       return { ok: false, error: unavailable(String(cause)) };

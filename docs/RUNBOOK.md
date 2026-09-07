@@ -124,6 +124,16 @@ Required in production. `.env.example` documents every one.
 `env()` validates everything at first access and lists **all** problems at once, so a missing
 secret fails the boot rather than the first request that happens to need it.
 
+**Setting real `SLACK_BOT_TOKEN` / `CLICKUP_API_TOKEN` / `RESEND_API_KEY` switches
+`pnpm test:integration` from mocks to the real APIs**, which then correctly reject the suite's
+fixture IDs. Blank them for that run (mocks), or give the suite fixtures matching a real
+workspace — don't just re-run and assume a fresh failure is a regression.
+
+**A Redis instance at its `maxmemory` cap rejects the Lua scripts BullMQ needs to schedule
+jobs** (`OOM command not allowed when used memory > 'maxmemory'`), which reads in the worker log
+as a boot failure with no obvious cause. If `REDIS_URL` points at a shared/cloud instance and the
+worker won't come up, check memory usage on that instance before anything else.
+
 `loadRootEnv()` deliberately does nothing in production: the platform supplies real environment
 variables there, and reading a committed file would be a way to ship the wrong ones.
 

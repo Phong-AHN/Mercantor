@@ -31,6 +31,14 @@ export function NavLink({
     <Link
       href={href}
       onClick={onNavigate}
+      // Every destination in this menu is `force-dynamic` (a fresh server
+      // render every time), so prefetching one on hover/viewport-visible
+      // buys nothing - there is no static shell to warm - and only adds
+      // background RSC requests for pages the visitor may never open.
+      // Unrelated to D-044: that bug was a page hanging outright, not a
+      // prefetch race, but this was worth turning off while looking at the
+      // same component.
+      prefetch={false}
       aria-current={active ? 'page' : undefined}
       title={description}
       className={cn(

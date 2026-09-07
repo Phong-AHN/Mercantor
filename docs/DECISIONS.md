@@ -477,6 +477,50 @@ decision entry and reported findings by hand instead. Five were real, each verif
 the exact failure path before it was trusted, then fixed and covered by a new test - not reported
 and left for later.
 
+**D-044 — A navbar click could stop working, and the reproduction that found why.** Reported as
+"click one menu item, then sometimes a different one won't click" - vague enough that it needed a
+real repro before a fix meant anything. A single click never failed; a Playwright script driving
+shuffled sequences of every sidebar link across ten fresh sign-ins did, and only ever on
+`/integrations`, 10/10 runs. Nothing was wrong with the click itself: the _previous_ page was still
+sitting on screen, fully interactive, because the app has no `loading.tsx` anywhere
+(`find apps/web/src/app -iname loading.tsx` returns nothing) - so a slow navigation just looks like
+the old page ignoring input, not like a page loading.
+
+Two hypotheses were tried and ruled out by direct experiment before finding the real one: dev-mode
+on-demand route compilation (failure rate dropped but did not disappear under a production build),
+and a `next/link` prefetch-cache race (still failed 10/10 after `prefetch={false}`, kept anyway as
+an independently reasonable change since every destination in this menu is `force-dynamic` and has
+no static shell worth prefetching). The actual cause: `/integrations` awaits
+`integrationHealth()` during server render, which calls `.health()` on the Slack, ClickUp, and
+Resend adapters via `Promise.all` - and none of the three `fetch()` calls in
+`packages/integrations/src/{slack,clickup,email}.ts` carried a timeout. A slow or unreachable
+provider blocked the whole page's render indefinitely, not just its own status tile. This had been
+invisible against the mock adapters used everywhere so far; it became reproducible only once `.env`
+was pointed at real Slack/ClickUp/Resend credentials for the first time.
+
+Fixed by giving every live call in all three adapters `signal: AbortSignal.timeout(8_000)` - not
+only `health()`, since an unbounded delivery call (`listChannels`, `createTask`, `send`, ...) would
+sit past the worker's own retry sweep too, the exact outcome the outbox pattern exists to avoid.
+Covered by `packages/integrations/src/timeout.test.ts`: three tests assert the signal is present on
+every live call, and one lets a stubbed `fetch` hang forever and waits out the real 8-second bound
+to confirm `health()` resolves to `reachable: false` rather than hanging (mocking
+`AbortSignal.timeout` itself was tried first and didn't reliably intercept the code under test, so
+the test pays the real 8 seconds instead - it is marked with its own longer timeout for that
+reason). Verified live afterward with the fix built and both servers running against real
+credentials: the same ten-run shuffled stress test that reproduced the bug went from 10/100 stuck
+clicks to 140/140 navigating, `/integrations` settling in ~0.6-0.9s instead of hanging, and
+`e2e-smoke.mjs` still 11/11.
+
+Two unrelated things surfaced while chasing this and are noted rather than fixed here: `.env` now
+carrying real Slack/ClickUp tokens makes `pnpm test:integration` hit the real APIs with fixture IDs
+that get correctly rejected (2 failures; confirmed unrelated to this fix by blanking both tokens and
+getting a clean 61/61) - the suite needs either env isolation or fixtures that match a real
+workspace before it can run safely against this `.env` again. Separately, the real Redis Cloud
+instance now in `REDIS_URL` was found at its `maxmemory` cap, rejecting the Lua scripts BullMQ needs
+to schedule jobs (`OOM command not allowed when used memory > 'maxmemory'`) - live verification
+above was run with the worker pointed at the local Docker Redis instead. That instance's capacity is
+a real, separate operational issue for whoever owns the Redis Cloud account to look at.
+
 1. **A rejected approval's reason survived its own re-request.** `autoRequestApprovals`
    (`apps/web/src/features/projects/mutations.ts`) reopens a `CHANGES_REQUESTED` or `REJECTED`
    approval as `PENDING` on re-entering the stage (D-038), but its `upsert`'s `update` branch never

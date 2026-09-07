@@ -1,5 +1,10 @@
 import type { EmailMessage, EmailProvider, ProviderHealth, ProviderResult } from './types';
 
+// See slack.ts's REQUEST_TIMEOUT_MS - a `health()` call runs synchronously
+// while `/integrations` renders (D-044), so an unbounded fetch there blocks
+// the whole page rather than just this one provider's status.
+const REQUEST_TIMEOUT_MS = 8_000;
+
 /** Live email over Resend. One `send`, because that is all the portal needs. */
 export function createResendProvider(apiKey: string, from: string): EmailProvider {
   return {
@@ -9,6 +14,7 @@ export function createResendProvider(apiKey: string, from: string): EmailProvide
       try {
         const response = await fetch('https://api.resend.com/domains', {
           headers: { authorization: `Bearer ${apiKey}` },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
         return {
           configured: true,
@@ -45,6 +51,7 @@ export function createResendProvider(apiKey: string, from: string): EmailProvide
             text: message.text,
             html: message.html,
           }),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
 
         if (!response.ok) {

@@ -274,18 +274,22 @@ wired; each has its own decision entry above and its own smoke script in `script
 
 None. Every requirement in `requirement.txt`, Phase 1 and Phase 2 both, is built and verified live.
 A full manual review once nothing remained (D-043) found and fixed five real bugs across earlier
-decisions - see D-043 for what they were and how each was verified.
+decisions - see D-043 for what they were and how each was verified. A separate navbar report led to
+D-044: an unbounded live `fetch()` in the Slack/ClickUp/Resend adapters could hang the whole
+`/integrations` page, invisible until real provider credentials were configured.
 
 ## Test coverage
 
 Three layers, each testing something the other two cannot:
 
-- **Unit tests** (`pnpm test`, 55 tests) — the SLA maths, the state machine, RBAC, password
+- **Unit tests** (`pnpm test`, 59 tests) — the SLA maths, the state machine, RBAC, password
   hashing, the portfolio CSV's escaping and column rules (D-040), which SLA breaches should be
   open, dated to the exact crossing, purely from the time model already computed (D-041), the
-  calendar-month bucketing behind the analytics trends - including a year boundary (D-042), and
-  that a Slack lookup failure is only ever a permanent skip when it is genuinely non-retryable
-  (D-043), with no infrastructure and no I/O.
+  calendar-month bucketing behind the analytics trends - including a year boundary (D-042), that
+  a Slack lookup failure is only ever a permanent skip when it is genuinely non-retryable (D-043),
+  and that every live Slack/ClickUp/Resend call carries a timeout signal, including a real
+  8-second proof that a hung connection resolves rather than hangs (D-044), with no infrastructure
+  and no I/O.
 - **Integration tests** (`pnpm test:integration`, 61 tests over 13 files) — the real exported
   server actions (and, for the first time, a real worker processor - see D-037) against a real
   Postgres, through a harness that mocks only `next/headers`, `next/cache` and `server-only` (see

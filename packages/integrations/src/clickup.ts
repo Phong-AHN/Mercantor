@@ -11,6 +11,11 @@ import type {
 
 const CLICKUP_API = 'https://api.clickup.com/api/v2';
 
+// See slack.ts's REQUEST_TIMEOUT_MS - a `health()` call runs synchronously
+// while `/integrations` renders (D-044), so an unbounded fetch there blocks
+// the whole page rather than just this one provider's status.
+const REQUEST_TIMEOUT_MS = 8_000;
+
 /**
  * Portal stage to ClickUp status name. ClickUp remains AHN's internal
  * execution layer, so the portal pushes stage changes at it and never reads
@@ -60,6 +65,7 @@ export function createClickUpProvider(apiToken: string): ClickUpProvider {
           'content-type': 'application/json',
         },
         body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch {
       return {

@@ -24,7 +24,7 @@ make one of them a field somebody has to remember to update, it is the wrong cha
 
 **Working, verified, demonstrable against seeded data:**
 
-- 38 routes build; `pnpm verify` is green (format, lint, typecheck, 55 unit tests)
+- 38 routes build; `pnpm verify` is green (format, lint, typecheck, 59 unit tests)
 - `pnpm test:integration` is green against a real Postgres and a real MinIO — 61 tests over 13
   files, proving the blocker-handover arithmetic, the handoff readiness gate, comment visibility
   per role, the outbox's transactional atomicity, that a launch blocker (and only a launch
@@ -94,6 +94,12 @@ rendered to nobody, a file attached to an internal-only comment announcing itsel
 anyway, a transient Slack lookup failure marked exactly like "no Slack account" and never retried,
 and the SLA sweep's daily approval nag never getting the urgent email/Slack delivery its own type
 promises.
+
+A navbar report ("click one menu, then another one won't click") turned out to be `/integrations`
+hanging its whole server render on an unbounded `fetch()` to Slack/ClickUp/Resend, invisible until
+`.env` first pointed at real credentials (D-044). Fixed with an 8-second `AbortSignal.timeout` on
+every live call in `packages/integrations`, verified with a ten-run shuffled click stress test
+(10/100 stuck clicks before, 140/140 clean after).
 
 **Known gaps against going live with real merchants: a few, all in `FUTURE-WORK.md`.** The biggest
 one - no UI creates a user or a project's Slack/ClickUp link yet, only `pnpm db:seed` and direct
