@@ -74,7 +74,12 @@ export function Dialog({
         if (event.target === ref.current) onClose();
       }}
       className={cn(
-        'border-line bg-surface-1 text-ink shadow-overlay w-[calc(100vw-2rem)] rounded-[var(--radius-xl)] border p-0',
+        // Native <dialog> centers itself via the UA stylesheet's `margin:
+        // auto` on `dialog:modal` - Tailwind's preflight zeroes margin on
+        // every element, which silently cancels that and leaves the dialog
+        // pinned to its default top-left inset instead. `m-auto` puts it
+        // back explicitly rather than depending on the browser default.
+        'border-line bg-surface-1 text-ink shadow-overlay m-auto w-[calc(100vw-2rem)] rounded-[var(--radius-xl)] border p-0',
         'backdrop:bg-ink/35 backdrop:backdrop-blur-[2px]',
         'open:rise',
         SIZE[size],

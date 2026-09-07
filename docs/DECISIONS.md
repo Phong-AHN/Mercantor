@@ -680,3 +680,18 @@ Slack bot token still lacks `users:read.email` (personal Slack DMs - `notificati
 `SKIPPED` without it, a different scope than the `conversations.list` one D-045 already fixed), and
 the configured Resend account has zero verified sending domains, so every `EMAIL` outbox message
 fails permanently regardless of retries. Both noted in `TODO.md`.
+
+**D-047 — Every modal opened top-left instead of centered; Tailwind's preflight was cancelling the
+browser's own centering rule.** `Dialog` (`packages/ui/src/dialog.tsx`) is built on the native
+`<dialog>` element specifically to get focus trapping, the top layer and Esc-to-close for free
+(the file's own opening comment). Centering is part of that same free behaviour - the UA
+stylesheet centers `dialog:modal` with `margin: auto` - but Tailwind v4's preflight zeroes margin
+on every element, `dialog` included, which silently cancelled it. The dialog still rendered inside
+the viewport - `showModal()`'s top-layer positioning was never in question - it just had no margin
+left to center itself with, so it sat at its default top-left inset instead. Every dialog in the
+app was affected equally, which is exactly why it read as generic rather than tied to any one
+screen. Fixed by putting `m-auto` back explicitly on the `<dialog>` element rather than relying on
+the browser default surviving preflight. Verified live: a dialog's bounding box now sits with equal
+gaps on all four sides of the viewport (confirmed 412px/412px horizontal, 217px/217px vertical at
+1400×1000), not measured against one screen's dialog alone since the fix is in the one shared
+component every `Dialog`, `ConfirmDialog` and `DialogTrigger` call site renders through.
