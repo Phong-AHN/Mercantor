@@ -33,16 +33,18 @@ against seeded data; it only blocks going live with real merchants.
 - [ ] **Slack.** Create a Slack app in your workspace with scopes `chat:write`, `channels:read`,
       `groups:read`, `mpim:read`, `im:read`, `channels:history`, `users:read.email`; install it;
       invite the bot to the channels you want project updates posted to. Set `SLACK_BOT_TOKEN`.
-      **The token currently in `.env` is missing `channels:read`, `groups:read`, `mpim:read` and
-      `im:read`** — add them in the app's OAuth & Permissions page and reinstall the app, or the
-      channel picker on a project's Settings page will show "missing an OAuth scope" instead of a
-      channel list (everything else Slack does - posting updates, pulling a message in - already
-      works with the current token).
+      **The token currently in `.env` is still missing `users:read.email`** (the other four were
+      added) — without it, a personal Slack DM for an urgent notification (`notification_dm`) is
+      silently `SKIPPED` with "missing an OAuth scope" as the reason. Add it in the app's OAuth &
+      Permissions page and reinstall the app; everything else Slack does already works.
 - [ ] **ClickUp.** Generate a personal or workspace API token from ClickUp's settings. Set
       `CLICKUP_API_TOKEN` (and `CLICKUP_TEAM_ID` if you use team-scoped endpoints).
 - [ ] **Email.** Sign up for Resend (or swap the adapter — see `packages/integrations/src/email.ts`),
       verify a sending domain (Resend will give you SPF/DKIM DNS records to add), then set
-      `RESEND_API_KEY` and `EMAIL_FROM`.
+      `RESEND_API_KEY` and `EMAIL_FROM`. **The Resend account configured in `.env` currently has zero
+      verified domains** (`GET /domains` returns an empty list) while `EMAIL_FROM` is set to an
+      `@ahnmedia.com` address — every email in the outbox is failing permanently as a result. Add and
+      verify `ahnmedia.com` (or whichever domain `EMAIL_FROM` uses) in the Resend dashboard first.
 - [ ] **Link each real project to its Slack channel and ClickUp task.** Each project's own Settings
       page now has a connect/disconnect form for both (D-045) — open `/projects/<code>/settings` and
       use it directly; no script or database write needed any more.

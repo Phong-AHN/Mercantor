@@ -45,7 +45,12 @@ async function retryOutbox(): Promise<void> {
   });
 
   for (const message of due) {
-    await enqueue('integrations', { outboxId: message.id }, { jobId: `outbox:${message.id}` });
+    // A custom jobId cannot contain `:` - BullMQ reserves it as the separator
+    // in its own Redis keys (`bull:<queue>:<jobId>`) and `Job.validateOptions`
+    // rejects one that has it, synchronously, before anything is written. A
+    // hyphen keeps this idempotent (the same outbox row never queues twice)
+    // without hitting that rejection.
+    await enqueue('integrations', { outboxId: message.id }, { jobId: `outbox-${message.id}` });
   }
   if (due.length > 0) logger.info({ count: due.length }, 'outbox retried');
 }

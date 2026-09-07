@@ -133,14 +133,41 @@ workspace — don't just re-run and assume a fresh failure is a regression.
 **A Redis instance at its `maxmemory` cap rejects the Lua scripts BullMQ needs to schedule
 jobs** (`OOM command not allowed when used memory > 'maxmemory'`), which reads in the worker log
 as a boot failure with no obvious cause. If `REDIS_URL` points at a shared/cloud instance and the
-worker won't come up, check memory usage on that instance before anything else.
+worker won't come up, check memory usage on that instance before anything else. **The Redis Cloud
+instance this project's `.env` was configured against went further and started rejecting its own
+password (`WRONGPASS`)** (checked 2026-09-07) - `REDIS_URL` is currently pointed at the local
+`pnpm infra:up` Redis instead (the cloud line is commented out, not deleted, in `.env`). Swap it
+back once you have a working credential for that instance, or provision a fresh one.
+
+**A shell `export REDIS_URL=... ; nohup pnpm dev & nohup pnpm dev:worker &` in the same invocation
+does not reliably reach both processes on this project's Windows/Git Bash setup** - one was
+observed still connecting to the value in `.env` despite the override (confirmed via `netstat`
+showing a connection to the cloud host, not `localhost`). Editing `REDIS_URL` directly in `.env`
+before starting either process is the reliable way to point dev at a different Redis; don't trust
+a shell export alone without checking `netstat` after.
+
+**A custom BullMQ job id cannot contain `:` unless it splits into exactly 3 parts** - BullMQ
+reserves that shape for its own `repeat:<hash>:<timestamp>` ids. `retryOutbox`'s job id was
+`outbox:<uuid>` (2 parts) until D-046, which `Job.validateOptions` rejected synchronously, before
+ever reaching Redis; `enqueue()` catches that and logs it, so the failure never surfaces as
+anything louder than a log line - every retry sweep failed silently, forever, and only a message
+delivered on its first, immediate attempt ever went out. If outbox messages are stuck `PENDING`
+with `attempts: 0` a while after being written, check the worker log for `Custom Id cannot contain
+:` before assuming the provider is the problem.
 
 **Linking a project to Slack (project Settings page) needs OAuth scopes beyond what posting a
 message needs**: `conversations.list` (used to populate the channel picker) requires
-`channels:read`, `groups:read`, `mpim:read` and `im:read` on the bot token. A token scoped only for
-sending (`chat:write`, `channels:history`, etc.) will get `missing_scope` back - the form shows this
-clearly rather than hanging, but the channel picker stays unusable until the scope is added in the
-Slack app's OAuth & Permissions page and the app is reinstalled to the workspace.
+`channels:read`, `groups:read`, `mpim:read` and `im:read` on the bot token, and resolving a
+personal Slack DM (`notification_dm`, for urgent notifications) separately needs
+`users:read.email`. A token scoped only for sending (`chat:write`, `channels:history`, etc.) will
+get `missing_scope` back for either - the form and the outbox both show this clearly rather than
+hanging, but stay unusable for that specific call until the scope is added in the Slack app's
+OAuth & Permissions page and the app is reinstalled to the workspace.
+
+**A Resend account with no verified sending domain fails every send permanently**, not just the
+ones from an unverified address - check `GET https://api.resend.com/domains` (or the Resend
+dashboard) for at least one verified domain matching `EMAIL_FROM` before assuming a code issue if
+`EMAIL` outbox messages stay stuck retrying.
 
 `loadRootEnv()` deliberately does nothing in production: the platform supplies real environment
 variables there, and reading a committed file would be a way to ship the wrong ones.

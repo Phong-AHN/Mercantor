@@ -25,7 +25,7 @@ make one of them a field somebody has to remember to update, it is the wrong cha
 **Working, verified, demonstrable against seeded data:**
 
 - 38 routes build; `pnpm verify` is green (format, lint, typecheck, 59 unit tests)
-- `pnpm test:integration` is green against a real Postgres and a real MinIO — 69 tests over 14
+- `pnpm test:integration` is green against a real Postgres and a real MinIO — 71 tests over 15
   files, proving the blocker-handover arithmetic, the handoff readiness gate, comment visibility
   per role, the outbox's transactional atomicity, that a launch blocker (and only a launch
   blocker, not an ordinary issue) queues one notification email and one Slack DM per recipient,
@@ -104,11 +104,21 @@ every live call in `packages/integrations`, verified with a ten-run shuffled cli
 Connecting a project to Slack and ClickUp had no UI path at all - only `pnpm db:seed` and direct
 database writes did. Each project's Settings page now has a connect/disconnect form for both,
 verified live before saving: a ClickUp task by id or pasted link through `getTask`, a Slack channel
-picked from a live `conversations.list` (D-045). That run against the real workspace also surfaced
-a real, separate config gap: the Slack bot token is missing the OAuth scopes
-`conversations.list` needs, so the form correctly explains why rather than hanging or crashing -
-someone with access to the Slack app needs to add `channels:read, groups:read, mpim:read, im:read`
-and reinstall it.
+picked from a live `conversations.list` (D-045).
+
+A separate report ("stage move updates Relay but not the linked ClickUp task, Slack still shows
+'bot not in channel'") led to D-046: a worker-side BullMQ job id (`outbox:<uuid>`) contained a
+colon in a shape BullMQ's own validation rejects, so the outbox's 2-minute retry sweep failed
+silently, forever - only a message delivered on its very first attempt ever went out. Fixed
+alongside a second, unrelated finding from the same investigation: the dev web process was in fact
+still talking to the real (and currently credential-broken) Redis Cloud instance rather than the
+local one this session had been trying to point it at via a shell export, traced with `netstat`.
+`REDIS_URL` is set directly in `.env` now rather than relying on that export. Verified live: a
+project's most recent stage move now shows `DELIVERED` for both its Slack post and its ClickUp
+sync, with a real timestamp. See `RUNBOOK.md` for the operational detail on all of this, and
+`TODO.md` for two further gaps the same investigation surfaced (Slack still needs
+`users:read.email` for personal DMs; Resend has no verified sending domain yet, so email delivery
+fails outright).
 
 **Known gaps against going live with real merchants: a few, all in `FUTURE-WORK.md`.** The biggest
 one - no UI creates a user account or a merchant's project membership yet, only `pnpm db:seed` and

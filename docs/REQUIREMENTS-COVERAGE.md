@@ -293,7 +293,7 @@ Three layers, each testing something the other two cannot:
   and that every live Slack/ClickUp/Resend call carries a timeout signal, including a real
   8-second proof that a hung connection resolves rather than hangs (D-044), with no infrastructure
   and no I/O.
-- **Integration tests** (`pnpm test:integration`, 69 tests over 14 files) — the real exported
+- **Integration tests** (`pnpm test:integration`, 71 tests over 15 files) — the real exported
   server actions (and, for the first time, a real worker processor - see D-037) against a real
   Postgres, through a harness that mocks only `next/headers`, `next/cache` and `server-only` (see
   `apps/web/test/`). They prove: the blocker-handover arithmetic writes the right rows with no gap
