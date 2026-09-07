@@ -17,8 +17,8 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Relay - AHN x SHOPLINE Migration Portal',
-    template: '%s - Relay',
+    default: 'Mercantor - AHN x SHOPLINE Migration Portal',
+    template: '%s - Mercantor',
   },
   description:
     'One merchant, one project record, one source of truth. Live migration status, blockers, approvals and deployment readiness for AHN and SHOPLINE.',

@@ -43,9 +43,9 @@ export default async function SignInPage({
 
         <div className="relative p-12">
           <div className="flex items-center gap-3">
-            <RelayMark />
+            <Wordmark />
             <div>
-              <p className="text-[15px] font-semibold leading-5 tracking-tight">Relay</p>
+              <p className="text-[15px] font-semibold leading-5 tracking-tight">Mercantor</p>
               <p className="text-[12px] leading-4 text-white/55">AHN &times; SHOPLINE</p>
             </div>
           </div>
@@ -80,9 +80,11 @@ export default async function SignInPage({
       <section className="flex items-center justify-center px-5 py-12 sm:px-10">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <RelayMark tone="dark" />
+            <Wordmark tone="dark" />
             <div>
-              <p className="text-ink text-[15px] font-semibold leading-5 tracking-tight">Relay</p>
+              <p className="text-ink text-[15px] font-semibold leading-5 tracking-tight">
+                Mercantor
+              </p>
               <p className="text-muted text-[12px] leading-4">AHN &times; SHOPLINE</p>
             </div>
           </div>
@@ -102,7 +104,7 @@ export default async function SignInPage({
   );
 }
 
-function RelayMark({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
+function Wordmark({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
   return (
     <span
       className={`grid size-9 place-items-center rounded-[11px] ${

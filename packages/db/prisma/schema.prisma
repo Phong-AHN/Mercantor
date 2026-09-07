@@ -1,4 +1,4 @@
-// Relay - AHN x SHOPLINE Migration Portal
+// Mercantor - AHN x SHOPLINE Migration Portal
 //
 // One merchant = one Project = one source of truth. Slack, ClickUp and email
 // hang off that record as integrations; none of them owns status.

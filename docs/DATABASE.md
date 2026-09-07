@@ -1,4 +1,4 @@
-# Relay — Database
+# Mercantor — Database
 
 PostgreSQL 17 + Prisma 6. Schema at `packages/db/prisma/schema.prisma`; migrations at
 `packages/db/prisma/migrations`.

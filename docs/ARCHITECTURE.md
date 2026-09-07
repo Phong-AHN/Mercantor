@@ -1,4 +1,4 @@
-# Relay — Architecture
+# Mercantor — Architecture
 
 > Written alongside the build. Where a decision differs from AHN Orbit, the reason is stated
 > rather than assumed. The predecessor's documentation is preserved in `docs/_legacy-ahn-orbit/`.

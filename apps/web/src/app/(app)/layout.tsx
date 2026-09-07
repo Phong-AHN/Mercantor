@@ -60,7 +60,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </main>
 
         <footer className="border-line text-faint border-t px-6 py-4 text-[11.5px]">
-          Relay - one merchant, one project record, one source of truth. All times UTC.
+          Mercantor - one merchant, one project record, one source of truth. All times UTC.
         </footer>
       </div>
     </div>

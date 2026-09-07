@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
-   Relay design tokens.
+   Mercantor design tokens.
 
    Application code never writes a raw colour. It writes `bg-surface-1`,
    `text-muted`, `border-line`, `tone-warning` - so the whole product stays one

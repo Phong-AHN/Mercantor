@@ -146,7 +146,7 @@ export function Wordmark() {
       </span>
       <span className="min-w-0">
         <span className="text-ink block text-[14px] font-semibold leading-4 tracking-tight">
-          Relay
+          Mercantor
         </span>
         <span className="text-muted block text-[10.5px] leading-4">AHN &times; SHOPLINE</span>
       </span>

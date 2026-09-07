@@ -1,4 +1,4 @@
-# Relay — Roles & permissions
+# Mercantor — Roles & permissions
 
 Deny by default. A role holds exactly what the matrix lists and nothing more. Roles are read from
 Postgres on every request — never from a cookie, a header or a token claim.

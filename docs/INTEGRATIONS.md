@@ -1,4 +1,4 @@
-# Relay — Integrations
+# Mercantor — Integrations
 
 Slack, ClickUp and email hang off the project record. **None of them owns project status.** The
 portal is the source of truth; they are how it reaches people who are not looking at it.

@@ -1,5 +1,5 @@
 /**
- * Demo data for Relay.
+ * Demo data for Mercantor.
  *
  * It builds seven merchants at seven different points in the migration, with
  * real stage histories, blockers that changed hands, issues, invoices and

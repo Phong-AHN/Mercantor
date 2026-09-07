@@ -28,7 +28,7 @@ export async function GET(request: Request): Promise<Response> {
     const showMoney = can(principal, 'invoice:read');
 
     const csv = buildProjectsCsv(projects, showMoney);
-    const filename = `relay-portfolio-${clock.now().toISOString().slice(0, 10)}.csv`;
+    const filename = `mercantor-portfolio-${clock.now().toISOString().slice(0, 10)}.csv`;
 
     return new Response(csv, {
       headers: {

@@ -1,4 +1,4 @@
-# Relay — Handoff
+# Mercantor — Handoff
 
 > Read this first. Then `ARCHITECTURE.md`, then `DECISIONS.md`, then the doc for whatever you are
 > about to touch. Going live with real merchants? Read `TODO.md` (things only you can do — account
@@ -106,7 +106,7 @@ database writes did. Each project's Settings page now has a connect/disconnect f
 verified live before saving: a ClickUp task by id or pasted link through `getTask`, a Slack channel
 picked from a live `conversations.list` (D-045).
 
-A separate report ("stage move updates Relay but not the linked ClickUp task, Slack still shows
+A separate report ("stage move updates Mercantor but not the linked ClickUp task, Slack still shows
 'bot not in channel'") led to D-046: a worker-side BullMQ job id (`outbox:<uuid>`) contained a
 colon in a shape BullMQ's own validation rejects, so the outbox's 2-minute retry sweep failed
 silently, forever - only a message delivered on its very first attempt ever went out. Fixed

@@ -1,4 +1,4 @@
-# Relay — TODO for you
+# Mercantor — TODO for you
 
 Everything in `requirement.txt` is built and verified — see `REQUIREMENTS-COVERAGE.md`. What is
 listed here is not missing code. It is account access, business decisions, and provisioning that

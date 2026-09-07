@@ -33,7 +33,7 @@ export function renderNotificationEmail(input: NotificationEmailInput): Rendered
   <p style="font-weight:600;font-size:16px">${escapeHtml(input.title)}</p>
   ${input.body ? `<p style="color:#475569">${escapeHtml(input.body)}</p>` : ''}
   <a href="${escapeHtml(input.projectUrl)}" style="display:inline-block;margin-top:16px;padding:9px 16px;background:#0f172a;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Open in the portal</a>
-  <p style="margin-top:28px;color:#94a3b8;font-size:12px">You are getting this because Relay flagged it as needing attention while you might not be looking at the portal.</p>
+  <p style="margin-top:28px;color:#94a3b8;font-size:12px">You are getting this because Mercantor flagged it as needing attention while you might not be looking at the portal.</p>
 </div>`.trim();
 
   return { subject, text, html };

@@ -61,7 +61,7 @@ describe('GET /api/projects/export', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/csv');
     expect(response.headers.get('content-disposition')).toContain(
-      'attachment; filename="relay-portfolio-',
+      'attachment; filename="mercantor-portfolio-',
     );
 
     const csv = await response.text();

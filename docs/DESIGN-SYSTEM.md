@@ -1,4 +1,4 @@
-# Relay — Design system
+# Mercantor — Design system
 
 The brief said the audience cares about the interface, so the UI is treated as a system rather
 than as a set of pages that happen to look similar. Everything below lives in `packages/ui`.

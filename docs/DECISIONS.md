@@ -1,4 +1,4 @@
-# Relay — Decisions
+# Mercantor — Decisions
 
 Recorded as they were made. Where a decision differs from AHN Orbit, the reason is stated.
 
@@ -642,7 +642,7 @@ correctly wherever else it might fail the same way. Noted in `TODO.md` and `RUNB
 operational item for whoever administers the Slack app; not something code can fix.
 
 **D-046 — Two more things broken by the same shape as D-044: a worker-side job id, and which Redis
-was actually being talked to.** Asked directly: a stage move updated Relay but not the linked
+was actually being talked to.** Asked directly: a stage move updated Mercantor but not the linked
 ClickUp task, and Slack kept showing the "bot is not in that channel" error from before the D-045
 relink even after the channel was fixed. Neither turned out to be about Slack or ClickUp at all.
 
@@ -712,3 +712,15 @@ rather than `useEffect` so the correction lands before the browser paints, not a
 after. Verified live in both placements at once: the merchant portal's menu (trigger at `y: 10`)
 now opens downward, fully inside the viewport; the main app's sidebar menu (trigger at `y: 844` in
 a 900px-tall viewport) still opens upward, exactly as it needs to.
+
+**D-049 — Renamed the product from Relay to Mercantor, scoped to what a person actually sees.**
+Every user-facing mention - the wordmark on the sign-in page and the sidebar, the browser tab
+title and its `%s - Mercantor` template, the app footer, the notification email's footer line, the
+CSV export's filename, every doc's own title line and the two decision entries that named the
+product mid-sentence - now reads "Mercantor". Deliberately not renamed: the `@relay/*` workspace
+package names, the `relay` root package name, the `relay-theme` `localStorage` key, and the
+`relay-demo-password` seeded password - none of those are something a user reads as the product's
+name, and renaming any of them (the packages especially - thirteen `package.json`s and every
+import across the monorepo) is a large, purely mechanical risk for zero visible benefit. Verified
+live: the sign-in page's wordmark and both panel copies read "Mercantor", and the browser tab
+title reads "Sign in - Mercantor" / "Dashboard - Mercantor" after signing in.

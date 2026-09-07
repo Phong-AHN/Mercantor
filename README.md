@@ -1,9 +1,9 @@
-# Relay — AHN × SHOPLINE Migration Portal
+# Mercantor — AHN × SHOPLINE Migration Portal
 
 One merchant = one project record = one source of truth. Slack, ClickUp and email are
 integrations around that record, not separate places where project status lives.
 
-Relay is the shared portal AHN Media and SHOPLINE use to run every merchant migration from
+Mercantor is the shared portal AHN Media and SHOPLINE use to run every merchant migration from
 introduction through deployment. Its whole design goal is that **one screen answers ten
 questions** without anybody having to ask:
 
