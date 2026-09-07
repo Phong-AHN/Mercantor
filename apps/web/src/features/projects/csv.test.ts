@@ -120,4 +120,36 @@ describe('buildProjectsCsv', () => {
     const csv = buildProjectsCsv([], true);
     expect(csv.trim().split('\r\n')).toHaveLength(1);
   });
+
+  it('defuses a merchant name that looks like a spreadsheet formula (CWE-1236)', () => {
+    const project = fixture({
+      merchant: {
+        id: 'merchant-3',
+        name: '=cmd|calc.exe!A1',
+        website: '+1-555-0100',
+        storeId: '@mention',
+        platform: null,
+      },
+      nextAction: '-5 days overdue',
+    });
+    const csv = buildProjectsCsv([project], false);
+    const cells = csv.trim().split('\r\n')[1]!.split(',');
+
+    // A leading ', not stripped, is exactly what tells Excel/Sheets/LibreOffice
+    // to treat the rest as literal text rather than evaluate it as a formula.
+    expect(cells).toContain("'=cmd|calc.exe!A1");
+    expect(csv).toContain("'+1-555-0100");
+    expect(csv).toContain("'@mention");
+    expect(csv).toContain("'-5 days overdue");
+  });
+
+  it('never applies the formula defusal to an ordinary numeric column', () => {
+    const csv = buildProjectsCsv([fixture()], true);
+    const [, dataLine] = csv.trim().split('\r\n');
+    // Age (days), Days in current stage, Open/launch-blocker counts, and every
+    // money column are real numbers or formatted-from-a-number strings - none
+    // of them should ever come out with the defusal prefix.
+    expect(dataLine).not.toMatch(/,'\d/);
+    expect(dataLine).toContain('10000.00');
+  });
 });

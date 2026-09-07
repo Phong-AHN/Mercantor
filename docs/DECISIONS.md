@@ -724,3 +724,74 @@ name, and renaming any of them (the packages especially - thirteen `package.json
 import across the monorepo) is a large, purely mechanical risk for zero visible benefit. Verified
 live: the sign-in page's wordmark and both panel copies read "Mercantor", and the browser tab
 title reads "Sign in - Mercantor" / "Dashboard - Mercantor" after signing in.
+
+**D-050 — A security and bug pass, requested directly, found two real vulnerabilities and closed
+two long-standing gaps in the security headers.**
+
+1. **A file attached to an `INTERNAL_AHN` comment was downloadable by anyone with the direct
+   link, regardless of role.** `GET /api/attachments/[id]` (`apps/web/src/app/api/attachments/[id]/route.ts`)
+   checked project membership (`resolveProject`) but never the visibility of the comment the file
+   hangs off. D-009's whole point is that an internal-only note never reaches SHOPLINE or the
+   merchant, and D-043 #3 already fixed the activity feed leaking that such a file _existed_ - but
+   the bytes themselves stayed one guessed-or-leaked link away from anyone signed in at all, on
+   any project they could see. Real exposure needs a UUIDv7 to leak somehow (pasted elsewhere,
+   browser history, a server log) rather than being guessable, but the fix is the same
+   `readableVisibilities(principal)` predicate the comment thread itself already uses, applied
+   here too, at essentially no cost. Covered by
+   `apps/web/src/app/api/attachments/[id]/route.integration.test.ts` (5 tests): AHN can still
+   download it, SHOPLINE and the merchant get a plain 404 - not a 403, so the response does not
+   even confirm the file exists - and a file with no comment attached is unaffected.
+
+2. **The portfolio CSV export was vulnerable to formula injection (CWE-1236).** Several exported
+   columns are free text someone typed - merchant name, website, blocker title, next action - and
+   `csvCell` (`apps/web/src/features/projects/csv.ts`) only ever escaped CSV's own structural
+   characters (quotes, commas, newlines), never a leading `=`, `+`, `-`, `@`, tab or carriage
+   return. Excel, Sheets and LibreOffice all treat a cell starting with one of those as a formula
+   to evaluate on open, not a literal string - a merchant name of
+   `=cmd|'/c calc.exe'!A1` would run when whoever exported the portfolio opened the file. Fixed
+   with the standard defusal (a leading `'`), applied only to actual `string` values - a `number`
+   here is always a computed, already-validated-non-negative figure (day counts, money), so the
+   distinction costs nothing and the fix cannot mis-fire on a legitimate number. Covered by two new
+   cases in `csv.test.ts`: a merchant name/website/store id crafted to look like a formula comes
+   back defused, and an ordinary numeric column never gets the prefix it does not need.
+
+3. **Two standard security headers were simply missing.** `next.config.ts` had
+   `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Permissions-Policy` but no
+   `Content-Security-Policy` and no `Strict-Transport-Security`. Nothing in this app loads a
+   remote script, an external font, or an `<img>` from another origin - `next/font/google`
+   self-hosts Inter and JetBrains Mono at build time, and every avatar is CSS/SVG initials rather
+   than an uploaded image (confirmed by grep: zero `<img>` tags anywhere in `apps/web/src`) - so a
+   strict CSP costs nothing here. `script-src`/`style-src` still need `unsafe-inline` for the
+   pre-paint theme script and Tailwind's runtime plus every component's own inline `style`
+   attribute; a nonce-based CSP that drops those is a real follow-up, not this pass.
+   `unsafe-eval` is added only outside production - webpack's Fast Refresh evaluates module code
+   as a string in dev, which a production build never does. Verified against a real production
+   build (`next build` + `next start`, not `next dev`, since dev's own HMR would have given a false
+   "needs unsafe-eval" reading): zero CSP violations across every route, the user menu, the theme
+   toggle, a dialog, and the merchant portal. HSTS is inert over the plain HTTP this runs on
+   locally and load-bearing once the production deploy is behind TLS, which `RUNBOOK.md` already
+   assumes (the session cookie's own `secure` flag depends on the same assumption).
+
+Two more were found and are noted rather than fixed here, deliberately:
+
+- **Sign-in has no brute-force protection beyond scrypt's own cost.** `signIn()` already defends
+  against user-enumeration correctly (a constant-time `DUMMY_HASH` check and one generic error
+  regardless of which failed), but nothing throttles repeated attempts against one account or one
+  IP. Not fixed blind: a naive per-account lockout is itself a denial-of-service vector - an
+  attacker who wants to lock a real person out of their own account only has to fail their
+  password a few times - and getting that trade-off right (a sliding window, per-IP rather than
+  per-account, failing open rather than closed if the limiter itself is unavailable) is a real
+  design decision, not a bounded bug fix. The safer standard answer is IP-based rate limiting at
+  the infrastructure/edge layer rather than in the app; noted in `TODO.md`.
+- **`pnpm audit` reports 6 advisories (4 high, 2 moderate)**, all transitive: `postcss` and `sharp`
+  bundled inside `next` itself, and `deepmerge-ts` inside Prisma's own CLI tooling
+  (`packages__db>@prisma/client>prisma>@prisma/config>deepmerge-ts`) - none are a direct dependency
+  of this app's own code. `pnpm update next` found nothing newer than the already-installed
+  `15.5.23` in this environment (likely a registry-mirror limitation of the sandbox this session
+  ran in, not that `15.5.23` is genuinely latest - the public registry lists `15.5.25` within the
+  same `^15.5.0` range). Worth a `pnpm update next` and a re-run of `pnpm audit` with full registry
+  access before the next deploy; noted in `TODO.md` rather than forced through here.
+
+`pnpm verify` (61 unit tests, up from 59), `pnpm test:integration` (76, up from 71), a production
+build of both apps, `e2e-smoke.mjs` (11/11), and the CSP live-verification above were all re-run
+clean after every fix in this entry.

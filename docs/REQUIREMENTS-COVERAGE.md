@@ -279,7 +279,13 @@ D-044: an unbounded live `fetch()` in the Slack/ClickUp/Resend adapters could ha
 `/integrations` page, invisible until real provider credentials were configured. D-045 closed the
 one gap `FUTURE-WORK.md` had flagged in this area - connecting a project to Slack or ClickUp had no
 UI, only a direct database write - with a connect/disconnect form on each project's Settings page,
-verified live before saving.
+verified live before saving. A requested security and bug pass (D-050) found and fixed two real
+vulnerabilities - a file attached to an internal-only comment was downloadable by anyone signed in
+who had the direct link, and the portfolio CSV export was vulnerable to formula injection (CWE-1236)
+
+- and added the `Content-Security-Policy`/`Strict-Transport-Security` headers that were simply
+  missing; two further gaps (no brute-force protection on sign-in, six advisories in transitive
+  dependencies) are noted rather than fixed - see D-050 and `TODO.md` §2.
 
 ## Test coverage
 
@@ -293,7 +299,7 @@ Three layers, each testing something the other two cannot:
   and that every live Slack/ClickUp/Resend call carries a timeout signal, including a real
   8-second proof that a hung connection resolves rather than hangs (D-044), with no infrastructure
   and no I/O.
-- **Integration tests** (`pnpm test:integration`, 71 tests over 15 files) — the real exported
+- **Integration tests** (`pnpm test:integration`, 76 tests over 16 files) — the real exported
   server actions (and, for the first time, a real worker processor - see D-037) against a real
   Postgres, through a harness that mocks only `next/headers`, `next/cache` and `server-only` (see
   `apps/web/test/`). They prove: the blocker-handover arithmetic writes the right rows with no gap

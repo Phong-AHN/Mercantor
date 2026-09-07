@@ -28,7 +28,26 @@ against seeded data; it only blocks going live with real merchants.
       outbound link (introduction emails, Slack messages, notification emails). Getting it wrong is
       the most common cause of "the Slack link is broken" (see `RUNBOOK.md`).
 
-## 2. Integrations — each is optional and mocked until you set its keys (`INTEGRATIONS.md`)
+## 2. Security — two things a security pass (D-050) found and could not fix from here
+
+- [ ] **Sign-in has no brute-force protection beyond scrypt's own cost.** User-enumeration is
+      already defended against correctly (a constant-time dummy-hash check, one generic error
+      regardless of which part was wrong), but nothing throttles repeated attempts. Deliberately
+      not patched with a quick per-account lockout - that is itself a denial-of-service vector,
+      since anyone can lock a real person out of their own account just by failing their password a
+      few times. The standard, safer answer is IP-based rate limiting at the infrastructure/edge
+      layer (a WAF, a reverse proxy, or your hosting platform's own bot/abuse protection) rather
+      than an application-level lockout - whoever picks the production host should turn this on
+      there before going live with real accounts.
+- [ ] **Run `pnpm update next` and `pnpm audit` again with full registry access.** From inside this
+      build's sandbox, `pnpm audit --prod` reports 6 advisories (4 high, 2 moderate) - `postcss`
+      and `sharp`, both bundled inside `next` itself, and `deepmerge-ts` inside Prisma's own CLI
+      tooling. None are a direct dependency of this app's code, and `pnpm update next` found
+      nothing newer than the already-installed `15.5.23` here, which is very likely this sandbox's
+      own registry mirror lagging the public one (`15.5.25` exists in the same `^15.5.0` range) -
+      worth confirming with a real update + re-audit before the next deploy, not urgent before then.
+
+## 3. Integrations — each is optional and mocked until you set its keys (`INTEGRATIONS.md`)
 
 - [ ] **Slack.** Create a Slack app in your workspace with scopes `chat:write`, `channels:read`,
       `groups:read`, `mpim:read`, `im:read`, `channels:history`, `users:read.email`; install it;
@@ -49,7 +68,7 @@ against seeded data; it only blocks going live with real merchants.
       page now has a connect/disconnect form for both (D-045) — open `/projects/<code>/settings` and
       use it directly; no script or database write needed any more.
 
-## 3. People — there is no self-service account creation yet (`FUTURE-WORK.md` §1)
+## 4. People — there is no self-service account creation yet (`FUTURE-WORK.md` §1)
 
 - [ ] **Decide who your real AHN and SHOPLINE users are** (name, email, role) and tell me — I can
       write a one-off provisioning script (distinct from `pnpm db:seed`, which wipes and rebuilds
@@ -61,7 +80,7 @@ against seeded data; it only blocks going live with real merchants.
       today means asking me to update the row directly. Worth deciding whether that is acceptable
       for launch or whether the reset flow (`FUTURE-WORK.md` §1) should be built first.
 
-## 4. Product decisions worth confirming with the real AHN/SHOPLINE team
+## 5. Product decisions worth confirming with the real AHN/SHOPLINE team
 
 These were each built with a reasoned default so nothing stayed unbuilt waiting on an answer, but
 they are genuine judgment calls, not technical ones — see `RBAC.md` §5 for the reasoning behind
@@ -73,7 +92,7 @@ each current answer:
 - [ ] **O3** — Should merchants see the full blocker record for their project, not just a summary
       on their portal overview? Currently the summary only.
 
-## 5. Ongoing, once live
+## 6. Ongoing, once live
 
 - [ ] **Rotate `CREDENTIAL_ENCRYPTION_KEY` on a schedule you're comfortable with** — rotating it
       invalidates anything encrypted under the old key, so plan for that rather than doing it as a

@@ -109,9 +109,24 @@ function minorToDecimal(minor: number): string {
   return (minor / 100).toFixed(2);
 }
 
-/** Quotes a field only when it needs it, and escapes an embedded quote by doubling it. */
+/**
+ * Quotes a field only when it needs it, and escapes an embedded quote by
+ * doubling it. Also defuses CSV/formula injection (CWE-1236) on the string
+ * columns - several of them are free text a person typed (merchant name,
+ * website, blocker title, next action...) and Excel, Sheets and LibreOffice
+ * all treat a cell starting with `=`, `+`, `-`, `@`, a tab or a carriage
+ * return as a formula to evaluate, not a literal string, on open. A leading
+ * `'` is the standard defusal: every one of those apps renders it as plain
+ * text instead. Only applied to actual strings, not a `number` - a day
+ * count or a money figure here is always a computed, non-negative value
+ * (contract totals and payments are validated `>= 0` on the way in, and a
+ * project can never be paid past its own invoice), so the distinction is
+ * never actually exercised by a real value, only kept so a plain `number`
+ * never gets wrapped in quotes it does not need.
+ */
 function csvCell(value: string | number): string {
-  const text = String(value);
+  let text = String(value);
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   if (/[",\r\n]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }

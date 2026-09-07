@@ -24,8 +24,8 @@ make one of them a field somebody has to remember to update, it is the wrong cha
 
 **Working, verified, demonstrable against seeded data:**
 
-- 38 routes build; `pnpm verify` is green (format, lint, typecheck, 59 unit tests)
-- `pnpm test:integration` is green against a real Postgres and a real MinIO — 71 tests over 15
+- 38 routes build; `pnpm verify` is green (format, lint, typecheck, 61 unit tests)
+- `pnpm test:integration` is green against a real Postgres and a real MinIO — 76 tests over 16
   files, proving the blocker-handover arithmetic, the handoff readiness gate, comment visibility
   per role, the outbox's transactional atomicity, that a launch blocker (and only a launch
   blocker, not an ordinary issue) queues one notification email and one Slack DM per recipient,
@@ -119,6 +119,20 @@ sync, with a real timestamp. See `RUNBOOK.md` for the operational detail on all 
 `TODO.md` for two further gaps the same investigation surfaced (Slack still needs
 `users:read.email` for personal DMs; Resend has no verified sending domain yet, so email delivery
 fails outright).
+
+A requested security and bug pass (D-050) found and fixed two real vulnerabilities: a file
+attached to an `INTERNAL_AHN` comment was downloadable by anyone signed in who had the direct
+`/api/attachments/<id>` link, regardless of role (the route checked project membership but never
+the comment's own visibility - fixed with the same `readableVisibilities` predicate the comment
+thread already uses); and the portfolio CSV export was vulnerable to formula injection (CWE-1236) -
+a merchant name or similar free-text column starting with `=`, `+`, `-` or `@` would run as a
+formula when the exported file was opened in Excel/Sheets, now defused with the standard leading
+`'`. Also added the `Content-Security-Policy` and `Strict-Transport-Security` headers, which were
+simply missing - verified against a real production build with zero violations across every route.
+Two further findings are noted rather than fixed: sign-in has no brute-force protection (a
+lockout is itself a denial-of-service risk if done carelessly - the right fix is IP-based rate
+limiting at the infrastructure layer, not in the app), and `pnpm audit` reports 6 advisories, all
+transitive via `next`'s and Prisma's own bundled tooling. See D-050 and `TODO.md` §2.
 
 **Known gaps against going live with real merchants: a few, all in `FUTURE-WORK.md`.** The biggest
 one - no UI creates a user account or a merchant's project membership yet, only `pnpm db:seed` and
