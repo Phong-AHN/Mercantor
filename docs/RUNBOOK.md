@@ -112,15 +112,16 @@ client afterwards with `pnpm db:generate` - see the Windows file-lock note above
 
 Required in production. `.env.example` documents every one.
 
-| Variable                    | Notes                                                                                                 |
-| --------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`              | Use a pooled endpoint. `DIRECT_URL` for migrations.                                                   |
-| `REDIS_URL`                 | Shared by the app (producer) and the worker (consumer).                                               |
-| `SESSION_SIGNING_SECRET`    | 32 random bytes, base64. `openssl rand -base64 32`                                                    |
-| `CREDENTIAL_ENCRYPTION_KEY` | Same. Rotating it invalidates stored credentials.                                                     |
-| `APP_URL`                   | Used in every outbound link. Getting it wrong is the most common cause of "the Slack link is broken". |
-| `S3_*`                      | MinIO locally, S3 in production. `S3_BUCKET` must already exist — nothing creates it at boot.         |
-| `SLACK_BOT_TOKEN` etc.      | Legacy/unused (see below) — still declared, optional, read by nothing.                                |
+| Variable                                                         | Notes                                                                                                                                                                                                    |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                   | Use a pooled endpoint. `DIRECT_URL` for migrations.                                                                                                                                                      |
+| `REDIS_URL`                                                      | Shared by the app (producer) and the worker (consumer).                                                                                                                                                  |
+| `SESSION_SIGNING_SECRET`                                         | 32 random bytes, base64. `openssl rand -base64 32`                                                                                                                                                       |
+| `CREDENTIAL_ENCRYPTION_KEY`                                      | Same. Rotating it invalidates stored credentials.                                                                                                                                                        |
+| `APP_URL`                                                        | Used in every outbound link. Getting it wrong is the most common cause of "the Slack link is broken".                                                                                                    |
+| `S3_*`                                                           | MinIO locally, S3 in production. `S3_BUCKET` must already exist — nothing creates it at boot.                                                                                                            |
+| `SLACK_BOT_TOKEN` etc.                                           | Legacy/unused (see below) — still declared, optional, read by nothing.                                                                                                                                   |
+| `SLACK_OAUTH_CLIENT_ID/SECRET`, `CLICKUP_OAUTH_CLIENT_ID/SECRET` | One-time, platform-level (D-053) — powers the "Connect via Slack/ClickUp" button at `/integrations`. Absent means that button stays hidden; manual token paste still works either way. See `TODO.md` §3. |
 
 `env()` validates everything at first access and lists **all** problems at once, so a missing
 secret fails the boot rather than the first request that happens to need it.

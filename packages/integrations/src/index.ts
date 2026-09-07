@@ -4,3 +4,4 @@ export * from './slack';
 export * from './clickup';
 export * from './email';
 export * from './registry';
+export * from './oauth';

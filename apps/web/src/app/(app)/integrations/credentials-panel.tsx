@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { KeyRound, Unlink } from 'lucide-react';
-import { Alert, Button, Field, FormActions, Input } from '@relay/ui';
+import { KeyRound, Unlink, Zap } from 'lucide-react';
+import { Alert, Button, buttonStyles, Field, FormActions, Input } from '@relay/ui';
 import { useAction } from '@/components/use-action';
 import {
   clearOrganizationIntegrationAction,
@@ -17,6 +17,15 @@ import {
  * "connected" vs "not yet" - `mode === 'live'` on the health this page
  * already fetched is exactly "this organization has a row", so no extra
  * fetch is needed to decide which state to render.
+ *
+ * Slack and ClickUp also get an OAuth "Connect" button (D-053) - the
+ * organization's own admin authorizes AHN's app from Slack's/ClickUp's own
+ * consent screen instead of ever copying a token. It only renders when the
+ * platform has registered an OAuth app at all (`oauthConfigured`, computed
+ * server-side from whether the client id/secret env vars are set); the
+ * manual-paste form underneath it never goes away - a workspace whose admin
+ * has restricted app installs, or one that already has a token handy, still
+ * has a path in.
  */
 
 function Disconnect({ onDisconnect, pending }: { onDisconnect: () => void; pending: boolean }) {
@@ -30,8 +39,39 @@ function Disconnect({ onDisconnect, pending }: { onDisconnect: () => void; pendi
   );
 }
 
-export function SlackCredentialsForm({ connected }: { connected: boolean }) {
+function ConnectViaOAuth({
+  href,
+  label,
+  onUseManual,
+}: {
+  href: string;
+  label: string;
+  onUseManual: () => void;
+}) {
+  return (
+    <div className="mt-3 space-y-2">
+      <a href={href} className={buttonStyles('secondary', 'sm')}>
+        <Zap className="size-3.5" />
+        {label}
+      </a>
+      <div>
+        <Button variant="link" size="sm" onClick={onUseManual}>
+          Or paste a token directly
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function SlackCredentialsForm({
+  connected,
+  oauthConfigured,
+}: {
+  connected: boolean;
+  oauthConfigured: boolean;
+}) {
   const [botToken, setBotToken] = useState('');
+  const [manual, setManual] = useState(!oauthConfigured);
   const connect = useAction(setOrganizationIntegrationAction, {
     successMessage: 'Slack connected.',
     onSuccess: () => setBotToken(''),
@@ -45,6 +85,16 @@ export function SlackCredentialsForm({ connected }: { connected: boolean }) {
       <Disconnect
         pending={disconnect.pending}
         onDisconnect={() => disconnect.run({ provider: 'SLACK' })}
+      />
+    );
+  }
+
+  if (!manual) {
+    return (
+      <ConnectViaOAuth
+        href="/api/oauth/slack/start"
+        label="Connect via Slack"
+        onUseManual={() => setManual(true)}
       />
     );
   }
@@ -81,14 +131,26 @@ export function SlackCredentialsForm({ connected }: { connected: boolean }) {
           <KeyRound className="size-3.5" />
           Connect
         </Button>
+        {oauthConfigured && (
+          <Button variant="link" size="sm" onClick={() => setManual(false)}>
+            Use Connect via Slack instead
+          </Button>
+        )}
       </FormActions>
     </div>
   );
 }
 
-export function ClickUpCredentialsForm({ connected }: { connected: boolean }) {
+export function ClickUpCredentialsForm({
+  connected,
+  oauthConfigured,
+}: {
+  connected: boolean;
+  oauthConfigured: boolean;
+}) {
   const [apiToken, setApiToken] = useState('');
   const [teamId, setTeamId] = useState('');
+  const [manual, setManual] = useState(!oauthConfigured);
   const connect = useAction(setOrganizationIntegrationAction, {
     successMessage: 'ClickUp connected.',
     onSuccess: () => {
@@ -105,6 +167,16 @@ export function ClickUpCredentialsForm({ connected }: { connected: boolean }) {
       <Disconnect
         pending={disconnect.pending}
         onDisconnect={() => disconnect.run({ provider: 'CLICKUP' })}
+      />
+    );
+  }
+
+  if (!manual) {
+    return (
+      <ConnectViaOAuth
+        href="/api/oauth/clickup/start"
+        label="Connect via ClickUp"
+        onUseManual={() => setManual(true)}
       />
     );
   }
@@ -147,6 +219,11 @@ export function ClickUpCredentialsForm({ connected }: { connected: boolean }) {
           <KeyRound className="size-3.5" />
           Connect
         </Button>
+        {oauthConfigured && (
+          <Button variant="link" size="sm" onClick={() => setManual(false)}>
+            Use Connect via ClickUp instead
+          </Button>
+        )}
       </FormActions>
     </div>
   );

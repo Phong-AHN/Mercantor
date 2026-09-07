@@ -956,3 +956,60 @@ now seeds the bootstrap "AHN Media" organization and assigns every non-merchant 
 submitting a deliberately bogus Slack bot token is rejected live against the real Slack API rather
 than silently saved, and the provider stays in mock mode after a reload - nothing persisted on a
 failed verification.
+
+**D-053 — Slack and ClickUp get an OAuth "Connect" button, so an organization's admin authorizes
+the app rather than ever copying a token. Email stays manual - no provider in that category offers
+the equivalent.** Asked directly, after D-052 shipped, whether pasting a bot token was really the
+only way in: for Slack and ClickUp, no - both support OAuth2 "someone clicks Allow" flows the same
+shape as any "Add to Slack" button. Resend (and every transactional email API - SendGrid, Postmark,
+SES) does not: an API key there is tied to an _account_ and a _verified sending domain_, not an
+app a user authorizes on someone else's behalf, so there is no OAuth flow to build for it. Email
+keeps the manual form D-052 shipped.
+
+1. **One platform-level OAuth app per provider, not one per organization.** AHN registers a single
+   Slack app and a single ClickUp app (`SLACK_OAUTH_CLIENT_ID`/`SECRET`,
+   `CLICKUP_OAUTH_CLIENT_ID`/`SECRET` - new, optional env vars, `packages/config/src/env.ts`).
+   An organization's own admin then authorizes _that_ app from Slack's/ClickUp's own consent
+   screen; the exchange (`packages/integrations/src/oauth.ts`) writes to the same
+   `OrganizationIntegration` row `setOrganizationIntegrationAction` already writes to, encrypted
+   the same way - OAuth is a second way to arrive at the same row, not a second storage path.
+2. **The manual-paste form never goes away** (the user's explicit choice over replacing it
+   outright) - a workspace whose admin restricts app installs, or an org that already has a token
+   handy, still has a path in. `SlackCredentialsForm`/`ClickUpCredentialsForm`
+   (`apps/web/src/app/(app)/integrations/credentials-panel.tsx`) default to the OAuth button when
+   the platform has registered an app (`slackOAuthConfigured()`/`clickUpOAuthConfigured()`, both
+   reading only whether the client id/secret env vars are set) and to the manual form when it has
+   not - either way, a link toggles to the other. Absent env vars means the button never renders
+   at all, the same "optional, mocked until configured" fallback every other provider setting
+   already has.
+3. **State is a plain random value in a short-lived, `httpOnly` cookie** (`apps/web/src/server/oauth.ts`),
+   compared against Slack's/ClickUp's own `state` query param on the way back - not a signed
+   value carrying the organization id. The callback re-derives the organization from the
+   already-signed-in session at that point instead, so the state's only job is proving the
+   redirect actually came from a flow this browser started, the minimum an OAuth CSRF guard needs
+   to do.
+4. **Four new route handlers, not server actions** (`apps/web/src/app/api/oauth/{slack,clickup}/{start,callback}/route.ts`) -
+   this leg of the flow is plain browser navigation (a click to Slack's own domain, a redirect
+   back), not a form submission this app renders a result for itself. Every rejection - state
+   mismatch, the user declining on Slack's/ClickUp's own screen, a forbidden principal, an
+   exchange failure - lands back on `/integrations?oauth_error=...`, turned into a plain-language
+   `Alert` there, never a bare JSON error for a leg nothing scripted.
+
+Slack's scopes match `TODO.md`'s already-documented app configuration exactly
+(`chat:write,channels:read,groups:read,mpim:read,im:read,channels:history,users:read.email`), so
+an organization connecting via OAuth ends up with the identical bot permissions manual setup
+already required - OAuth changes how the token arrives, not what it can do. `pnpm verify`,
+`pnpm test:integration` (105 tests, unchanged - nothing here needed new coverage beyond what
+D-052 already proved about `OrganizationIntegration` writes), and a production build all pass
+clean. Verified live in a real browser against an isolated throwaway organization (never against
+AHN Media's own now-live-connected credentials - found already configured with real tokens during
+this pass, by a demo account, apparently through manual browser testing rather than anything these
+tools did, and left untouched rather than guessed at further): the Connect buttons render only
+when the platform env vars are set, each redirects to the correct provider with the right
+`client_id`, `redirect_uri`, and (for Slack) the exact documented scope string, and a non-empty
+anti-CSRF `state` rides along on both.
+
+Registering the actual Slack app and ClickUp app - a human action on their respective developer
+dashboards, the same shape "create a Slack app and set `SLACK_BOT_TOKEN`" already was - is listed
+in `TODO.md` §3 as a prerequisite; without it the buttons stay hidden and manual paste is the only
+path, exactly as it was before this pass.

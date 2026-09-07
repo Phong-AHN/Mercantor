@@ -71,6 +71,17 @@ const schema = z.object({
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default('AHN Migration Portal <portal@ahnmedia.example>'),
 
+  // Platform-level OAuth apps (D-053) - one registration for the whole
+  // deployment, not per organization. An organization's own admin then
+  // "Connect"s Slack/ClickUp through the browser rather than ever handling
+  // a token - see `packages/integrations/src/oauth.ts`. Absent means the
+  // Connect button is hidden and the manual-token form is the only path,
+  // the same fallback every organization already has.
+  SLACK_OAUTH_CLIENT_ID: z.string().optional(),
+  SLACK_OAUTH_CLIENT_SECRET: z.string().optional(),
+  CLICKUP_OAUTH_CLIENT_ID: z.string().optional(),
+  CLICKUP_OAUTH_CLIENT_SECRET: z.string().optional(),
+
   WORKER_HEALTH_PORT: z.coerce.number().int().positive().default(3100),
 });
 

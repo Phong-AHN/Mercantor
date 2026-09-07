@@ -55,17 +55,29 @@ against seeded data; it only blocks going live with real merchants.
 (`integration:manage`, e.g. `AHN_ADMIN`), encrypted at rest and verified live before being saved.
 The credential requirements below are unchanged; only where they get typed in has moved.
 
-- [ ] **Slack.** Create a Slack app in your workspace with scopes `chat:write`, `channels:read`,
-      `groups:read`, `mpim:read`, `im:read`, `channels:history`, `users:read.email`; install it;
-      invite the bot to the channels you want project updates posted to. Paste the bot token into
-      the Slack card at `/integrations`. **The token previously kept in `.env` was still missing
-      `users:read.email`** (the other four were added) — without it, a personal Slack DM for an
-      urgent notification (`notification_dm`) is silently `SKIPPED` with "missing an OAuth scope"
-      as the reason. Add it in the app's OAuth & Permissions page and reinstall the app before
-      pasting the token in; everything else Slack does already works.
-- [ ] **ClickUp.** Generate a personal or workspace API token from ClickUp's settings. Paste it
-      into the ClickUp card at `/integrations` (Team ID is optional there, for team-scoped
-      endpoints).
+- [ ] **Slack, option A — set up the OAuth "Connect" button (D-053), so any organization's admin
+      authorizes it with one click instead of ever handling a token.** A one-time,
+      platform-level registration, not per organization: create a Slack app at
+      <https://api.slack.com/apps>, add the bot scopes `chat:write`, `channels:read`,
+      `groups:read`, `mpim:read`, `im:read`, `channels:history`, `users:read.email` under OAuth &
+      Permissions, set its redirect URL to `<APP_URL>/api/oauth/slack/callback`, then set
+      `SLACK_OAUTH_CLIENT_ID` and `SLACK_OAUTH_CLIENT_SECRET` (from the app's Basic Information
+      page) in `.env`. Without it, the Connect button stays hidden and option B is the only path.
+- [ ] **Slack, option B — paste a bot token directly, always available regardless of option A.**
+      Create a Slack app with the same scopes as above, install it, invite the bot to the channels
+      you want project updates posted to, then paste the bot token into the Slack card at
+      `/integrations`. **The token previously kept in `.env` was still missing `users:read.email`**
+      (the other four were added) — without it, a personal Slack DM for an urgent notification
+      (`notification_dm`) is silently `SKIPPED` with "missing an OAuth scope" as the reason. Add it
+      in the app's OAuth & Permissions page and reinstall the app before pasting the token in;
+      everything else Slack does already works.
+- [ ] **ClickUp, option A — set up the OAuth "Connect" button (D-053).** Same shape as Slack's:
+      create an OAuth app at <https://app.clickup.com/settings/apps>, set its redirect URL to
+      `<APP_URL>/api/oauth/clickup/callback`, then set `CLICKUP_OAUTH_CLIENT_ID` and
+      `CLICKUP_OAUTH_CLIENT_SECRET` in `.env`. One-time, platform-level.
+- [ ] **ClickUp, option B — paste an API token directly, always available.** Generate a personal
+      or workspace API token from ClickUp's settings, paste it into the ClickUp card at
+      `/integrations` (Team ID is optional there, for team-scoped endpoints).
 - [ ] **Email.** Sign up for Resend (or swap the adapter — see `packages/integrations/src/email.ts`),
       verify a sending domain (Resend will give you SPF/DKIM DNS records to add), then paste the
       API key and the verified from-address into the Email card at `/integrations`. **The Resend

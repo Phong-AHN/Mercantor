@@ -165,6 +165,18 @@ there is no UI yet for a `PLATFORM_ADMIN` to actually create a second organizati
 a direct database write, the same gap staff/merchant invites closed for `User`/`ProjectMember`
 before this.
 
+Asked directly whether pasting a token was really the only way in - D-053 added an OAuth "Connect"
+button for Slack and ClickUp, so an organization's own admin authorizes AHN's app from Slack's or
+ClickUp's own consent screen instead of ever copying one. One platform-level app registration
+(`SLACK_OAUTH_CLIENT_ID`/`SECRET`, `CLICKUP_OAUTH_CLIENT_ID`/`SECRET` - `TODO.md` §3) powers every
+organization's Connect button; the manual-paste form never goes away, for a workspace whose admin
+restricts app installs or an org that already has a token handy. Email/Resend keeps manual entry
+only - no transactional email provider offers an equivalent "authorize this app" OAuth flow, since
+an API key there is tied to an account and a verified sending domain, not delegated access.
+Verified live against an isolated throwaway organization, never against AHN Media's own
+credentials (found already live-connected with real tokens mid-pass, through the manual form,
+apparently by hand rather than by anything these tools did - left untouched).
+
 **Known gaps against going live with real merchants: everything left is a credential, a business
 call, infrastructure, or (as of D-052) the tenant-facing vocabulary rename - not a missing feature
 or a known bug.** `GOING-LIVE-DECISIONS.md` is the checklist; `TODO.md` covers the same ground with

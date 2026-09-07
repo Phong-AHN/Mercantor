@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
 import { Mail, MessageSquare, SquareKanban } from 'lucide-react';
 import { clock, formatDateTime, formatRelative } from '@relay/core';
-import { integrationHealthFor } from '@relay/integrations';
+import {
+  clickUpOAuthConfigured,
+  integrationHealthFor,
+  slackOAuthConfigured,
+} from '@relay/integrations';
 import { can } from '@relay/rbac';
 import {
   Alert,
@@ -38,21 +42,45 @@ const OUTBOX_TONE = {
   SKIPPED: 'muted',
 } as const;
 
+const OAUTH_ERROR_MESSAGE: Record<string, string> = {
+  slack_state: 'That Slack connection attempt expired or was opened in another tab. Try again.',
+  slack_denied: 'Slack authorization was cancelled - nothing was connected.',
+  slack_forbidden: 'Your account cannot manage integrations for an organization.',
+  slack_no_code: 'Slack did not return an authorization code. Try again.',
+  slack_exchange: 'Slack could not complete the connection. Try again, or paste a token directly.',
+  clickup_state: 'That ClickUp connection attempt expired or was opened in another tab. Try again.',
+  clickup_denied: 'ClickUp authorization was cancelled - nothing was connected.',
+  clickup_forbidden: 'Your account cannot manage integrations for an organization.',
+  clickup_no_code: 'ClickUp did not return an authorization code. Try again.',
+  clickup_exchange:
+    'ClickUp could not complete the connection. Try again, or paste a token directly.',
+};
+
+const CONNECTED_LABEL: Record<string, string> = { slack: 'Slack', clickup: 'ClickUp' };
+
 /**
  * Integrations are the seam, and this page is where you can see whether the
  * seam is holding. The outbox is the honest bit: a message that has not gone
  * out yet is visible here rather than silently lost.
  */
-export default async function IntegrationsPage() {
+export default async function IntegrationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ connected?: string; oauth_error?: string }>;
+}) {
   const principal = await requirePrincipalOrRedirect('/integrations');
   if (!can(principal, 'integration:manage')) return <PermissionDenied />;
   if (!principal.organizationId) return <PermissionDenied />;
+
+  const { connected, oauth_error: oauthError } = await searchParams;
 
   const [health, outbox] = await Promise.all([
     integrationHealthFor(principal.organizationId),
     listOutbox(principal),
   ]);
   const now = clock.now();
+  const slackOAuth = slackOAuthConfigured();
+  const clickUpOAuth = clickUpOAuthConfigured();
 
   const providers = [
     {
@@ -62,7 +90,12 @@ export default async function IntegrationsPage() {
       health: health.slack,
       blurb:
         'Project updates post to the linked channel with a link straight back to the record. Important Slack messages can be pulled back into the project history.',
-      form: <SlackCredentialsForm connected={health.slack.mode === 'live'} />,
+      form: (
+        <SlackCredentialsForm
+          connected={health.slack.mode === 'live'}
+          oauthConfigured={slackOAuth}
+        />
+      ),
     },
     {
       key: 'clickup' as const,
@@ -71,7 +104,12 @@ export default async function IntegrationsPage() {
       health: health.clickup,
       blurb:
         'Stage changes push a status to the linked task. ClickUp stays your execution layer; the portal stays the shared source of truth.',
-      form: <ClickUpCredentialsForm connected={health.clickup.mode === 'live'} />,
+      form: (
+        <ClickUpCredentialsForm
+          connected={health.clickup.mode === 'live'}
+          oauthConfigured={clickUpOAuth}
+        />
+      ),
     },
     {
       key: 'email' as const,
@@ -92,6 +130,19 @@ export default async function IntegrationsPage() {
         title="Integrations"
         description="Slack, ClickUp and email hang off the project record. None of them owns project status."
       />
+
+      {connected && (
+        <Alert tone="success" title={`${CONNECTED_LABEL[connected] ?? connected} connected`}>
+          Authorized through {CONNECTED_LABEL[connected] ?? connected} directly - no token was ever
+          typed in.
+        </Alert>
+      )}
+
+      {oauthError && (
+        <Alert tone="danger" title="Connection failed">
+          {OAUTH_ERROR_MESSAGE[oauthError] ?? 'That connection attempt failed. Try again.'}
+        </Alert>
+      )}
 
       {mocked.length > 0 && (
         <Alert tone="info" title={`${mocked.length} integration(s) running in mock mode`}>
