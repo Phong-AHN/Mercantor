@@ -167,10 +167,21 @@ OAuth & Permissions page and the app is reinstalled to the workspace.
 **A Resend account with no verified sending domain fails every send permanently**, not just the
 ones from an unverified address - check `GET https://api.resend.com/domains` (or the Resend
 dashboard) for at least one verified domain matching `EMAIL_FROM` before assuming a code issue if
-`EMAIL` outbox messages stay stuck retrying.
+`EMAIL` outbox messages stay stuck retrying. This affects invite and password-reset emails
+(D-051) exactly the same way it affects everything else email sends - the account itself was
+created fine either way, so check `/people` (or the project's Settings page) rather than assuming
+the invite failed outright.
 
 `loadRootEnv()` deliberately does nothing in production: the platform supplies real environment
 variables there, and reading a committed file would be a way to ship the wrong ones.
+
+**Sign-in rate limiting (D-051) is IP-keyed, not account-keyed, and has no env-var knobs yet.**
+The free-attempt count, the delay curve, its cap, and the quiet-window reset are constants at the
+top of `packages/auth/src/rate-limit.ts` - edit and redeploy to change them, there is nothing to
+set in `.env`. A user reporting "it won't let me sign in, says to wait" after real mistyped
+attempts is the feature working as intended, not a bug; a shared office/VPN IP hitting the same
+limit for multiple different people is the one real cost of keying by IP instead of by account
+(see `SignInThrottle`'s and D-051's own comments for why the account-keyed alternative is worse).
 
 ---
 

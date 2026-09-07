@@ -519,6 +519,13 @@ async function queueUrgentApprovalDeliveries(
 }
 
 async function purgeSessions(): Promise<void> {
-  const result = await db.session.deleteMany({ where: { expiresAt: { lt: clock.now() } } });
-  if (result.count > 0) logger.info({ count: result.count }, 'expired sessions purged');
+  const now = clock.now();
+  const sessions = await db.session.deleteMany({ where: { expiresAt: { lt: now } } });
+  if (sessions.count > 0) logger.info({ count: sessions.count }, 'expired sessions purged');
+
+  // Same idea, same schedule: an expired invite/reset link is not a security
+  // risk left in place (it is already unusable - `consumePasswordToken`
+  // checks `expiresAt` itself), just a row with no reason to keep existing.
+  const tokens = await db.passwordToken.deleteMany({ where: { expiresAt: { lt: now } } });
+  if (tokens.count > 0) logger.info({ count: tokens.count }, 'expired password tokens purged');
 }

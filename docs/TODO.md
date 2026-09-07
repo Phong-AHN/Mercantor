@@ -68,17 +68,17 @@ against seeded data; it only blocks going live with real merchants.
       page now has a connect/disconnect form for both (D-045) — open `/projects/<code>/settings` and
       use it directly; no script or database write needed any more.
 
-## 4. People — there is no self-service account creation yet (`FUTURE-WORK.md` §1)
+## 4. People — provisioning is self-service now (D-051)
 
-- [ ] **Decide who your real AHN and SHOPLINE users are** (name, email, role) and tell me — I can
-      write a one-off provisioning script (distinct from `pnpm db:seed`, which wipes and rebuilds
-      demo data — never run that against real data).
-- [ ] **Decide how merchant accounts get created.** The same applies: a merchant contact needs a
-      `User` row (role `MERCHANT`) and a `ProjectMember` row linking them to their one project.
-      Until an invite flow exists, this is also a provisioning-script job.
-- [ ] **Have a plan for a forgotten password.** There is no self-service reset yet — resetting one
-      today means asking me to update the row directly. Worth deciding whether that is acceptable
-      for launch or whether the reset flow (`FUTURE-WORK.md` §1) should be built first.
+- [ ] **Invite your real AHN and SHOPLINE users directly.** `/people` → "Invite person" (needs
+      `user:manage` - `AHN_ADMIN` or `SHOPLINE_ADMIN`) creates the account and emails a
+      set-password link. No script, no database write.
+- [ ] **Invite each real merchant from their project's Settings page.** "Invite to portal" (needs
+      `merchant:manage` - an `AHN_PROJECT_MANAGER` already has it) creates the `User` and the
+      `ProjectMember` row and emails the same kind of set-password link.
+- [ ] **Password reset is self-service too** — `/forgot-password` on the sign-in page.
+- [ ] Decide **who actually gets the first real invites, and in what order** — see
+      `GOING-LIVE-DECISIONS.md` §2.
 
 ## 5. Product decisions worth confirming with the real AHN/SHOPLINE team
 

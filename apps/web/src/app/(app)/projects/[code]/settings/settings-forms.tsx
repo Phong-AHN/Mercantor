@@ -1,14 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Save } from 'lucide-react';
+import { Save, UserPlus } from 'lucide-react';
 import { MIGRATION_TYPE_LABEL, MIGRATION_TYPES, type MigrationType } from '@relay/core';
 import {
   Alert,
+  Avatar,
   Button,
   Card,
   CardBody,
   CardHeader,
+  Empty,
   Field,
   FormActions,
   Input,
@@ -16,7 +18,11 @@ import {
   Textarea,
 } from '@relay/ui';
 import { useAction } from '@/components/use-action';
-import { assignPeopleAction, updateProjectAction } from '@/features/projects/actions';
+import {
+  assignPeopleAction,
+  inviteMerchantAction,
+  updateProjectAction,
+} from '@/features/projects/actions';
 
 interface Person {
   id: string;
@@ -252,6 +258,93 @@ export function AssignmentForm({
             Save assignments
           </Button>
         </FormActions>
+      </CardBody>
+    </Card>
+  );
+}
+
+interface MerchantMember {
+  id: string;
+  name: string;
+  email: string;
+}
+
+/**
+ * The other gap `FUTURE-WORK.md` §1 named: a merchant's portal access is a
+ * real `ProjectMember` row (D-010), but nothing ever created one outside
+ * `pnpm db:seed`. Inviting someone already listed here is harmless -
+ * `inviteMerchantAction` treats a repeat invite as "grant access, do not
+ * re-send a password email" once their account already exists.
+ */
+export function MerchantAccessForm({ code, members }: { code: string; members: MerchantMember[] }) {
+  const [form, setForm] = useState({ name: '', email: '' });
+  const action = useAction(inviteMerchantAction, {
+    onSuccess: () => setForm({ name: '', email: '' }),
+  });
+
+  return (
+    <Card>
+      <CardHeader
+        title="Merchant portal access"
+        count={members.length}
+        description="Who can sign in to this project's merchant portal."
+      />
+      <CardBody className="space-y-4">
+        {members.length === 0 ? (
+          <Empty title="Nobody invited yet" className="py-6" />
+        ) : (
+          <ul className="space-y-2">
+            {members.map((member) => (
+              <li key={member.id} className="flex items-center gap-2.5">
+                <Avatar name={member.name} team="MERCHANT" size="sm" />
+                <div className="min-w-0">
+                  <p className="text-ink truncate text-[13px] font-medium">{member.name}</p>
+                  <p className="text-faint truncate text-[11.5px]">{member.email}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="border-line space-y-3 border-t pt-4">
+          {action.error && (
+            <Alert tone="danger" dense>
+              {action.error}
+            </Alert>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Name" htmlFor="merchant-name" error={action.fieldErrors.name ?? null}>
+              <Input
+                id="merchant-name"
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                placeholder="Merchant contact's name"
+              />
+            </Field>
+            <Field label="Email" htmlFor="merchant-email" error={action.fieldErrors.email ?? null}>
+              <Input
+                id="merchant-email"
+                type="email"
+                value={form.email}
+                onChange={(event) => setForm({ ...form, email: event.target.value })}
+                placeholder="owner@merchant.example"
+              />
+            </Field>
+          </div>
+
+          <FormActions>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={action.pending}
+              onClick={() => action.run({ code, name: form.name, email: form.email })}
+            >
+              <UserPlus className="size-3.5" />
+              Invite to portal
+            </Button>
+          </FormActions>
+        </div>
       </CardBody>
     </Card>
   );

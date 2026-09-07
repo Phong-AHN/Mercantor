@@ -25,7 +25,7 @@ make one of them a field somebody has to remember to update, it is the wrong cha
 **Working, verified, demonstrable against seeded data:**
 
 - 38 routes build; `pnpm verify` is green (format, lint, typecheck, 61 unit tests)
-- `pnpm test:integration` is green against a real Postgres and a real MinIO — 76 tests over 16
+- `pnpm test:integration` is green against a real Postgres and a real MinIO — 99 tests over 21
   files, proving the blocker-handover arithmetic, the handoff readiness gate, comment visibility
   per role, the outbox's transactional atomicity, that a launch blocker (and only a launch
   blocker, not an ordinary issue) queues one notification email and one Slack DM per recipient,
@@ -134,9 +134,23 @@ lockout is itself a denial-of-service risk if done carelessly - the right fix is
 limiting at the infrastructure layer, not in the app), and `pnpm audit` reports 6 advisories, all
 transitive via `next`'s and Prisma's own bundled tooling. See D-050 and `TODO.md` §2.
 
-**Known gaps against going live with real merchants: a few, all in `FUTURE-WORK.md`.** The biggest
-one - no UI creates a user account or a merchant's project membership yet, only `pnpm db:seed` and
-direct database writes do - is worth reading before promising anyone real onboarding.
+Asked directly to make the product customer-facing and to implement the whole thing without
+stopping to ask - D-051, and see `GOING-LIVE-PLAN.md` for what that meant and
+`GOING-LIVE-DECISIONS.md` for everything found along the way that needed a human call instead of
+code. Built: self-service password reset (`/forgot-password`, `/set-password`), staff invitations
+(`/people` → "Invite person", `user:manage`), merchant invitations (each project's Settings page →
+"Invite to portal", `merchant:manage`), and IP-keyed sign-in rate limiting closing the gap D-050
+deliberately left open. All three "no UI creates a `User`/`ProjectMember` row" gaps `FUTURE-WORK.md`
+§1 used to describe are closed. A real bug surfaced building the staff-invite UI - a plain constant
+exported from a `'use server'` file breaks the moment a Client Component imports it - fixed and
+swept for elsewhere in the repo (found nowhere else). Verified live end to end: inviting a real
+staff member and a real merchant through the actual UI, using a freshly minted token at
+`/set-password` to sign in with a new password, and the forgot-password round trip returning the
+identical message for a real and a made-up address.
+
+**Known gaps against going live with real merchants: everything left is a credential, a business
+call, or infrastructure - not code.** `GOING-LIVE-DECISIONS.md` is the checklist; `TODO.md` covers
+the same ground with more operational detail.
 
 ---
 

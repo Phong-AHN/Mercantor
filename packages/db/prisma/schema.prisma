@@ -333,8 +333,8 @@ enum AttachmentKind {
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String   @id @default(uuid(7)) @db.Uuid
-  email        String   @unique
+  id           String    @id @default(uuid(7)) @db.Uuid
+  email        String    @unique
   name         String
   passwordHash String
   role         UserRole
@@ -342,14 +342,15 @@ model User {
   title        String?
   phone        String?
   avatarColor  String? // deterministic fallback avatar, no upload required
-  timezone     String   @default("UTC")
-  isActive     Boolean  @default(true)
+  timezone     String    @default("UTC")
+  isActive     Boolean   @default(true)
   lastLoginAt  DateTime? @db.Timestamptz(3)
-  createdAt    DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
   deletedAt    DateTime? @db.Timestamptz(3)
 
   sessions              Session[]
+  passwordTokens        PasswordToken[]
   projectMemberships    ProjectMember[]
   managedProjects       Project[]           @relation("ProjectAhnPm")
   developedProjects     Project[]           @relation("ProjectAhnDev")
@@ -381,16 +382,16 @@ model User {
 }
 
 model Session {
-  id        String   @id @default(uuid(7)) @db.Uuid
-  userId    String   @db.Uuid
+  id         String    @id @default(uuid(7)) @db.Uuid
+  userId     String    @db.Uuid
   // Sessions are stored hashed: a database dump cannot be replayed as a login.
-  tokenHash String   @unique
-  expiresAt DateTime @db.Timestamptz(3)
-  revokedAt DateTime? @db.Timestamptz(3)
-  ip        String?
-  userAgent String?
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
-  lastSeenAt DateTime @default(now()) @db.Timestamptz(3)
+  tokenHash  String    @unique
+  expiresAt  DateTime  @db.Timestamptz(3)
+  revokedAt  DateTime? @db.Timestamptz(3)
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  lastSeenAt DateTime  @default(now()) @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -398,12 +399,55 @@ model Session {
   @@index([expiresAt])
 }
 
+/// A person setting their password for the first time (`INVITE`, from
+/// `inviteUserAction`/`inviteMerchantAction`) and a person who forgot theirs
+/// (`RESET`, from `requestPasswordResetAction`) both walk the same one-time,
+/// hashed, short-lived link back to `setPasswordAction` - two ways in, one
+/// consumption path, the same guarantee `Session` already gives: the raw
+/// token only ever exists in the email, never in a place a database dump
+/// could replay.
+enum PasswordTokenPurpose {
+  INVITE
+  RESET
+}
+
+model PasswordToken {
+  id        String               @id @default(uuid(7)) @db.Uuid
+  userId    String               @db.Uuid
+  purpose   PasswordTokenPurpose
+  tokenHash String               @unique
+  expiresAt DateTime             @db.Timestamptz(3)
+  usedAt    DateTime?            @db.Timestamptz(3)
+  createdAt DateTime             @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Sign-in throttling, keyed by source IP rather than by account: an
+/// account-keyed lockout is itself a denial-of-service vector (anyone can
+/// lock a real person out just by failing their password a few times) -
+/// D-050 flagged this and deliberately deferred it rather than patch it
+/// blind. Keyed by IP instead, the delay only ever slows down the one
+/// source making the attempts, never the account being attempted from
+/// somewhere else. A distributed attack across many IPs still needs a
+/// WAF/edge-layer answer - see `GOING-LIVE-DECISIONS.md`.
+model SignInThrottle {
+  ip             String   @id
+  failedAttempts Int      @default(0)
+  lastAttemptAt  DateTime @db.Timestamptz(3)
+
+  @@index([lastAttemptAt])
+}
+
 // ---------------------------------------------------------------------------
 // Merchant & contacts
 // ---------------------------------------------------------------------------
 
 model Merchant {
-  id              String  @id @default(uuid(7)) @db.Uuid
+  id              String    @id @default(uuid(7)) @db.Uuid
   name            String
   website         String?
   shoplineStoreId String?
@@ -411,8 +455,8 @@ model Merchant {
   country         String?
   industry        String?
   notes           String?
-  createdAt       DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
   deletedAt       DateTime? @db.Timestamptz(3)
 
   contacts MerchantContact[]
@@ -423,13 +467,13 @@ model Merchant {
 }
 
 model MerchantContact {
-  id         String  @id @default(uuid(7)) @db.Uuid
-  merchantId String  @db.Uuid
+  id         String   @id @default(uuid(7)) @db.Uuid
+  merchantId String   @db.Uuid
   name       String
   email      String
   phone      String?
   title      String?
-  isPrimary  Boolean @default(false)
+  isPrimary  Boolean  @default(false)
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
   updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
@@ -444,9 +488,9 @@ model MerchantContact {
 // ---------------------------------------------------------------------------
 
 model Project {
-  id         String        @id @default(uuid(7)) @db.Uuid
-  code       String        @unique // PRJ-0001, safe to say on a call
-  merchantId String        @db.Uuid
+  id         String @id @default(uuid(7)) @db.Uuid
+  code       String @unique // PRJ-0001, safe to say on a call
+  merchantId String @db.Uuid
 
   stage         ProjectStage  @default(INTRODUCTION)
   migrationType MigrationType @default(ONE_TO_ONE)
@@ -469,12 +513,12 @@ model Project {
   // Denormalised so the portfolio list can sort and filter without a join
   // storm. Recomputed inside the same transaction as whatever changed it.
   health           ProjectHealth @default(ON_TRACK)
-  currentBlockerId String?       @db.Uuid @unique
+  currentBlockerId String?       @unique @db.Uuid
 
-  nextAction            String?
-  nextActionOwnerId     String?   @db.Uuid
-  nextActionOwnerTeam   Team?
-  nextActionDueDate     DateTime? @db.Timestamptz(3)
+  nextAction          String?
+  nextActionOwnerId   String?   @db.Uuid
+  nextActionOwnerTeam Team?
+  nextActionDueDate   DateTime? @db.Timestamptz(3)
 
   contractTotalMinor Int    @default(0)
   currency           String @default("USD")
@@ -485,13 +529,13 @@ model Project {
   updatedAt DateTime  @updatedAt @db.Timestamptz(3)
   deletedAt DateTime? @db.Timestamptz(3)
 
-  merchant            Merchant @relation(fields: [merchantId], references: [id])
-  ahnProjectManager   User?    @relation("ProjectAhnPm", fields: [ahnProjectManagerId], references: [id])
-  ahnDeveloper        User?    @relation("ProjectAhnDev", fields: [ahnDeveloperId], references: [id])
-  shoplineAm          User?    @relation("ProjectShoplineAm", fields: [shoplineAmId], references: [id])
-  shoplineSe          User?    @relation("ProjectShoplineSe", fields: [shoplineSeId], references: [id])
-  nextActionOwner     User?    @relation("ProjectNextActionOwner", fields: [nextActionOwnerId], references: [id])
-  currentBlocker      Blocker? @relation("ProjectCurrentBlocker", fields: [currentBlockerId], references: [id])
+  merchant          Merchant @relation(fields: [merchantId], references: [id])
+  ahnProjectManager User?    @relation("ProjectAhnPm", fields: [ahnProjectManagerId], references: [id])
+  ahnDeveloper      User?    @relation("ProjectAhnDev", fields: [ahnDeveloperId], references: [id])
+  shoplineAm        User?    @relation("ProjectShoplineAm", fields: [shoplineAmId], references: [id])
+  shoplineSe        User?    @relation("ProjectShoplineSe", fields: [shoplineSeId], references: [id])
+  nextActionOwner   User?    @relation("ProjectNextActionOwner", fields: [nextActionOwnerId], references: [id])
+  currentBlocker    Blocker? @relation("ProjectCurrentBlocker", fields: [currentBlockerId], references: [id])
 
   members       ProjectMember[]
   stageEvents   StageEvent[]
@@ -543,16 +587,16 @@ model ProjectMember {
 /// One visit to one stage. The open row (exitedAt = null) is the current stage.
 /// Every SLA number in the product is computed from this table.
 model StageEvent {
-  id        String       @id @default(uuid(7)) @db.Uuid
-  projectId String       @db.Uuid
-  stage     ProjectStage
+  id          String       @id @default(uuid(7)) @db.Uuid
+  projectId   String       @db.Uuid
+  stage       ProjectStage
   /// Overrides the stage's default owning team when a project agrees otherwise.
-  ownerTeam Team?
-  enteredAt DateTime     @db.Timestamptz(3)
-  exitedAt  DateTime?    @db.Timestamptz(3)
+  ownerTeam   Team?
+  enteredAt   DateTime     @db.Timestamptz(3)
+  exitedAt    DateTime?    @db.Timestamptz(3)
   /// Cached on exit so historical reporting does not recompute the whole table.
-  durationMs BigInt?
-  changedById String?    @db.Uuid
+  durationMs  BigInt?
+  changedById String?      @db.Uuid
   reason      String?
 
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -572,17 +616,17 @@ model StageEvent {
 /// open launch breach per project (LAUNCH_OVERRUN), the same pattern
 /// `StageEvent`/`BlockerOwnership` already use for "exactly one open span".
 model SlaBreach {
-  id        String        @id @default(uuid(7)) @db.Uuid
-  projectId String        @db.Uuid
-  kind      SlaBreachKind
+  id         String        @id @default(uuid(7)) @db.Uuid
+  projectId  String        @db.Uuid
+  kind       SlaBreachKind
   /// The stage that overran. Set for STAGE_OVERRUN, always null for LAUNCH_OVERRUN.
-  stage     ProjectStage?
+  stage      ProjectStage?
   /// The target (days) that was crossed. Null for LAUNCH_OVERRUN, whose
   /// target is the project's own `targetLaunchDate` rather than a fixed number.
   targetDays Int?
-  startedAt  DateTime     @db.Timestamptz(3)
-  resolvedAt DateTime?    @db.Timestamptz(3)
-  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+  startedAt  DateTime      @db.Timestamptz(3)
+  resolvedAt DateTime?     @db.Timestamptz(3)
+  createdAt  DateTime      @default(now()) @db.Timestamptz(3)
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -626,14 +670,14 @@ model Blocker {
 /// When ownership of a blocker changes the previous owner's timer stops and the
 /// new owner's begins. That is this table; `computeProjectTime` reads it.
 model BlockerOwnership {
-  id         String    @id @default(uuid(7)) @db.Uuid
-  blockerId  String    @db.Uuid
-  ownerTeam  Team
-  ownerUserId String?  @db.Uuid
-  startedAt  DateTime  @db.Timestamptz(3)
-  endedAt    DateTime? @db.Timestamptz(3)
-  durationMs BigInt?
-  note       String?
+  id          String    @id @default(uuid(7)) @db.Uuid
+  blockerId   String    @db.Uuid
+  ownerTeam   Team
+  ownerUserId String?   @db.Uuid
+  startedAt   DateTime  @db.Timestamptz(3)
+  endedAt     DateTime? @db.Timestamptz(3)
+  durationMs  BigInt?
+  note        String?
 
   blocker Blocker @relation(fields: [blockerId], references: [id], onDelete: Cascade)
   owner   User?   @relation(fields: [ownerUserId], references: [id])
@@ -647,21 +691,21 @@ model BlockerOwnership {
 // ---------------------------------------------------------------------------
 
 model ScopeItem {
-  id          String           @id @default(uuid(7)) @db.Uuid
-  projectId   String           @db.Uuid
-  category    ScopeCategory
-  label       String
-  disposition ScopeDisposition @default(IN_SCOPE)
-  status      ScopeStatus      @default(NOT_STARTED)
-  sourceCount Int?
-  migratedCount Int?
-  notes       String?
+  id                       String           @id @default(uuid(7)) @db.Uuid
+  projectId                String           @db.Uuid
+  category                 ScopeCategory
+  label                    String
+  disposition              ScopeDisposition @default(IN_SCOPE)
+  status                   ScopeStatus      @default(NOT_STARTED)
+  sourceCount              Int?
+  migratedCount            Int?
+  notes                    String?
   /// Set when a change request has been priced and agreed.
   changeRequestAmountMinor Int?
-  changeRequestApprovedAt  DateTime? @db.Timestamptz(3)
-  sortOrder   Int              @default(0)
-  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime         @updatedAt @db.Timestamptz(3)
+  changeRequestApprovedAt  DateTime?        @db.Timestamptz(3)
+  sortOrder                Int              @default(0)
+  createdAt                DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime         @updatedAt @db.Timestamptz(3)
 
   project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   /// The invoice line an approved change request became. Set once, by
@@ -699,19 +743,19 @@ model AccessItem {
 }
 
 model AssetItem {
-  id        String      @id @default(uuid(7)) @db.Uuid
-  projectId String      @db.Uuid
-  kind      AssetKind
-  label     String
-  status    AssetStatus @default(NOT_REQUESTED)
-  required  Boolean     @default(true)
-  dueDate   DateTime?   @db.Timestamptz(3)
-  receivedAt DateTime?  @db.Timestamptz(3)
-  approvedAt DateTime?  @db.Timestamptz(3)
-  notes     String?
-  sortOrder Int         @default(0)
-  createdAt DateTime    @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime    @updatedAt @db.Timestamptz(3)
+  id         String      @id @default(uuid(7)) @db.Uuid
+  projectId  String      @db.Uuid
+  kind       AssetKind
+  label      String
+  status     AssetStatus @default(NOT_REQUESTED)
+  required   Boolean     @default(true)
+  dueDate    DateTime?   @db.Timestamptz(3)
+  receivedAt DateTime?   @db.Timestamptz(3)
+  approvedAt DateTime?   @db.Timestamptz(3)
+  notes      String?
+  sortOrder  Int         @default(0)
+  createdAt  DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime    @updatedAt @db.Timestamptz(3)
 
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   attachments Attachment[]
@@ -801,15 +845,15 @@ model CommentMention {
 /// assets, design, feedback, development, QA, review, deployment. System
 /// generated - people write Comments, the portal writes these.
 model ActivityEvent {
-  id          String            @id @default(uuid(7)) @db.Uuid
-  projectId   String            @db.Uuid
-  type        ActivityType
-  actorId     String?           @db.Uuid
-  summary     String
-  detail      String?
-  visibility  CommentVisibility @default(AHN_SHOPLINE)
-  payload     Json?
-  occurredAt  DateTime          @default(now()) @db.Timestamptz(3)
+  id         String            @id @default(uuid(7)) @db.Uuid
+  projectId  String            @db.Uuid
+  type       ActivityType
+  actorId    String?           @db.Uuid
+  summary    String
+  detail     String?
+  visibility CommentVisibility @default(AHN_SHOPLINE)
+  payload    Json?
+  occurredAt DateTime          @default(now()) @db.Timestamptz(3)
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   actor   User?   @relation(fields: [actorId], references: [id])
@@ -823,26 +867,26 @@ model ActivityEvent {
 // ---------------------------------------------------------------------------
 
 model Issue {
-  id          String        @id @default(uuid(7)) @db.Uuid
-  projectId   String        @db.Uuid
-  reference   String // ISS-12 within the project, for talking about it
-  title       String
-  description String
-  severity    IssueSeverity @default(MEDIUM)
-  status      IssueStatus   @default(OPEN)
-  ownerTeam   Team          @default(AHN)
-  ownerUserId String?       @db.Uuid
-  reportedById String?      @db.Uuid
-  reportedAt  DateTime      @default(now()) @db.Timestamptz(3)
-  dueDate     DateTime?     @db.Timestamptz(3)
-  resolution  String?
-  resolvedAt  DateTime?     @db.Timestamptz(3)
+  id             String        @id @default(uuid(7)) @db.Uuid
+  projectId      String        @db.Uuid
+  reference      String // ISS-12 within the project, for talking about it
+  title          String
+  description    String
+  severity       IssueSeverity @default(MEDIUM)
+  status         IssueStatus   @default(OPEN)
+  ownerTeam      Team          @default(AHN)
+  ownerUserId    String?       @db.Uuid
+  reportedById   String?       @db.Uuid
+  reportedAt     DateTime      @default(now()) @db.Timestamptz(3)
+  dueDate        DateTime?     @db.Timestamptz(3)
+  resolution     String?
+  resolvedAt     DateTime?     @db.Timestamptz(3)
   /// Set once, by `createClickUpTaskAction`. Created as a subtask of the
   /// project's linked task, so there is nowhere to configure a list id.
   clickUpTaskId  String?
   clickUpTaskUrl String?
-  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
 
   project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   owner      User?   @relation("IssueOwner", fields: [ownerUserId], references: [id])
@@ -862,26 +906,26 @@ model Issue {
 /// Milestone billing: a project has many invoices, and the project rollup is
 /// the sum. Amounts are integer minor units of `currency`.
 model Invoice {
-  id             String        @id @default(uuid(7)) @db.Uuid
-  projectId      String        @db.Uuid
-  number         String?
-  milestone      String
-  status         InvoiceStatus @default(NOT_INVOICED)
-  amountMinor    Int           @default(0)
-  paidMinor      Int           @default(0)
-  currency       String        @default("USD")
-  invoiceDate    DateTime?     @db.Timestamptz(3)
-  dueDate        DateTime?     @db.Timestamptz(3)
-  paidDate       DateTime?     @db.Timestamptz(3)
-  notes          String?
-  sortOrder      Int           @default(0)
-  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
+  id          String        @id @default(uuid(7)) @db.Uuid
+  projectId   String        @db.Uuid
+  number      String?
+  milestone   String
+  status      InvoiceStatus @default(NOT_INVOICED)
+  amountMinor Int           @default(0)
+  paidMinor   Int           @default(0)
+  currency    String        @default("USD")
+  invoiceDate DateTime?     @db.Timestamptz(3)
+  dueDate     DateTime?     @db.Timestamptz(3)
+  paidDate    DateTime?     @db.Timestamptz(3)
+  notes       String?
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
   /// Set only for a line created by approving a change request. Nothing else
   /// ever writes it, and it is at most one invoice per scope item.
-  scopeItemId    String?       @unique @db.Uuid
+  scopeItemId String?       @unique @db.Uuid
 
-  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   scopeItem ScopeItem? @relation(fields: [scopeItemId], references: [id])
 
   @@index([projectId, status])
@@ -895,17 +939,17 @@ model Invoice {
 /// Formal, timestamped checkpoints. One row per type per project; the history
 /// of decisions lives in ActivityEvent.
 model Approval {
-  id           String         @id @default(uuid(7)) @db.Uuid
-  projectId    String         @db.Uuid
-  type         ApprovalType
-  status       ApprovalStatus @default(NOT_REQUESTED)
-  requestedById String?       @db.Uuid
-  requestedAt  DateTime?      @db.Timestamptz(3)
-  decidedById  String?        @db.Uuid
-  decidedAt    DateTime?      @db.Timestamptz(3)
-  notes        String?
-  createdAt    DateTime       @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime       @updatedAt @db.Timestamptz(3)
+  id            String         @id @default(uuid(7)) @db.Uuid
+  projectId     String         @db.Uuid
+  type          ApprovalType
+  status        ApprovalStatus @default(NOT_REQUESTED)
+  requestedById String?        @db.Uuid
+  requestedAt   DateTime?      @db.Timestamptz(3)
+  decidedById   String?        @db.Uuid
+  decidedAt     DateTime?      @db.Timestamptz(3)
+  notes         String?
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(3)
 
   project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   requestedBy User?   @relation("ApprovalRequester", fields: [requestedById], references: [id])
@@ -942,21 +986,21 @@ model HandoffSubmission {
 // ---------------------------------------------------------------------------
 
 model IntroductionEmail {
-  id          String           @id @default(uuid(7)) @db.Uuid
-  projectId   String           @db.Uuid
-  status      IntroEmailStatus @default(DRAFT)
-  subject     String
-  bodyText    String
-  bodyHtml    String
+  id                String           @id @default(uuid(7)) @db.Uuid
+  projectId         String           @db.Uuid
+  status            IntroEmailStatus @default(DRAFT)
+  subject           String
+  bodyText          String
+  bodyHtml          String
   /// Snapshot of the addresses, so the record survives a contact being edited.
-  recipients  Json
-  sentById    String?          @db.Uuid
-  sentAt      DateTime?        @db.Timestamptz(3)
-  respondedAt DateTime?        @db.Timestamptz(3)
-  responseNote String?
+  recipients        Json
+  sentById          String?          @db.Uuid
+  sentAt            DateTime?        @db.Timestamptz(3)
+  respondedAt       DateTime?        @db.Timestamptz(3)
+  responseNote      String?
   providerMessageId String?
-  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime         @updatedAt @db.Timestamptz(3)
+  createdAt         DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sentBy  User?   @relation(fields: [sentById], references: [id])
@@ -994,18 +1038,18 @@ model IntegrationLink {
 /// transaction as the change it describes, so a Slack outage can never lose an
 /// update - it only delays it.
 model OutboxMessage {
-  id         String              @id @default(uuid(7)) @db.Uuid
-  projectId  String?             @db.Uuid
-  provider   IntegrationProvider
-  kind       String
-  payload    Json
-  status     OutboxStatus        @default(PENDING)
-  attempts   Int                 @default(0)
-  lastError  String?
-  availableAt DateTime           @default(now()) @db.Timestamptz(3)
-  deliveredAt DateTime?          @db.Timestamptz(3)
+  id          String              @id @default(uuid(7)) @db.Uuid
+  projectId   String?             @db.Uuid
+  provider    IntegrationProvider
+  kind        String
+  payload     Json
+  status      OutboxStatus        @default(PENDING)
+  attempts    Int                 @default(0)
+  lastError   String?
+  availableAt DateTime            @default(now()) @db.Timestamptz(3)
+  deliveredAt DateTime?           @db.Timestamptz(3)
   externalRef String?
-  createdAt  DateTime            @default(now()) @db.Timestamptz(3)
+  createdAt   DateTime            @default(now()) @db.Timestamptz(3)
 
   project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 

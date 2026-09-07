@@ -12,7 +12,8 @@ const CONTROL = cn(
 );
 
 export interface FieldProps {
-  label: string;
+  /** Usually a string; a row like "Password / Forgot password?" needs a node. */
+  label: React.ReactNode;
   htmlFor?: string;
   hint?: React.ReactNode;
   error?: string | string[] | null;

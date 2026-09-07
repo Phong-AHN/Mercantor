@@ -37,7 +37,17 @@ export function SignInForm({ next }: { next?: string }) {
       </Field>
 
       <Field
-        label="Password"
+        label={
+          <span className="flex items-center justify-between gap-2">
+            Password
+            <a
+              href="/forgot-password"
+              className="text-accent-ink text-[12px] font-normal underline-offset-4 hover:underline"
+            >
+              Forgot password?
+            </a>
+          </span>
+        }
         htmlFor="password"
         required
         error={failed?.fieldErrors?.password ?? null}

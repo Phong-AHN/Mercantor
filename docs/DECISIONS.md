@@ -795,3 +795,72 @@ Two more were found and are noted rather than fixed here, deliberately:
 `pnpm verify` (61 unit tests, up from 59), `pnpm test:integration` (76, up from 71), a production
 build of both apps, `e2e-smoke.mjs` (11/11), and the CSP live-verification above were all re-run
 clean after every fix in this entry.
+
+**D-051 — Customer-facing, executed end to end without stopping to ask, per direct instruction.**
+`GOING-LIVE-PLAN.md` is the plan this was built against; `GOING-LIVE-DECISIONS.md` is where every
+question that came up along the way went instead of being asked - a credential, a business call, a
+piece of legal content, nothing code can resolve on its own. What follows is what got built.
+
+1. **Password reset.** `PasswordToken` (`purpose: RESET | INVITE`, one hashed, single-use,
+   short-lived table doing what `Session` already does for logins) backs both this and account
+   provisioning below. `/forgot-password` always returns the same message whether or not the email
+   exists - the same anti-enumeration shape `signIn()` already used for a wrong password, now
+   applied to a second surface that could have leaked the same information a different way.
+   `/set-password?token=...` consumes it once, and a `RESET` token revokes every session that
+   existed before it (an `INVITE` token has none to revoke).
+
+2. **Staff provisioning.** `/people` gained an "Invite person" form for `user:manage`
+   (`inviteUserAction`) - the first gap `FUTURE-WORK.md` §1 named: every account before this
+   existed only because `pnpm db:seed` or a direct write made it. `MERCHANT` and `PLATFORM_ADMIN`
+   are refused by the input schema itself, not just by the form not offering them - letting anyone
+   who holds `user:manage` mint the one unrestricted role would be a real privilege-escalation path
+   this form should not open.
+
+3. **Merchant provisioning.** Each project's Settings page gained an "Invite to portal" form
+   (`inviteMerchantAction`) - the second gap `FUTURE-WORK.md` §1 named: a merchant's access is a
+   real, enforced `ProjectMember` row (D-010), but nothing but `pnpm db:seed` ever created one.
+   Gated by `merchant:manage`, which `AHN_PROJECT_MANAGER` already holds and `AHN_DEVELOPER` does
+   not - the same split `introduction:send` already draws, on the reasoning that the PM who owns
+   the merchant relationship day to day should not need an admin's permission to bring the merchant
+   into the portal they are already emailing. Re-inviting an email that already has a merchant
+   account grants access to the new project rather than erroring or duplicating the account.
+
+4. **Sign-in rate limiting** (`SignInThrottle`, `packages/auth/src/rate-limit.ts`) - closing the
+   gap D-050 deliberately left open rather than patch blind. Keyed by IP, not by account: an
+   account-keyed lockout is itself a denial-of-service vector, since anyone can lock a real person
+   out of their own account just by failing their password a few times. The first four misses from
+   one IP are free (typo tolerance), then the delay doubles each attempt, capped at 30 seconds,
+   and fifteen quiet minutes forgets the count entirely - never a hard, permanent lockout. Every
+   function in the module fails open: the limiter being unavailable is never the reason a real
+   sign-in cannot happen.
+
+5. **The demo-account picker's production gating was checked, not rebuilt** - `DemoAccounts`
+   already returned `null` under `NODE_ENV=production` (a `'use client'` component, so this is
+   dead-code-eliminated from the bundle entirely, not merely hidden by CSS), verified live against
+   a real production build rather than trusted from reading the code.
+
+A genuine bug surfaced while wiring the staff-invite UI and is worth naming on its own: a
+`'use server'` file may only export async functions - every top-level export becomes a server
+action reference - and `INVITABLE_ROLE_OPTIONS`, a plain array living in `actions.ts` for
+convenience, broke the instant a Client Component imported it
+(`INVITABLE_ROLE_OPTIONS.map is not a function`), because the client received a callable reference
+to it, not the array. A production build had compiled it without complaint; only opening the page
+in a browser surfaced it, which is exactly why "the build passed" and "verified live" are kept as
+two separate steps throughout this project rather than treated as the same claim. Fixed by moving
+the shared, non-action data into its own plain module (`features/people/roles.ts`) that both the
+action file and the client component import from - and a repo-wide sweep for the same pattern
+(`grep` every `'use server'` file for a non-`defineAction` export) found no other instance.
+
+Covered by 23 new integration tests, five in new files
+(`account/actions.integration.test.ts`, `people/actions.integration.test.ts`,
+`projects/merchant-access.integration.test.ts`, `auth/rate-limit.integration.test.ts`,
+`auth/password-token.integration.test.ts`) and one added to the existing
+`maintenance.integration.test.ts` for the purge job below - 99 total now, up from 76, over 21
+files, up from 16. Verified live end to end, not only through the test suite: inviting a staff
+member and a merchant through the actual UI, minting a real token and using it at `/set-password`
+to sign in with a new password, the forgot-password round trip returning the identical message for
+a real and a made-up address, and the demo-account picker's absence from a real production build.
+
+`purge-expired-sessions` (the nightly worker sweep) now also clears expired `PasswordToken` rows,
+on the same schedule as expired sessions - not a security fix (`consumePasswordToken` already
+refuses an expired token on its own), just no reason to let them accumulate.

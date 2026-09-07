@@ -6,12 +6,18 @@ import {
   IllegalTransitionError,
   PreconditionFailedError,
   PROJECT_STAGES,
+  renderAccountInviteEmail,
   STAGES,
   TEAMS,
   ValidationError,
   type ProjectStage,
 } from '@relay/core';
-import { transaction } from '@relay/db';
+import { randomToken } from '@relay/core/server';
+import { createPasswordToken, hashPassword } from '@relay/auth';
+import { env } from '@relay/config';
+import { db, transaction } from '@relay/db';
+import { integrations } from '@relay/integrations';
+import { logger } from '@relay/observability';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, notify, recordActivity } from '@/server/record';
 import {
@@ -408,5 +414,125 @@ export const updateProjectAction = defineAction({
 
     revalidateProject(input.code);
     return actionOk(undefined, 'Project updated.');
+  },
+});
+
+/**
+ * Creates the merchant's own login and grants it access to exactly this
+ * project - the second gap `FUTURE-WORK.md` §1 named: a merchant's portal
+ * access is a real, enforced `ProjectMember` row (D-010), but nothing ever
+ * created one except `pnpm db:seed`. Gated by `merchant:manage` rather than
+ * the org-wide `user:manage`: the AHN project manager who owns this
+ * relationship day to day already holds it, the same permission
+ * `introduction:send` already trusts them with. Deliberately a separate
+ * action from `sendIntroductionAction` rather than folded into it - see
+ * `GOING-LIVE-DECISIONS.md` for why that is a content/product decision, not
+ * a technical one.
+ */
+export const inviteMerchantAction = defineAction({
+  name: 'project.invite_merchant',
+  permission: 'merchant:manage',
+  input: z.object({
+    code: z.string().min(1),
+    name: z.string().trim().min(1, 'Enter a name.').max(200),
+    email: z
+      .string()
+      .trim()
+      .min(1, 'Enter an email address.')
+      .email('Enter a valid email address.'),
+  }),
+  async handler(input, ctx) {
+    const project = await resolveProject(ctx.principal, input.code);
+    const email = input.email.trim().toLowerCase();
+
+    const existing = await db.user.findFirst({
+      where: { email },
+      select: { id: true, role: true, deletedAt: true },
+    });
+    if (existing && existing.deletedAt === null && existing.role !== 'MERCHANT') {
+      throw new ValidationError('That email already has a non-merchant account.', {
+        email: ['That email already has a non-merchant account.'],
+      });
+    }
+
+    const placeholderHash = existing ? undefined : await hashPassword(randomToken(32));
+
+    const user = await transaction(async (tx) => {
+      const row = existing
+        ? await tx.user.update({
+            where: { id: existing.id },
+            data: { deletedAt: null, isActive: true, name: input.name },
+          })
+        : await tx.user.create({
+            data: {
+              email,
+              name: input.name,
+              role: 'MERCHANT',
+              team: 'MERCHANT',
+              passwordHash: placeholderHash!,
+              isActive: true,
+            },
+          });
+
+      await tx.projectMember.upsert({
+        where: { projectId_userId: { projectId: project.id, userId: row.id } },
+        create: { projectId: project.id, userId: row.id },
+        update: {},
+      });
+
+      await recordActivity(tx, {
+        projectId: project.id,
+        type: 'ASSIGNMENT_CHANGED',
+        actorId: ctx.principal.id,
+        summary: `${row.name} invited to the merchant portal.`,
+      });
+
+      await audit(tx, {
+        principal: ctx.principal,
+        projectId: project.id,
+        action: 'project.invite_merchant',
+        entityType: 'User',
+        entityId: row.id,
+        after: { email: row.email },
+        ip: ctx.ip,
+      });
+
+      return row;
+    });
+
+    // An existing merchant account already has a working password - grant
+    // access to this project and stop, rather than force a reset on them.
+    if (existing) {
+      revalidateProject(input.code);
+      return actionOk(undefined, `${user.name} now has access to this project.`);
+    }
+
+    const { token } = await createPasswordToken(user.id, 'INVITE');
+    const rendered = renderAccountInviteEmail({
+      recipientName: user.name,
+      invitedBy: `${ctx.principal.name} at AHN Media`,
+      setPasswordUrl: `${env().APP_URL}/set-password?token=${token}`,
+    });
+    const result = await integrations().email.send({
+      to: [{ name: user.name, email: user.email }],
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
+    });
+
+    revalidateProject(input.code);
+
+    if (!result.ok) {
+      logger.error(
+        { userId: user.id, error: result.error },
+        'merchant invite email failed to send',
+      );
+      return actionOk(
+        undefined,
+        `${user.name}'s account was created, but the invite email could not be sent - check /integrations.`,
+      );
+    }
+
+    return actionOk(undefined, `Invited ${user.name}.`);
   },
 });

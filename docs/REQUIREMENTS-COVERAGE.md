@@ -285,7 +285,11 @@ who had the direct link, and the portfolio CSV export was vulnerable to formula 
 
 - and added the `Content-Security-Policy`/`Strict-Transport-Security` headers that were simply
   missing; two further gaps (no brute-force protection on sign-in, six advisories in transitive
-  dependencies) are noted rather than fixed - see D-050 and `TODO.md` §2.
+  dependencies) are noted rather than fixed - see D-050 and `TODO.md` §2. D-051 then closed the
+  three account-provisioning gaps `FUTURE-WORK.md` §1 had described since Phase 2 - self-service
+  password reset, staff invitations, and merchant invitations - and closed D-050's deferred
+  rate-limiting gap with an IP-keyed delay. Everything left before inviting a real merchant is a
+  credential, a business call, or infrastructure, not code - see `GOING-LIVE-DECISIONS.md`.
 
 ## Test coverage
 
@@ -299,7 +303,7 @@ Three layers, each testing something the other two cannot:
   and that every live Slack/ClickUp/Resend call carries a timeout signal, including a real
   8-second proof that a hung connection resolves rather than hangs (D-044), with no infrastructure
   and no I/O.
-- **Integration tests** (`pnpm test:integration`, 76 tests over 16 files) — the real exported
+- **Integration tests** (`pnpm test:integration`, 99 tests over 21 files) — the real exported
   server actions (and, for the first time, a real worker processor - see D-037) against a real
   Postgres, through a harness that mocks only `next/headers`, `next/cache` and `server-only` (see
   `apps/web/test/`). They prove: the blocker-handover arithmetic writes the right rows with no gap

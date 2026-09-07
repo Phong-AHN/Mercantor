@@ -9,27 +9,19 @@ discovered by surprise.
 
 ---
 
-## 1. Account and project provisioning has no UI yet
+## 1. Account and project provisioning — closed by D-051
 
-The whole app assumes a `User` row and, for a merchant, a `ProjectMember` row already exist —
-nothing wrong with that model, but nothing in the UI can create either one:
+This whole section used to describe three gaps: no way to create a `User` row, no way to grant a
+merchant a `ProjectMember` row, no password reset. All three are built now (D-051) - `/people`'s
+"Invite person" form, each project's Settings page's "Invite to portal" form, and
+`/forgot-password` + `/set-password`. What is left in this area is smaller and named in
+`GOING-LIVE-DECISIONS.md` instead, since none of it is a technical gap: who the first real invites
+should go to, whether merchant provisioning should eventually fold into `sendIntroductionAction`
+rather than staying its own separate action, and the sign-in rate-limit constants being a
+reasonable default rather than a number anyone has stress-tested.
 
-- **No user management screen.** `/people` (`apps/web/src/app/(app)/people/page.tsx`) is read-only
-  — a directory, not an admin tool. The RBAC matrix already grants `user:manage` to `AHN_ADMIN` and
-  `SHOPLINE_ADMIN` (`packages/rbac/src/matrix.ts`), but no action anywhere checks it yet - it is a
-  permission reserved for a feature that was never built. Today, every account (staff or merchant)
-  exists only because `pnpm db:seed` created it or someone wrote directly to the database.
-- **No merchant invite flow.** A merchant's access to `/portal` is a `ProjectMember` row
-  (D-010) — real, enforced, and correct once it exists — but nothing creates one. It is worth
-  designing deliberately (a real invite email, an expiring link, doubling as the "automated merchant
-  introduction" flow the brief already asks for) rather than added as an afterthought.
-- **No password reset.** No forgot-password request, no reset email, no expiring token. A locked-out
-  user needs their `passwordHash` updated directly today.
-
-These three are really one theme — administrative write actions for rows that today are seed-only —
-and are probably worth designing and building together rather than one at a time. Connecting a
-project to a Slack channel or a ClickUp task no longer belongs on this list: each project's own
-Settings page now has a connect/disconnect form for both, verified live before saving (D-045).
+Connecting a project to a Slack channel or a ClickUp task doesn't belong on this list either: each
+project's own Settings page has had a connect/disconnect form for both since D-045.
 
 ## 2. Architectural cleanup flagged during the D-043 review
 

@@ -19,6 +19,7 @@ import {
 } from '@relay/ui';
 import { listPeople } from '@/features/workspace/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import { InvitePersonButton } from './invite-person-button';
 
 export const metadata: Metadata = { title: 'People' };
 export const dynamic = 'force-dynamic';
@@ -37,6 +38,7 @@ export default async function PeoplePage() {
       <PageHeader
         title="People"
         description="Who has access to the portal, and what their role lets them do. Roles are read from the database on every request - never from a token."
+        actions={can(principal, 'user:manage') ? <InvitePersonButton /> : undefined}
       />
 
       {TEAM_ORDER.map((team) => {

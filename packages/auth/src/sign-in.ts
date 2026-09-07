@@ -1,5 +1,6 @@
 import { clock, ValidationError } from '@relay/core';
 import { db } from '@relay/db';
+import { checkSignInThrottle, clearSignInThrottle, recordSignInFailure } from './rate-limit';
 import { createSession, type IssuedSession } from './session';
 import { hashPassword, needsRehash, verifyPassword } from './password';
 
@@ -26,6 +27,9 @@ export async function signIn(
   meta: { ip?: string | null; userAgent?: string | null } = {},
 ): Promise<SignInResult> {
   const email = emailInput.trim().toLowerCase();
+  const ip = meta.ip ?? null;
+
+  await checkSignInThrottle(ip);
 
   const user = await db.user.findFirst({
     where: { email, deletedAt: null },
@@ -35,6 +39,7 @@ export async function signIn(
   const matches = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
 
   if (!user || !matches || !user.isActive) {
+    await recordSignInFailure(ip);
     throw new ValidationError(GENERIC_FAILURE, { email: [GENERIC_FAILURE] });
   }
 
@@ -46,6 +51,7 @@ export async function signIn(
   }
 
   await db.user.update({ where: { id: user.id }, data: { lastLoginAt: clock.now() } });
+  await clearSignInThrottle(ip);
 
   return { session: await createSession(user.id, meta), userId: user.id };
 }

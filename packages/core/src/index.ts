@@ -14,6 +14,7 @@ export * from './health';
 export { clock, setClock, resetClock, fixedClock, type Clock } from './clock';
 export * from './answers';
 export * from './attachments';
+export * from './account-email';
 export * from './email-format';
 export * from './intro-email';
 export * from './notification-email';

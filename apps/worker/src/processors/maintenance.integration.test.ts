@@ -360,3 +360,51 @@ describe('SLA sweep urgent delivery for a pending approval', () => {
     }
   });
 });
+
+/**
+ * D-051: an expired invite/reset link is not a security risk left sitting
+ * around (`consumePasswordToken` already checks `expiresAt` itself), just a
+ * row with no reason to keep - `purge-expired-sessions` now clears both in
+ * the same sweep, on the same schedule.
+ */
+describe('purge-expired-sessions also clears expired password tokens', () => {
+  it('deletes an expired token, leaves an unexpired one alone', async () => {
+    const user = await db.user.create({
+      data: {
+        email: `it-purge-${randomUUID().slice(0, 8)}@relay.test`,
+        name: 'Purge Test User',
+        passwordHash: 'scrypt$1$1$1$dW51c2Vk$dW51c2Vk',
+        role: 'AHN_DEVELOPER',
+        team: 'AHN',
+        isActive: true,
+      },
+    });
+
+    try {
+      const expired = await db.passwordToken.create({
+        data: {
+          userId: user.id,
+          purpose: 'RESET',
+          tokenHash: `expired-${randomUUID()}`,
+          expiresAt: new Date(Date.now() - 1_000),
+        },
+      });
+      const live = await db.passwordToken.create({
+        data: {
+          userId: user.id,
+          purpose: 'INVITE',
+          tokenHash: `live-${randomUUID()}`,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+
+      await processMaintenance({ task: 'purge-expired-sessions' });
+
+      const remaining = await db.passwordToken.findMany({ where: { userId: user.id } });
+      expect(remaining.map((row) => row.id)).toEqual([live.id]);
+      expect(remaining.map((row) => row.id)).not.toContain(expired.id);
+    } finally {
+      await db.user.delete({ where: { id: user.id } });
+    }
+  });
+});

@@ -5,7 +5,7 @@ import { Card, CardHeader, Empty, PermissionDenied, StatusPill } from '@relay/ui
 import { getProject, listAssignableUsers } from '@/features/projects/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
 import { IntegrationsPanel } from './integration-forms';
-import { AssignmentForm, ProjectDetailsForm } from './settings-forms';
+import { AssignmentForm, MerchantAccessForm, ProjectDetailsForm } from './settings-forms';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +54,19 @@ export default async function ProjectSettingsPage({
         deploymentNotes={project.deploymentNotes}
         contractTotal={can(principal, 'invoice:manage') ? project.contractTotalMinor / 100 : null}
       />
+
+      {can(principal, 'merchant:manage') && (
+        <MerchantAccessForm
+          code={project.code}
+          members={project.members
+            .filter((member) => member.user.role === 'MERCHANT')
+            .map((member) => ({
+              id: member.user.id,
+              name: member.user.name,
+              email: member.user.email,
+            }))}
+        />
+      )}
 
       {can(principal, 'project:assign') && (
         <AssignmentForm
