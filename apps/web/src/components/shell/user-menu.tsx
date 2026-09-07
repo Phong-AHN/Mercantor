@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { LogOut, UserRound } from 'lucide-react';
 import { USER_ROLE_LABEL, type Team, type UserRole } from '@relay/core';
 import { Avatar, cn } from '@relay/ui';
@@ -20,7 +20,29 @@ export function UserMenu({
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // Which way the menu opens has to follow where the trigger actually sits,
+  // not be hardcoded: this component renders both at the bottom of the main
+  // sidebar (room below is tight, room above is not) and at the top of the
+  // merchant portal's header (the reverse) - a fixed "always opens upward"
+  // pushed the portal's menu above the viewport, unreachable. Defaults to
+  // opening downward (the common case) and only flips up when there isn't
+  // room below but there is above, measured against the trigger each time
+  // it opens rather than assumed from where the component happens to live.
+  const [placement, setPlacement] = useState<'up' | 'down'>('down');
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const trigger = ref.current;
+    const menu = menuRef.current;
+    if (!trigger || !menu) return;
+    const triggerRect = trigger.getBoundingClientRect();
+    const menuHeight = menu.offsetHeight;
+    const roomBelow = window.innerHeight - triggerRect.bottom;
+    const roomAbove = triggerRect.top;
+    setPlacement(roomBelow < menuHeight && roomAbove > roomBelow ? 'up' : 'down');
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -65,8 +87,12 @@ export function UserMenu({
 
       {open && (
         <div
+          ref={menuRef}
           role="menu"
-          className="rise border-line bg-surface-1 shadow-overlay absolute bottom-full right-0 z-40 mb-2 w-64 overflow-hidden rounded-[var(--radius-md)] border"
+          className={cn(
+            'rise border-line bg-surface-1 shadow-overlay absolute right-0 z-40 w-64 overflow-hidden rounded-[var(--radius-md)] border',
+            placement === 'up' ? 'bottom-full mb-2' : 'top-full mt-2',
+          )}
         >
           <div className="border-line border-b px-3.5 py-3">
             <p className="text-ink truncate text-[13px] font-semibold">{name}</p>

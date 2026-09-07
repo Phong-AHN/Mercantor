@@ -695,3 +695,20 @@ the browser default surviving preflight. Verified live: a dialog's bounding box 
 gaps on all four sides of the viewport (confirmed 412px/412px horizontal, 217px/217px vertical at
 1400×1000), not measured against one screen's dialog alone since the fix is in the one shared
 component every `Dialog`, `ConfirmDialog` and `DialogTrigger` call site renders through.
+
+**D-048 — `UserMenu` opened upward unconditionally; that is wrong wherever its trigger sits near
+the top of the viewport.** `UserMenu` (`apps/web/src/components/shell/user-menu.tsx`) renders in
+two places that are each other's mirror image: the bottom of the main app's sidebar footer (room
+below is tight, room above is not - opening upward is correct there) and the top of the merchant
+portal's header (the reverse). The dropdown's position was hardcoded `bottom-full`, correct for the
+first placement and simply broken for the second - as a merchant, the menu opened above its
+trigger, above `y: 0`, pushed off the top of the viewport with "Sign out" unreachable. Rather than
+add a prop each call site has to remember to set correctly (and get right again if the component is
+placed somewhere else later), the menu now measures itself: a `useLayoutEffect` compares the room
+above and below the trigger against the open menu's actual rendered height and picks a placement -
+defaulting to downward (the ordinary reading direction for a menu under a trigger), flipping to
+upward only when there is not enough room below but there is above. Runs in `useLayoutEffect`
+rather than `useEffect` so the correction lands before the browser paints, not as a visible flicker
+after. Verified live in both placements at once: the merchant portal's menu (trigger at `y: 10`)
+now opens downward, fully inside the viewport; the main app's sidebar menu (trigger at `y: 844` in
+a 900px-tall viewport) still opens upward, exactly as it needs to.
