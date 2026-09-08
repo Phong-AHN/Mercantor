@@ -256,7 +256,15 @@ export const recordSlackMessageAction = defineAction({
   },
 });
 
-/** Mention autocomplete. Returns only people who can already see the project. */
+/**
+ * Mention autocomplete. Returns only people who can already see the project -
+ * this project's own organization's staff, plus whichever merchant accounts
+ * actually hold a `ProjectMember` row on it. Scoped by `organizationId`
+ * rather than merely `role !== 'MERCHANT'` - without it, every AHN/SHOPLINE
+ * staff member across *every* organization was a mentionable candidate on
+ * any project, the same cross-tenant leak `listAssignableUsers` was built to
+ * prevent (D-052).
+ */
 export const searchMentionableUsersAction = defineAction({
   name: 'activity.search_users',
   permission: 'project:read',
@@ -270,7 +278,7 @@ export const searchMentionableUsersAction = defineAction({
         isActive: true,
         name: input.q ? { contains: input.q, mode: 'insensitive' } : undefined,
         OR: [
-          { role: { not: 'MERCHANT' } },
+          { role: { not: 'MERCHANT' }, organizationId: project.organizationId },
           { projectMemberships: { some: { projectId: project.id } } },
         ],
       },

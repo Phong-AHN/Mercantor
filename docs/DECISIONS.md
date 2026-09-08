@@ -1013,3 +1013,82 @@ Registering the actual Slack app and ClickUp app - a human action on their respe
 dashboards, the same shape "create a Slack app and set `SLACK_BOT_TOKEN`" already was - is listed
 in `TODO.md` §3 as a prerequisite; without it the buttons stay hidden and manual paste is the only
 path, exactly as it was before this pass.
+
+**D-054 — A full audit of every server action and API route for authorization clarity, requested
+directly: five real cross-tenant leaks found and closed, one flagged rather than rushed.** Every
+`defineAction` was already structurally required to declare a permission (`defineAction`'s config
+type has no optional form of `permission:` - it does not compile without one), so the audit's real
+question was never "does this API check _a_ permission" but "does it check the _right_ one, on
+the right slice of data" - RBAC.md §3 now states that as its own rule, since a permission and a
+tenant scope are two different guarantees and a review that checks only the first is checking half
+the API. Reviewed: all 42 server actions' `permission:` declarations, all 6 route handlers under
+`apps/web/src/app/api/**`, and every remaining hand-written `db.*.findMany`/`findFirst` outside
+`resolveProject`'s own already-audited (D-052) boundary. Two patterns turned out fine on inspection
+and are worth naming so they are not mistaken for gaps on a future pass: `decideApprovalAction`'s
+`permission: 'approval:read'` and `setAccessStatusAction`/`setAssetStatusAction`'s `:read`-only
+gates are deliberately coarse baseline checks, with the real, finer-grained authorization
+(`canDecideApproval`, the merchant/AHN split on which status values each side may set) enforced
+inside the handler and covered by existing tests - not an oversight.
+
+Five real cross-tenant leaks were found and fixed, all the same shape D-052 already fixed three of
+(`searchMerchantsAction`, `listAssignableUsers`, `inviteUserAction`) - a query that checked
+`role !== 'MERCHANT'` or nothing at all where it needed to also check `organizationId`:
+
+1. **`searchMentionableUsersAction`** (`@`-mention autocomplete on a comment) suggested every
+   AHN/SHOPLINE-shaped staff member on the entire platform, not just this project's own
+   organization - fixed by adding `organizationId: project.organizationId` alongside the existing
+   `role !== 'MERCHANT'` branch.
+2. **`listPeople`** (`/people`, the staff directory) had no scoping at all - a flat
+   `deletedAt: null` returned every organization's entire staff and merchant roster, names, emails,
+   roles, last-seen times, to any other organization's `user:read` holder. The most severe of the
+   five: a full cross-tenant PII dump on a page every AHN/SHOPLINE-shaped role can already reach.
+   Fixed with a new `orgScope()` helper (`workspace/queries.ts`) mirroring `scope()`'s
+   `PLATFORM_ADMIN` exception, applied to non-merchant rows directly and to merchant rows through
+   the same "holds a `ProjectMember` row on one of this organization's projects" test
+   `listMerchants` already used.
+3. **`listAuditLog`** (`/audit`) scoped project-linked rows correctly but unconditionally included
+   every `projectId: null` row (an organization-level action with no single project to hang off,
+   like `people.invite` or `settings.update_aging`) regardless of which organization it belonged
+   to - the actor's own IP address and every invite they ever sent, visible platform-wide. Fixed
+   by scoping the project-less branch to rows whose actor shares the caller's `organizationId`
+   (documented caveat: a future audit row with no actor at all would need its own handling, since
+   none of today's call sites produce one).
+4. **`listOutbox`** (`/integrations`'s outbound queue) carried the identical unconditional
+   `projectId: null` branch, though no current `queueOutbox` call site ever actually produces one -
+   tightened to project-scoped only rather than left as a landmine for the first future caller that
+   does, since `OutboxMessage` has no actor to scope a project-less row by the way `AuditLog` does.
+5. **`previewAgingAction`** (the live count behind the Settings page's aging-band preview) queried
+   every non-completed project platform-wide - adjusting your own organization's thresholds
+   revealed how many active projects, and their start dates, every other organization has. Scoped
+   to the caller's own organization's projects (`PLATFORM_ADMIN` previews against all, as
+   elsewhere).
+
+**One related gap was found and deliberately not fixed this pass: `PortalSetting` (the aging
+thresholds and inactivity-days row `updateAgingThresholdsAction` writes) has no `organizationId` at
+all - it is one genuinely global key/value table, so one organization's admin retuning "what counts
+as delayed" changes every other organization's dashboard colours and the worker's nightly SLA
+sweep, platform-wide.** Unlike the five above, this is not a query that forgot a filter - the table
+itself has nowhere to put one, and the real fix (namespacing `PortalSetting`'s key by
+organization, or a schema column, then updating `apps/worker/src/processors/maintenance.ts`'s
+sweep to load and apply a different threshold set per project's own organization instead of one
+global value) touches the worker's periodic health/SLA computation directly, load-bearing logic
+D-041 already built real test coverage against. Rushing that change inside an already-broad audit
+pass risked exactly the kind of regression this session's "verified live, not just tests pass"
+standard exists to catch. Named plainly in `GOING-LIVE-DECISIONS.md` §3 instead of fixed quietly or
+left undiscovered - worth its own dedicated pass, not a rider on this one. Also worth noting for
+the same reason: `buildSnapshot`'s two live call sites (`queries.ts`'s `toListItem`,
+`mutations.ts`'s `recomputeHealth`) already never pass a `thresholds` argument today, always
+falling back to `DEFAULT_AGING_THRESHOLDS` regardless of what `PortalSetting` holds - only the
+worker's own periodic sweep actually reads the configured thresholds at all, a pre-existing
+disconnect between the Settings form and live page rendering that predates this pass and is
+unrelated to multi-tenancy.
+
+Covered by 4 new integration tests appended to `tenant-isolation.integration.test.ts`
+(`searchMentionableUsersAction`, `listPeople`, `listAuditLog`, `previewAgingAction` each proven
+directly against two real organizations) - 109 integration tests now, up from 105, in the same 22
+files. `pnpm verify`, `pnpm test:integration`, and a production build all pass clean. Verified live
+in a real browser against a second, genuinely separate organization created for this purpose (an
+`AHN_ADMIN` and an `AHN_DEVELOPER`, no projects): `/people` showed exactly those two people and
+nothing from AHN Media's real eleven-person seeded roster; `/audit` showed none of AHN Media's real
+actor names. AHN Media's own now-live-connected credentials and data were read for comparison only,
+never written to or disconnected.

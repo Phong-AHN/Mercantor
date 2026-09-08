@@ -25,7 +25,7 @@ make one of them a field somebody has to remember to update, it is the wrong cha
 **Working, verified, demonstrable against seeded data:**
 
 - 38 routes build; `pnpm verify` is green (format, lint, typecheck, 69 unit tests)
-- `pnpm test:integration` is green against a real Postgres and a real MinIO — 105 tests over 22
+- `pnpm test:integration` is green against a real Postgres and a real MinIO — 109 tests over 22
   files, proving the blocker-handover arithmetic, the handoff readiness gate, comment visibility
   per role, the outbox's transactional atomicity, that a launch blocker (and only a launch
   blocker, not an ordinary issue) queues one notification email and one Slack DM per recipient,
@@ -37,10 +37,11 @@ make one of them a field somebody has to remember to update, it is the wrong cha
   breach records opening the instant a mutation or the 15-minute sweep learns of one and closing
   at the exact moment `moveStage` learns the other (D-041), the analytics trends correctly
   bucketing started/launched projects and SLA breaches by calendar month (D-042), and multi-tenant
-  isolation - one organization's projects, merchant search, assignable staff, and integration
-  credentials never reachable from another's, `PLATFORM_ADMIN` still reaching every organization
-  (D-052) - all through the actual exported server actions, route handlers, queries, or worker
-  processors, not a copy of their logic. See `apps/web/test/` for the harness.
+  isolation - one organization's projects, merchant search, assignable staff, mention autocomplete,
+  the people directory, the audit log, the aging-threshold preview, and integration credentials
+  never reachable from another's, `PLATFORM_ADMIN` still reaching every organization
+  (D-052, D-054) - all through the actual exported server actions, route handlers, queries, or
+  worker processors, not a copy of their logic. See `apps/web/test/` for the harness.
 - `node scripts/e2e-smoke.mjs` passes 11/11 in a real browser, including the cross-role
   visibility boundaries
 - The full chain works end to end: a UI action commits the change, the activity row, the audit row
@@ -177,10 +178,27 @@ Verified live against an isolated throwaway organization, never against AHN Medi
 credentials (found already live-connected with real tokens mid-pass, through the manual form,
 apparently by hand rather than by anything these tools did - left untouched).
 
+Asked directly to recheck the whole project for authorization clarity, per API - D-054 audited all
+42 server actions' `permission:` declarations, every route handler, and every remaining
+hand-written query outside `resolveProject`'s already-audited boundary. `defineAction`'s config
+type already made a permission declaration structurally required (it does not compile without
+one), so the real question was never "does this check _a_ permission" but "the right one, on the
+right organization's data" - found and fixed five real cross-tenant leaks, the same
+`role !== 'MERCHANT'`-without-`organizationId` shape D-052 had already fixed three of elsewhere:
+mention autocomplete, the `/people` directory (the most severe - a full cross-tenant staff/merchant
+roster dump), the audit log's project-less rows (invite history, IPs), the outbox's equivalent
+(tightened pre-emptively; no live call site actually triggers it), and the Settings page's
+aging-band project-count preview. One related gap - `PortalSetting` (aging thresholds) being one
+shared row across every organization rather than per-tenant - was found and deliberately not
+fixed, since correcting it touches the worker's live SLA sweep (D-041's load-bearing logic)
+directly; named in `GOING-LIVE-DECISIONS.md` §3 rather than rushed. Verified live against a second,
+genuinely separate organization created for this purpose: `/people` and `/audit` showed exactly
+that organization's own two-person roster and none of AHN Media's real eleven-person one.
+
 **Known gaps against going live with real merchants: everything left is a credential, a business
-call, infrastructure, or (as of D-052) the tenant-facing vocabulary rename - not a missing feature
-or a known bug.** `GOING-LIVE-DECISIONS.md` is the checklist; `TODO.md` covers the same ground with
-more operational detail.
+call, infrastructure, or (as of D-052/D-054) a tenant-facing decision named plainly - not a missing
+feature or a known bug.** `GOING-LIVE-DECISIONS.md` is the checklist; `TODO.md` covers the same
+ground with more operational detail.
 
 ---
 

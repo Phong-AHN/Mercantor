@@ -72,14 +72,24 @@ export const updateAgingThresholdsAction = defineAction({
   },
 });
 
-/** Counts how many projects each band would hold, for the preview. */
+/**
+ * Counts how many projects each band would hold, for the preview. Scoped to
+ * the caller's own organization's projects (`PLATFORM_ADMIN`, with none of
+ * its own, previews against every organization's) - without it, adjusting
+ * your own thresholds revealed how many active projects, and their start
+ * dates, every other organization on the platform has.
+ */
 export const previewAgingAction = defineAction({
   name: 'settings.preview_aging',
   permission: 'settings:manage',
   input: z.object({}),
-  async handler() {
+  async handler(_input, ctx) {
     const projects = await db.project.findMany({
-      where: { deletedAt: null, stage: { not: 'COMPLETED' } },
+      where: {
+        deletedAt: null,
+        stage: { not: 'COMPLETED' },
+        ...(ctx.principal.organizationId ? { organizationId: ctx.principal.organizationId } : {}),
+      },
       select: { startDate: true },
     });
     return actionOk(projects.map((project) => project.startDate.toISOString()));

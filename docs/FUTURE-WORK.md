@@ -23,11 +23,12 @@ reasonable default rather than a number anyone has stress-tested.
 Connecting a project to a Slack channel or a ClickUp task doesn't belong on this list either: each
 project's own Settings page has had a connect/disconnect form for both since D-045.
 
-## 2. Multi-tenancy — closed by D-052, two real gaps left
+## 2. Multi-tenancy — closed by D-052/D-053, three real gaps left
 
-`Organization` is now the top-level tenant, self-service encrypted integration credentials
-included - see D-052 in `DECISIONS.md`. Two things are named there rather than built, since
-neither is a technical gap in the sense the rest of this file means:
+`Organization` is now the top-level tenant, self-service encrypted integration credentials (with
+an OAuth "Connect" option for Slack/ClickUp, D-053) included - see D-052/D-053/D-054 in
+`DECISIONS.md`. Three things are named there rather than built, since none is a technical gap in
+the sense the rest of this file means:
 
 - **No UI yet for a `PLATFORM_ADMIN` to create a second organization.** Today that is a direct
   database write, the same shape `User`/`ProjectMember` provisioning was in before D-051 built
@@ -37,6 +38,12 @@ neither is a technical gap in the sense the rest of this file means:
   tenant-neutral.** A real product decision - what the roles should even be called for a company
   not migrating merchants onto SHOPLINE - not a schema change, and listed in
   `GOING-LIVE-DECISIONS.md` §3 rather than decided here.
+- **`PortalSetting` (aging thresholds, inactivity days) is one shared row, not per organization**
+  (found during D-054's permissions audit). Fixing it properly means namespacing or adding a
+  column to `PortalSetting` _and_ teaching the worker's periodic SLA sweep
+  (`apps/worker/src/processors/maintenance.ts`) to load a threshold set per project's own
+  organization - real surgery on D-041's load-bearing health/SLA computation, not a query missing
+  a filter, and out of scope for the audit that found it. See `GOING-LIVE-DECISIONS.md` §3.
 
 ## 3. Architectural cleanup flagged during the D-043 review
 

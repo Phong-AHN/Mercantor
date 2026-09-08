@@ -71,10 +71,27 @@ the highlights of each role's grant so it can be checked without reading code.
    lands you on your own surface, not on a narrowed version of somebody else's.
 5. **A merchant is confined to their own projects** by `projectScopeWhere`, applied in the query.
    A project they are not a member of does not exist as far as any read is concerned.
-6. **Approvals are one-sided.** `canDecideApproval` routes each checkpoint to the side that owns
+6. **Every other role is confined to its own organization** (D-052), by the same
+   `projectScopeWhere` - `PLATFORM_ADMIN` (the SaaS operator, not a tenant) is the one exception,
+   reaching every organization's portfolio. This is the seam a permission alone cannot enforce: two
+   different `AHN_ADMIN`s in two different organizations hold the identical grant, and what keeps
+   them apart is that every query scoped through `projectScopeWhere` (or the `organizationId`-aware
+   equivalents `listPeople`, `listAuditLog`, `listAssignableUsers`, `searchMerchantsAction`, and
+   `searchMentionableUsersAction` use directly) never returns the other's row in the first place -
+   never a filter applied after the fact. A permission answers "can this role do X at all"; scoping
+   answers "X on whose data" - both have to hold for an endpoint to be actually safe in a
+   multi-tenant deployment, and a review that checks only the first is checking half the API.
+7. **Approvals are one-sided.** `canDecideApproval` routes each checkpoint to the side that owns
    it. SHOPLINE cannot approve QA; AHN cannot approve deployment.
-7. **The frontend uses the engine to hide controls; the server uses it to decide.** A hidden
+8. **The frontend uses the engine to hide controls; the server uses it to decide.** A hidden
    button is a courtesy. Every action asserts its permission again server-side.
+9. **A server action cannot skip declaring a permission.** `defineAction`'s config type requires
+   `permission: Permission | Permission[]` - TypeScript refuses to compile a `'use server'` action
+   that omits it, so "which permission gates this API" is always answerable by reading its
+   `defineAction({ permission: ... })` block, never a question of whether someone remembered to
+   add a check. Route handlers (`apps/web/src/app/api/**/route.ts`) get no such structural
+   guarantee - each calls `requirePrincipal()`/`can()` by hand, so a new one needs the same rule
+   applied deliberately (see D-054).
 
 ---
 

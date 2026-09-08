@@ -12,6 +12,17 @@ function scope(principal: Principal): Prisma.ProjectWhereInput {
   return projectScopeWhere(principal) as Prisma.ProjectWhereInput;
 }
 
+/**
+ * The `User`-side equivalent of `scope()` above: `{}` for `PLATFORM_ADMIN`
+ * (no organization of its own, sees every organization's people, the same
+ * exception `projectScopeWhere` makes), `{ organizationId }` for everyone
+ * else. Spread into a `where` clause rather than returned as a standalone
+ * filter, since every caller combines it with a `role` condition first.
+ */
+function orgScope(principal: Principal): Prisma.UserWhereInput {
+  return principal.organizationId ? { organizationId: principal.organizationId } : {};
+}
+
 const PROJECT_BRIEF = {
   id: true,
   code: true,
@@ -258,10 +269,26 @@ export async function listMerchants(principal: Principal) {
   });
 }
 
+/**
+ * The `/people` directory. Staff are scoped to the caller's own organization
+ * (`PLATFORM_ADMIN`, with none of its own, sees every organization's - the
+ * same exception `projectScopeWhere` makes); merchants are scoped by
+ * actually holding a `ProjectMember` row on one of that organization's
+ * projects, the same test `listMerchants` above already applies. Without
+ * both halves this was a flat `deletedAt: null` - every organization's
+ * entire staff and merchant roster, visible to any other organization's
+ * `user:read` holder.
+ */
 export async function listPeople(principal: Principal) {
   if (!can(principal, 'user:read')) return [];
   return db.user.findMany({
-    where: { deletedAt: null },
+    where: {
+      deletedAt: null,
+      OR: [
+        { role: { not: 'MERCHANT' }, ...orgScope(principal) },
+        { role: 'MERCHANT', projectMemberships: { some: { project: scope(principal) } } },
+      ],
+    },
     select: {
       id: true,
       name: true,
@@ -284,10 +311,24 @@ export async function listPeople(principal: Principal) {
   });
 }
 
+/**
+ * A `projectId: null` audit row (e.g. `people.invite`, `settings.update_aging`
+ * - an action about the organization itself, not one project) has no project
+ * to scope through, so it is scoped by its actor's organization instead
+ * (`PLATFORM_ADMIN`, with none, still sees every such row - consistent with
+ * every other exception `projectScopeWhere` makes). Every current call site
+ * passes a real `principal`, so `actorId` is never actually null in
+ * practice, but a future system-initiated audit row with no actor at all
+ * would need its own explicit handling here rather than silently vanishing
+ * or leaking to every organization.
+ */
 export async function listAuditLog(principal: Principal, limit = 200) {
   if (!can(principal, 'audit:read')) return [];
+  const projectless: Prisma.AuditLogWhereInput = principal.organizationId
+    ? { projectId: null, actor: { organizationId: principal.organizationId } }
+    : { projectId: null };
   return db.auditLog.findMany({
-    where: { OR: [{ project: scope(principal) }, { projectId: null }] },
+    where: { OR: [{ project: scope(principal) }, projectless] },
     select: {
       id: true,
       action: true,
@@ -304,10 +345,20 @@ export async function listAuditLog(principal: Principal, limit = 200) {
   });
 }
 
+/**
+ * Every current `queueOutbox` call site passes a real `projectId` (unlike
+ * `AuditLog`, which genuinely has project-less rows) - `project: scope(...)`
+ * alone already covers `PLATFORM_ADMIN` too, since its `projectScopeWhere`
+ * has no organization filter to begin with. Deliberately no
+ * `{ projectId: null }` fallback: `OutboxMessage` carries no actor to scope
+ * a project-less row by, so a future one would have nothing to prevent it
+ * from showing up in every organization's queue - safer to have it show up
+ * in none until that need is designed for properly.
+ */
 export async function listOutbox(principal: Principal, limit = 50) {
   if (!can(principal, 'integration:manage')) return [];
   return db.outboxMessage.findMany({
-    where: { OR: [{ project: scope(principal) }, { projectId: null }] },
+    where: { project: scope(principal) },
     select: {
       id: true,
       provider: true,

@@ -73,6 +73,21 @@ login.
       the mock adapter (by design — `packages/integrations/src/registry.ts` never throws on a bad
       decrypt) rather than error loudly. Fine for now; worth a documented rotation runbook before
       there are real customers' real tokens sitting encrypted in production.
+- [ ] **The aging-band thresholds and inactivity-days setting are one shared, platform-wide row,
+      not per organization (found during D-054's permissions audit, deliberately not fixed there).**
+      `PortalSetting` has no `organizationId` at all — any organization's `settings:manage` holder
+      retuning "what counts as delayed" changes what every other organization's dashboard calls
+      delayed too, and what the worker's nightly SLA sweep chases for them. The real fix
+      (namespace `PortalSetting`'s key by organization, or add a column, then teach
+      `apps/worker/src/processors/maintenance.ts`'s sweep to load a threshold set per project's own
+      organization instead of one global value) touches the worker's live SLA/health computation
+      directly — D-041's own load-bearing logic — and was judged too large a change to make
+      correctly inside an already-broad audit pass rather than as its own dedicated one. Separately
+      worth knowing: the Settings form's thresholds are _already_ disconnected from most live
+      rendering today — `buildSnapshot`'s two page-render call sites never pass them and always use
+      the hardcoded defaults; only the worker's periodic sweep reads the configured value at all.
+      That disconnect predates this pass and is unrelated to multi-tenancy, but narrows how much
+      the shared-row problem actually bites in practice today.
 
 ## 4. Product decisions already open before this pass
 

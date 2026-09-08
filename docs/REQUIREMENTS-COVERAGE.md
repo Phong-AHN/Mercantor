@@ -294,9 +294,18 @@ who had the direct link, and the portfolio CSV export was vulnerable to formula 
   top-level tenant - any agency signing up gets its own people, its own projects, and its own
   encrypted, self-configured Slack/ClickUp/Resend credentials, none of it visible to another
   tenant - without renaming the `AHN`/`SHOPLINE` role vocabulary itself, a real product decision
-  named plainly rather than folded in quietly (see D-052 and `GOING-LIVE-DECISIONS.md` §3).
-  Everything left before inviting a real merchant is a credential, a business call, infrastructure,
-  or that vocabulary decision, not missing code - see `GOING-LIVE-DECISIONS.md`.
+  named plainly rather than folded in quietly (see D-052 and `GOING-LIVE-DECISIONS.md` §3). D-053
+  then added an OAuth "Connect" button for Slack and ClickUp, so an organization's own admin
+  authorizes AHN's app instead of ever copying a token - email keeps manual entry, since no
+  transactional email provider offers an equivalent flow. Asked directly to recheck the whole
+  project for authorization clarity, D-054 audited every server action and route handler and found
+  five real cross-tenant leaks the same shape D-052 had already fixed three of elsewhere - mention
+  autocomplete, the `/people` directory, the audit log, the outbox, and the aging-threshold preview
+  each returning another organization's data where they should not have - all fixed, with one
+  related gap (aging thresholds are one shared row, not per organization) named rather than rushed,
+  since fixing it properly touches the worker's live SLA sweep. Everything left before inviting a
+  real merchant is a credential, a business call, infrastructure, or a named tenant-facing
+  decision, not missing code - see `GOING-LIVE-DECISIONS.md`.
 
 ## Test coverage
 
@@ -311,7 +320,7 @@ Three layers, each testing something the other two cannot:
   8-second proof that a hung connection resolves rather than hangs (D-044), and
   `projectScopeWhere`'s organization filter plus its `PLATFORM_ADMIN` bypass (D-052), with no
   infrastructure and no I/O.
-- **Integration tests** (`pnpm test:integration`, 105 tests over 22 files) — the real exported
+- **Integration tests** (`pnpm test:integration`, 109 tests over 22 files) — the real exported
   server actions (and, for the first time, a real worker processor - see D-037) against a real
   Postgres, through a harness that mocks only `next/headers`, `next/cache` and `server-only` (see
   `apps/web/test/`). They prove: the blocker-handover arithmetic writes the right rows with no gap

@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '@relay/db';
 import { integrationsFor, setOrganizationIntegration } from '@relay/integrations';
+import { searchMentionableUsersAction } from '@/features/activity/actions';
+import { previewAgingAction } from '@/features/settings/actions';
+import { listAuditLog, listPeople } from '@/features/workspace/queries';
 import {
   cleanupFixtures,
   createTestOrganization,
@@ -134,5 +137,64 @@ describe('tenant isolation between organizations', () => {
         configuredById: orgAPm.id,
       });
     }
+  });
+
+  it("mention autocomplete on a comment never suggests another organization's staff", async () => {
+    await signInAs(orgAPm);
+    const result = await searchMentionableUsersAction({ code: orgAProjectCode, q: '' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.data.map((u) => u.id)).toContain(orgAPm.id);
+    expect(result.data.map((u) => u.id)).not.toContain(orgBPm.id);
+  });
+
+  it("the People directory never lists another organization's staff", async () => {
+    const peopleForA = await listPeople(orgAPm);
+    expect(peopleForA.map((p) => p.id)).toContain(orgAPm.id);
+    expect(peopleForA.map((p) => p.id)).not.toContain(orgBPm.id);
+  });
+
+  it("the audit log's project-less entries (invites, settings changes) stay within one organization", async () => {
+    // Written directly rather than through `inviteUserAction` - proving
+    // `listAuditLog`'s scoping, not the invite flow's own business logic,
+    // which has its own coverage in `people/actions.integration.test.ts`.
+    const rowA = await db.auditLog.create({
+      data: {
+        actorId: orgAPm.id,
+        action: 'people.invite',
+        entityType: 'User',
+        entityId: orgAPm.id,
+        after: { note: 'tenant-isolation fixture - org A' },
+      },
+    });
+    const rowB = await db.auditLog.create({
+      data: {
+        actorId: orgBPm.id,
+        action: 'people.invite',
+        entityType: 'User',
+        entityId: orgBPm.id,
+        after: { note: 'tenant-isolation fixture - org B' },
+      },
+    });
+
+    try {
+      const auditForA = await listAuditLog(orgAPm);
+      expect(auditForA.map((row) => row.id)).toContain(rowA.id);
+      expect(auditForA.map((row) => row.id)).not.toContain(rowB.id);
+    } finally {
+      await db.auditLog.deleteMany({ where: { id: { in: [rowA.id, rowB.id] } } });
+    }
+  });
+
+  it("previewing aging thresholds never counts another organization's projects", async () => {
+    const orgAAdmin = await createTestUser('AHN_ADMIN', { organizationId: orgAPm.organizationId });
+    await signInAs(orgAAdmin);
+
+    const result = await previewAgingAction({});
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+
+    const orgBProject = (await listProjects(orgBPm)).find((p) => p.code === orgBProjectCode)!;
+    expect(result.data).not.toContain(orgBProject.startDate.toISOString());
   });
 });
