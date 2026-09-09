@@ -27,7 +27,14 @@ RUN pnpm install --frozen-lockfile --filter @relay/worker...
 FROM base AS runner
 ENV NODE_ENV=production
 ENV RELAY_ROLE=worker
-COPY --from=deps /app/node_modules ./node_modules
+# The whole `deps` stage output, not just its top-level `node_modules` - pnpm's
+# default isolated linker also creates a `node_modules/.bin` (with the
+# `prisma` binary symlink) inside *each* workspace package, e.g.
+# `packages/db/node_modules/.bin/prisma`. Copying only `/app/node_modules`
+# leaves those nested ones behind, and `pnpm --filter @relay/db generate`
+# below fails with `prisma: not found` even though the root `node_modules`
+# looks complete.
+COPY --from=deps /app /app
 COPY . .
 RUN pnpm --filter @relay/db generate
 
