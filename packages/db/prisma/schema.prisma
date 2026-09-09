@@ -13,8 +13,18 @@
 // No custom `output`: the client is generated into `node_modules/.prisma`.
 // A generated client outside node_modules makes Next's file tracer walk up
 // looking for `schema.prisma` and glob the user's home directory.
+//
+// `binaryTargets` explicitly includes Vercel's serverless runtime
+// ("rhel-openssl-3.0.x") alongside "native" (whatever platform actually
+// runs `prisma generate` - Windows locally, linux-musl in the worker's
+// Alpine Docker image). Without it, only the engine for wherever `generate`
+// last ran ships with the client, and a request on Vercel fails at runtime
+// with "Prisma Client could not locate the Query Engine for runtime
+// rhel-openssl-3.0.x" - confirmed live in production. See
+// https://pris.ly/d/engine-not-found-nextjs.
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
