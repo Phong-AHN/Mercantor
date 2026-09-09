@@ -279,6 +279,33 @@ delivery is written to be idempotent (`RUNBOOK.md`'s "The scheduled work" table)
 racing the same job is a no-op, not a double send - `replicas` in `.railway/railway.ts` is the
 field for it, but there is no throughput reason to raise it from the current `1` yet.
 
+**Two more failure modes actually hit and fixed while first standing this service up, both
+already reflected in `.railway/railway.ts` and worth knowing if the healthcheck ever fails again
+after a real change:**
+
+- **`healthcheckTimeout` too short.** Railway's own unmanaged default is 5 minutes; an earlier
+  `30` here failed a real deploy outright ("Retry window: 30s", 2 attempts, done) even though the
+  app itself came up in about a second once the container actually started - a cold image pull
+  eats into that window before the app gets a chance to run at all. Now `180`.
+- **A custom port needs an explicit `PORT` variable, `EXPOSE` in the Dockerfile notwithstanding.**
+  Confirmed live: the worker was genuinely healthy (`worker health endpoint listening` in the
+  logs, then it went on to process and log a job failure without crashing) while Railway's own
+  healthcheck prober reported "service unavailable" on every attempt across the whole retry
+  window. Nothing in this app reads `process.env.PORT` - it reads `WORKER_HEALTH_PORT` instead -
+  but Railway's healthcheck prober still needs a `PORT` variable to know which container port to
+  probe when a service doesn't bind to whatever `$PORT` it was handed. Setting `PORT: '3100'` in
+  `.railway/railway.ts`'s `env` (matching `WORKER_HEALTH_PORT`) fixed it immediately - no code
+  change, no rebuild, just that one variable.
+
+**A third thing worth knowing before touching `env` in `.railway/railway.ts` again**: every
+variable actually present on the service needs an entry there, even a `preserve()` one - IaC
+treats the file as the _whole_ desired state of everything it lists, so a variable Railway already
+has but this file doesn't mention is a pending delete on the next `apply`. Confirmed the hard way:
+an early `plan` here proposed deleting 10 variables the dashboard already had (`DIRECT_URL`,
+`WORKER_HEALTH_PORT`, and the legacy Slack/ClickUp/Resend ones among them) simply because they
+were not yet listed. Always read what `railway config plan` actually proposes - especially the
+destructive-change count - before ever running `apply`.
+
 If `apps/web` ever moves to Railway too, add a second `service(...)` to the same
 `.railway/railway.ts` (one file per environment, not one per service) - no Dockerfile needed
 (Railway's own builder detects Next.js natively), and set its healthcheck to `/api/health`
