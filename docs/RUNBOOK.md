@@ -397,6 +397,25 @@ time until `binaryTargets` says otherwise. Fixed by setting
 contain both `query_engine-windows.dll.node` (or your local platform's) and
 `libquery_engine-rhel-openssl-3.0.x.so.node`.
 
+**`binaryTargets` was necessary but not sufficient - the identical error came back on a later
+deploy with no schema change at all.** The engine existed in `node_modules` (confirmed locally,
+and the earlier fix was verified live against production once), yet a subsequent build 500'd again
+with the same "could not locate the Query Engine for runtime rhel-openssl-3.0.x". Cause: Next's
+**output file tracing** - the static analysis that decides which files actually get copied into
+each route's deployed serverless function - resolves Prisma's engine through a dynamic `require`
+it cannot follow through pnpm's hashed `.pnpm/@prisma+client@<version>_<hash>/` store path, so
+whether the binary makes it into a given function bundle is not reliable even when it exists on
+disk at build time. This is Prisma's own documented failure mode for Next.js
+(https://pris.ly/d/engine-not-found-nextjs). Fixed in `apps/web/next.config.ts` with
+`outputFileTracingIncludes` forcing every route to include
+`../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**/*` (glob on the hash
+since it changes with the lockfile) alongside the unhashed `../../node_modules/.prisma/client/**/*`
+in case of different hoisting. **Verify by inspecting the trace, not just the build succeeding**:
+after `pnpm --filter @relay/web build`, `apps/web/.next/server/app/**/*.nft.json` for any
+DB-touching route should list a path containing `libquery_engine-rhel-openssl-3.0.x.so.node` -
+`grep -o '"[^"]*libquery_engine[^"]*"' apps/web/.next/server/app/(auth)/sign-in/page.js.nft.json`.
+An empty result there is the actual bug reproduced locally, before ever pushing.
+
 ---
 
 ## Backups & data

@@ -12,6 +12,25 @@ const config: NextConfig = {
   // repository looking for a lockfile and trips over the junctions Windows
   // keeps in the user profile.
   outputFileTracingRoot: path.join(here, '..', '..'),
+  // Belt-and-suspenders alongside schema.prisma's `binaryTargets`: Next's
+  // output file tracing decides what actually ships in the deployed
+  // serverless function, and it resolves Prisma's query engine through a
+  // dynamic `require` its static analysis can't follow - especially one more
+  // level deep under pnpm's hashed `.pnpm/<pkg>@<version>_<hash>/`
+  // directories. `binaryTargets` alone got this generating the right engine
+  // locally and even shipping correctly on some builds, but not
+  // deterministically - production still 500'd on a later deploy with
+  // "Prisma Client could not locate the Query Engine for runtime
+  // rhel-openssl-3.0.x" despite nothing about the schema changing. This is
+  // Prisma's own documented fix for the failure (https://pris.ly/d/engine-not-found-nextjs):
+  // force-include the engine binaries for every route regardless of what
+  // tracing infers.
+  outputFileTracingIncludes: {
+    '/**/*': [
+      '../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**/*',
+      '../../node_modules/.prisma/client/**/*',
+    ],
+  },
   // Workspace packages ship TypeScript source, not a build artefact.
   transpilePackages: [
     '@relay/ui',
