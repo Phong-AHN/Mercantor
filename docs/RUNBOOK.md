@@ -423,11 +423,20 @@ the Vercel deployment had no `regions` set, which defaults the serverless functi
 (US East, confirmed from an actual function-invocation log), while Supabase is
 `aws-0-ap-southeast-1` (Singapore) and real users are in Asia. Every DB round trip - and the
 session lookup alone (`getPrincipal` → `resolveSession`) runs on every single page - crossed the
-Pacific twice. Fixed by `apps/web/vercel.json`'s `"regions": ["sin1"]`, colocating the function
-with the database (both Singapore) instead of leaving Vercel's default. Because Root Directory is
-`apps/web`, `vercel.json` has to live there, not at the repo root, or Vercel never reads it.
-**If the app is ever pointed at a database in a different region, this needs to move with it** -
-`regions` picks one fixed region for every function; there is no per-database-provider auto-detection.
+Pacific twice. `apps/web/vercel.json`'s `"regions": ["sin1"]` was added first and is harmless to keep (Root
+Directory is `apps/web`, so that is where `vercel.json` has to live for Vercel to read it at all),
+but **it alone did not move the deployed function** - confirmed live: after that file was pushed
+and a fresh deploy went out clean, `curl -sD- -o /dev/null https://www.mercantor.co/api/health`
+still showed `x-vercel-id: hkg1::iad1::...` (edge in Hong Kong, function still executing in
+Washington DC). **The actual switch is Project Settings → Functions → Function Region in the
+Vercel dashboard** - a manual, per-project setting that is not driven by `vercel.json` on this
+project/plan. Changed by hand to Singapore; the very next request showed
+`x-vercel-id: hkg1::sin1::...`, and the numbers backed it up immediately (all measured live against
+production, no redeploy needed after the dashboard change): sign-in-to-dashboard 18.0s → 1.9s,
+`/dashboard` 8.8s → 0.47s, `/projects/[code]` 17.9s → 0.57s. **If the app is ever pointed at a
+database in a different region, this dashboard setting needs to move with it** - it is a single
+fixed region for every function, there is no per-database-provider auto-detection, and `vercel.json`
+alone will not be enough to change it - check the dashboard first.
 
 ---
 
