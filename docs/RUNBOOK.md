@@ -416,6 +416,19 @@ DB-touching route should list a path containing `libquery_engine-rhel-openssl-3.
 `grep -o '"[^"]*libquery_engine[^"]*"' apps/web/.next/server/app/(auth)/sign-in/page.js.nft.json`.
 An empty result there is the actual bug reproduced locally, before ever pushing.
 
+**"Every page feels slow, even a dashboard that runs one query."** Measured live against
+production (2026-09-09): sign-in to dashboard ~18s, `/dashboard` ~8.7s for a page whose only query
+is one `project.findMany`, `/projects/[code]` ~18s. Not a query-count problem - the cause is that
+the Vercel deployment had no `regions` set, which defaults the serverless function to `iad1`
+(US East, confirmed from an actual function-invocation log), while Supabase is
+`aws-0-ap-southeast-1` (Singapore) and real users are in Asia. Every DB round trip - and the
+session lookup alone (`getPrincipal` → `resolveSession`) runs on every single page - crossed the
+Pacific twice. Fixed by `apps/web/vercel.json`'s `"regions": ["sin1"]`, colocating the function
+with the database (both Singapore) instead of leaving Vercel's default. Because Root Directory is
+`apps/web`, `vercel.json` has to live there, not at the repo root, or Vercel never reads it.
+**If the app is ever pointed at a database in a different region, this needs to move with it** -
+`regions` picks one fixed region for every function; there is no per-database-provider auto-detection.
+
 ---
 
 ## Backups & data
