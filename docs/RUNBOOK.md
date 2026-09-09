@@ -381,6 +381,22 @@ boundaries.
 `node_modules`. A custom `output` outside it makes Next's file tracer walk up looking for
 `schema.prisma` and glob the home folder. Do not reintroduce `output` in the generator block.
 
+**"Vercel build succeeds, every DB-touching page 500s in production"** ("Prisma Client could not
+locate the Query Engine for runtime `rhel-openssl-3.0.x`" in the function logs,
+`FUNCTION_INVOCATION_FAILED`). The build passing proves nothing here - `next build` only needs the
+Prisma Client's TypeScript types, not its native query-engine binary, so a missing engine for the
+target platform only surfaces at request time. Root cause: `schema.prisma`'s `generator client`
+block had no `binaryTargets`, so the client only ships the engine for whatever platform actually
+ran `prisma generate` - Windows locally, `linux-musl` in the worker's Alpine Docker image, neither
+of which matches Vercel's serverless runtime (`rhel-openssl-3.0.x`). A redeploy alone does not fix
+this - it's not a stale-build/cache problem, the wrong engine is genuinely what gets built every
+time until `binaryTargets` says otherwise. Fixed by setting
+`binaryTargets = ["native", "rhel-openssl-3.0.x"]` so both engines ship regardless of where
+`generate` runs. Verify locally before trusting a redeploy: after `prisma generate`,
+`packages/db/node_modules/.prisma/client/` (or the workspace root's, depending on hoisting) should
+contain both `query_engine-windows.dll.node` (or your local platform's) and
+`libquery_engine-rhel-openssl-3.0.x.so.node`.
+
 ---
 
 ## Backups & data
