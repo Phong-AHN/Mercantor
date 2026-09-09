@@ -223,60 +223,67 @@ Run `pnpm db:migrate:deploy` before releasing either.
 
 Railway is a good fit specifically because it runs a plain long-lived container rather than only
 request-scoped functions - `apps/worker` cannot go on a serverless platform (Vercel included) for
-exactly that reason. `apps/web` can go on Railway too (as a second service in the same project) or
-anywhere else that runs Next.js; either way both processes need to point at the **same**
-`DATABASE_URL` and `REDIS_URL`.
+exactly that reason. In this project's actual split, `apps/web` stays on Vercel; only the worker
+goes to Railway. Either way both processes need to point at the **same** `DATABASE_URL` and
+`REDIS_URL`.
 
-1. **New Service → Deploy from GitHub repo**, pick this repo. Railway defaults the build root to
-   the repo root, which is what the worker's Dockerfile needs (it `COPY`s the whole monorepo, not
-   just `apps/worker`) - leave it there, do not set a root/working directory.
-2. **Settings → Build → Builder: Dockerfile**, path `infra/Dockerfile.worker`. Simplest: point
-   **Settings → Config-as-code path** at `infra/railway.worker.json` instead, which already
-   declares the Dockerfile path, the `/health` healthcheck, and a restart policy - one field
-   instead of several.
-3. **Variables** - paste in the production values from `.env` (see `TODO.md` §1 for which ones
-   need real values, not the dev placeholders): **`DATABASE_URL`, `SESSION_SIGNING_SECRET`,
-   `CREDENTIAL_ENCRYPTION_KEY` are not optional** - `main.ts`'s very first line is `const config =
-env()`, before the health server, before anything else, and `env()` throws synchronously if any
-   of the three is missing (see the schema in `packages/config/src/env.ts` - no `.default()`, no
-   `.optional()`). A missing one crashes the process before it ever binds the health port, which
-   Railway reports as a healthcheck that never once succeeds across its whole retry window - not a
-   slow boot, a crash loop. Also set `REDIS_URL` explicitly - its schema default
-   (`redis://localhost:6380`) is meant for local dev only and does not exist inside a Railway
-   container, so leaving it unset makes `installSchedules()` hang waiting for a Redis that will
-   never answer, which looks identical to the crash-loop case from the healthcheck's side (the
-   health port never opens either way). Round out the list with `APP_URL` and `S3_*`. `NODE_ENV`
-   and `RELAY_ROLE` are already set inside the Dockerfile - don't override `RELAY_ROLE`.
-   `WORKER_HEALTH_PORT` can stay at its default (`3100`) - no need to wire it to Railway's `PORT`
-   variable.
-4. **Networking** - leave "Generate Domain" **off**. The worker never receives inbound HTTP from
-   anywhere but Railway's own healthcheck, which reaches it over the private network using the
-   port the Dockerfile's `EXPOSE 3100` already declares - no public URL, and one less thing
-   exposed to the internet.
-5. **Deploy.** Watch the build logs for `pnpm --filter @relay/db generate` succeeding and the
-   first log line naming every installed schedule (`packages/queue/src/queues.ts`); then confirm
-   the service goes healthy in the Railway dashboard. **If the healthcheck fails on every attempt
-   with no partial progress, that is a boot-time crash or hang, not a slow start** - open the
-   service's Deploy Logs (not the build log) for the actual error; it is almost always one of the
-   two causes above.
+**Railway's older "Config as Code" (a `railway.json`/`railway.toml` a service reads from its own
+repo) is deprecated, and does not work at all for a service created after Infrastructure as Code
+shipped** - "New services cannot opt into Config as Code" is Railway's own wording. This project
+briefly kept one (`infra/railway.worker.json`) before finding that out the hard way: the service
+deployed and the healthcheck failed exactly as if the file did not exist, because for a new
+service it does not. Removed. The deploy definition lives in `.railway/railway.ts` at the repo
+root instead, managed by the Railway CLI's `railway config plan`/`apply` - not the dashboard's
+per-service settings.
+
+1. **Install the Railway CLI** and `railway login`, then `railway link` from the repo root to pick
+   (or create) the Railway project and environment this should manage.
+2. **`.railway/railway.ts` is already written** - one `service("worker", ...)`, no `build`/`start`
+   fields (those pick Railway's Railpack/Nixpacks builder; the worker needs its own
+   `infra/Dockerfile.worker`, selected via the `RAILWAY_DOCKERFILE_PATH` environment variable
+   instead, since the Dockerfile lives outside the default root), no `rootDirectory` (the
+   Dockerfile's `COPY` commands are relative to the repo root, not `apps/worker` - scoping the
+   source there breaks every one of them), no `domains` (the worker takes no inbound traffic but
+   Railway's own healthcheck, reached over the private network on the port
+   `infra/Dockerfile.worker`'s `EXPOSE 3100` already declares). The file's own comments explain
+   each choice; read them before changing anything.
+3. **Set the real secret values before the first apply, outside the file** - either the Railway
+   dashboard's Variables tab for the (not-yet-existing) worker service, or
+   `railway variables set KEY=value` per variable. The file declares each one as `preserve()`
+   (`DATABASE_URL`, `SESSION_SIGNING_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`, `REDIS_URL`, `APP_URL`,
+   `S3_*`) specifically so a real secret is never written into a file this repo commits to GitHub -
+   `preserve()` means "whatever is already set on Railway, don't touch it from here", which has
+   nothing to preserve the very first time. **`DATABASE_URL`, `SESSION_SIGNING_SECRET`,
+   `CREDENTIAL_ENCRYPTION_KEY` are not optional** - `apps/worker/src/main.ts`'s very first line is
+   `const config = env()`, before the health server, before anything else, and `env()` throws
+   synchronously if any of the three is missing (`packages/config/src/env.ts`'s schema - no
+   `.default()`, no `.optional()` on those three). A missing one crashes the process before it
+   ever binds the health port, which Railway reports as a healthcheck that never once succeeds
+   across its whole retry window - not a slow boot, a crash loop. Set `REDIS_URL` explicitly too -
+   its schema default (`redis://localhost:6380`) is meant for local dev only and does not exist
+   inside a Railway container, so leaving it unset makes `installSchedules()` hang waiting for a
+   Redis that will never answer, which looks identical to the crash-loop case from the
+   healthcheck's side (the health port never opens either way).
+4. **`railway config plan`** - read-only, safe to run any time, prints exactly what would be
+   created/changed. Confirm it shows one service being created and nothing unexpected before
+   going further.
+5. **`railway config apply`** - review the same plan again and confirm. Watch the build logs for
+   `pnpm --filter @relay/db generate` succeeding and the first runtime log line naming every
+   installed schedule (`packages/queue/src/queues.ts`); then confirm the service goes healthy.
+   **If the healthcheck fails on every attempt with no partial progress, that is a boot-time crash
+   or hang, not a slow start** - open the service's Deploy Logs (not the build log) for the actual
+   error; it is almost always one of the two env var causes above.
 
 Scaling past one instance is safe if it's ever needed - every scheduled task and every outbox
 delivery is written to be idempotent (`RUNBOOK.md`'s "The scheduled work" table), so two workers
-racing the same job is a no-op, not a double send - but there is no throughput reason to start
-above `numReplicas: 1`.
+racing the same job is a no-op, not a double send - `replicas` in `.railway/railway.ts` is the
+field for it, but there is no throughput reason to raise it from the current `1` yet.
 
-### Deploying `apps/web` to Railway too
-
-Nothing worker-specific about it - New Service → same repo → Railway's Nixpacks builder detects
-Next.js on its own, no Dockerfile needed. Two things worth setting deliberately: **the healthcheck
-path is `/api/health`, not `/health`** - that path only exists on the worker (a different service,
-a different port); pointing a Railway service at a path its own app doesn't serve reports a
-perfectly healthy deploy as unhealthy and kills it, exactly the failure this section exists to
-head off. And it needs the same `DATABASE_URL`, `SESSION_SIGNING_SECRET`,
-`CREDENTIAL_ENCRYPTION_KEY`, `REDIS_URL` as the worker (both processes share one database and one
-queue), plus `S3_*` for uploads. `infra/railway.web.json` already sets the healthcheck path as
-config-as-code - point **Settings → Config-as-code path** at it the same way the worker's steps
-above do.
+If `apps/web` ever moves to Railway too, add a second `service(...)` to the same
+`.railway/railway.ts` (one file per environment, not one per service) - no Dockerfile needed
+(Railway's own builder detects Next.js natively), and set its healthcheck to `/api/health`
+(`apps/web/src/app/api/health/route.ts`), not `/health` - that path only exists on the worker, a
+different service on a different port.
 
 ---
 

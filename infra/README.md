@@ -1,16 +1,19 @@
 # infra
 
 `Dockerfile.worker` builds the background worker as its own container — it holds a blocking Redis
-connection and a request-scoped runtime cannot host it. `railway.worker.json` is Railway
-config-as-code for that service (Dockerfile builder, `/health` healthcheck, restart policy) — point
-a Railway service's Config-as-code path at it.
+connection and a request-scoped runtime cannot host it. `.railway/railway.ts` (repo root, not this
+directory — Railway's Infrastructure-as-Code CLI looks for it there) is the Railway deploy
+definition for that one service; see `RUNBOOK.md` → "Deploying the worker to Railway" for the
+`railway config plan`/`apply` workflow. `apps/web` is not defined there — it deploys to Vercel in
+this project, not Railway; if that ever changes, it needs no Dockerfile (Railway's own builder
+detects Next.js natively), only a `/api/health` healthcheck path
+(`apps/web/src/app/api/health/route.ts`) instead of the worker's `/health`.
 
-The web app deploys as an ordinary Next.js application (no Dockerfile needed — Railway's Nixpacks
-builder, Vercel, and most other Node hosts all detect it natively); it has no infrastructure of its
-own beyond the environment variables listed in `.env.example`. `railway.web.json` only sets the
-healthcheck path to `/api/health` (`apps/web/src/app/api/health/route.ts`) — plain `/health`, which
-the worker uses, does not exist on this app and a Railway service healthchecking that path will
-report the deploy as unhealthy and kill it even though the app started fine.
+**Railway's older "Config as Code" (`railway.json`/`railway.toml` in a service's repo) is
+deprecated and does not work for a service created after Infrastructure as Code shipped** — this
+project used to keep one here, found out the hard way it silently did nothing for a freshly created
+service, and removed it. Don't reintroduce a `railway.json`/`railway.toml` file; edit
+`.railway/railway.ts` instead.
 
 Local development uses `docker-compose.yml` at the repository root: Postgres 17 on 5433, Redis 7
 on 6380, MinIO on 9010 with its console on 9011. The ports are deliberately non-default so the
