@@ -114,7 +114,7 @@ Required in production. `.env.example` documents every one.
 
 | Variable                                                         | Notes                                                                                                                                                                                                    |
 | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                                   | Use a pooled endpoint. `DIRECT_URL` for migrations.                                                                                                                                                      |
+| `DATABASE_URL`                                                   | Use a pooled endpoint. `DIRECT_URL` for migrations. **On Supabase, append `?pgbouncer=true`** - see below.                                                                                               |
 | `REDIS_URL`                                                      | Shared by the app (producer) and the worker (consumer).                                                                                                                                                  |
 | `SESSION_SIGNING_SECRET`                                         | 32 random bytes, base64. `openssl rand -base64 32`                                                                                                                                                       |
 | `CREDENTIAL_ENCRYPTION_KEY`                                      | Same. Rotating it invalidates stored credentials.                                                                                                                                                        |
@@ -125,6 +125,30 @@ Required in production. `.env.example` documents every one.
 
 `env()` validates everything at first access and lists **all** problems at once, so a missing
 secret fails the boot rather than the first request that happens to need it.
+
+**On Supabase specifically, three separate connection issues showed up back to back going live -
+worth knowing all three rather than fixing one and assuming the database is done:**
+
+1. **The direct connection host (`db.<ref>.supabase.co:5432`, what `DIRECT_URL` normally is)
+   resolves IPv6-only.** Platforms without reliable outbound IPv6 (Railway confirmed; this
+   project's own `docker build`/local shell hit the identical `P1001: Can't reach database server`)
+   cannot reach it at all, `env()` validation aside - the URL is well-formed, the server is up, the
+   network path simply isn't there. Fix: use Supabase's **Session Pooler** connection string
+   instead (same pooler host as below, port `5432`) for `DIRECT_URL` - it's IPv4-reachable and
+   supports the prepared statements `prisma migrate deploy` needs, which the Transaction Pooler
+   below does not.
+2. **The Transaction Pooler (`aws-0-<region>.pooler.supabase.com:6543`, what `DATABASE_URL` should
+   be) needs `?pgbouncer=true` appended, or Prisma throws `42P05: prepared statement "s0" already
+exists`** the moment two queries in a row reuse a pooled connection PgBouncer has multiplexed
+   with a different client's session - not on the first query (which is why a quick manual check
+   can look fine), reliably on the second. Confirmed live: an invite/reset flow's
+   `consumePasswordToken` immediately followed by `db.user.update` crashed with exactly this on
+   both Railway and Vercel until `?pgbouncer=true` was added to `DATABASE_URL` on each. The flag
+   tells Prisma's query engine to skip its own prepared-statement caching, which is what collides
+   with PgBouncer's transaction-mode multiplexing in the first place.
+3. **Both processes need the fix independently** - `apps/worker` (Railway) and `apps/web` (Vercel)
+   each hold their own copy of `DATABASE_URL`/`DIRECT_URL`, set separately on each platform, and
+   fixing one does nothing for the other.
 
 **Since D-052, `SLACK_BOT_TOKEN` / `CLICKUP_API_TOKEN` / `RESEND_API_KEY` in `.env` do nothing.**
 Every organization now self-configures its own credentials at `/integrations` (encrypted at rest,
