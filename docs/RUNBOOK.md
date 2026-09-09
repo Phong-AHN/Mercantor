@@ -199,6 +199,20 @@ Two processes, and they cannot be one:
 **`apps/web`** — any Node host or serverless platform. `pnpm --filter @relay/web build`, then
 `start`. It only ever produces queue jobs.
 
+**A platform that scopes its build command to `apps/web` alone (Vercel's "Root Directory" set to
+`apps/web`, for one) never runs `packages/db`'s own `build` script** (`prisma generate`) - only the
+root `pnpm build` (`pnpm -r build`) does that automatically. Without it, `@relay/db`'s generated
+Prisma Client is missing or stale, and `next build` fails - either a webpack
+`Module not found: Can't resolve '.prisma/client/default'`, or a TypeScript error several layers
+downstream that looks unrelated (`Parameter 'x' implicitly has an 'any' type` on a `.map`/`.filter`
+over a query result, since the untyped client makes the whole inferred chain `any`). Reproduced
+locally by deleting the generated client and running `pnpm --filter @relay/web build` alone.
+**Fixed once, for every platform, by `packages/db/package.json`'s `postinstall: "prisma generate"`** -
+pnpm runs every workspace package's own `postinstall` after `pnpm install`, regardless of which
+subdirectory a platform's build command is scoped to, so the client exists before any build step
+gets a chance to run. Verified the same way: delete the generated client, `pnpm install`, confirm
+the `postinstall` line generates it, then `pnpm --filter @relay/web build` alone succeeds.
+
 **`apps/worker`** — a long-lived container. It holds a blocking Redis connection and cannot run
 on a request-scoped runtime. `RELAY_ROLE=worker` is set by its own entry shim; without it, the
 queue consumer refuses to start. Point the platform's health check at `:3100/health`.
