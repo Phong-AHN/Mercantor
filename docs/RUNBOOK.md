@@ -235,17 +235,30 @@ anywhere else that runs Next.js; either way both processes need to point at the 
    declares the Dockerfile path, the `/health` healthcheck, and a restart policy - one field
    instead of several.
 3. **Variables** - paste in the production values from `.env` (see `TODO.md` §1 for which ones
-   need real values, not the dev placeholders): at minimum `DATABASE_URL`, `REDIS_URL`,
-   `CREDENTIAL_ENCRYPTION_KEY`, `APP_URL`, `S3_*`. `NODE_ENV` and `RELAY_ROLE` are already set
-   inside the Dockerfile - don't override `RELAY_ROLE`. `WORKER_HEALTH_PORT` can stay at its
-   default (`3100`) - no need to wire it to Railway's `PORT` variable.
+   need real values, not the dev placeholders): **`DATABASE_URL`, `SESSION_SIGNING_SECRET`,
+   `CREDENTIAL_ENCRYPTION_KEY` are not optional** - `main.ts`'s very first line is `const config =
+env()`, before the health server, before anything else, and `env()` throws synchronously if any
+   of the three is missing (see the schema in `packages/config/src/env.ts` - no `.default()`, no
+   `.optional()`). A missing one crashes the process before it ever binds the health port, which
+   Railway reports as a healthcheck that never once succeeds across its whole retry window - not a
+   slow boot, a crash loop. Also set `REDIS_URL` explicitly - its schema default
+   (`redis://localhost:6380`) is meant for local dev only and does not exist inside a Railway
+   container, so leaving it unset makes `installSchedules()` hang waiting for a Redis that will
+   never answer, which looks identical to the crash-loop case from the healthcheck's side (the
+   health port never opens either way). Round out the list with `APP_URL` and `S3_*`. `NODE_ENV`
+   and `RELAY_ROLE` are already set inside the Dockerfile - don't override `RELAY_ROLE`.
+   `WORKER_HEALTH_PORT` can stay at its default (`3100`) - no need to wire it to Railway's `PORT`
+   variable.
 4. **Networking** - leave "Generate Domain" **off**. The worker never receives inbound HTTP from
    anywhere but Railway's own healthcheck, which reaches it over the private network using the
    port the Dockerfile's `EXPOSE 3100` already declares - no public URL, and one less thing
    exposed to the internet.
 5. **Deploy.** Watch the build logs for `pnpm --filter @relay/db generate` succeeding and the
    first log line naming every installed schedule (`packages/queue/src/queues.ts`); then confirm
-   the service goes healthy in the Railway dashboard.
+   the service goes healthy in the Railway dashboard. **If the healthcheck fails on every attempt
+   with no partial progress, that is a boot-time crash or hang, not a slow start** - open the
+   service's Deploy Logs (not the build log) for the actual error; it is almost always one of the
+   two causes above.
 
 Scaling past one instance is safe if it's ever needed - every scheduled task and every outbox
 delivery is written to be idempotent (`RUNBOOK.md`'s "The scheduled work" table), so two workers
