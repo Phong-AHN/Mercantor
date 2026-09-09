@@ -7,9 +7,17 @@ WORKDIR /app
 FROM base AS deps
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY apps/worker/package.json apps/worker/
-COPY packages/config/package.json packages/config/
+# `packages/db` and `packages/config` copy in full, not just their
+# package.json, because `pnpm install` runs `packages/db`'s own
+# `postinstall` (`prisma generate`) as part of installing this stage's
+# dependencies - it needs `prisma.config.ts` and `prisma/schema.prisma` to
+# find, and `prisma.config.ts` itself imports `@relay/config`'s real source
+# (`loadRootEnv`), not just its package.json. Every other package here has
+# no postinstall of its own, so a manifest-only copy is enough for them and
+# keeps this layer's cache narrow to what can actually invalidate it.
+COPY packages/config packages/config/
 COPY packages/core/package.json packages/core/
-COPY packages/db/package.json packages/db/
+COPY packages/db packages/db/
 COPY packages/integrations/package.json packages/integrations/
 COPY packages/observability/package.json packages/observability/
 COPY packages/queue/package.json packages/queue/
