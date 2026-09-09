@@ -23,7 +23,8 @@ against seeded data; it only blocks going live with real merchants.
   - `apps/web` — any Node host or serverless platform (Vercel, Render, Railway, etc.).
   - `apps/worker` — needs a **long-lived container**, not a serverless/request-scoped runtime, since
     it holds a blocking Redis connection. `infra/Dockerfile.worker` is ready to use. Vercel cannot
-    host this half.
+    host this half. Railway is a straightforward fit - `infra/railway.worker.json` is ready too;
+    `RUNBOOK.md` → "Deploying the worker to Railway" has the step-by-step.
 - [ ] **Buy/point a domain and set `APP_URL`** to the real production URL — it is used in every
       outbound link (introduction emails, Slack messages, notification emails). Getting it wrong is
       the most common cause of "the Slack link is broken" (see `RUNBOOK.md`).

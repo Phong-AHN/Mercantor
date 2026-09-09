@@ -205,6 +205,39 @@ queue consumer refuses to start. Point the platform's health check at `:3100/hea
 
 Run `pnpm db:migrate:deploy` before releasing either.
 
+### Deploying the worker to Railway
+
+Railway is a good fit specifically because it runs a plain long-lived container rather than only
+request-scoped functions - `apps/worker` cannot go on a serverless platform (Vercel included) for
+exactly that reason. `apps/web` can go on Railway too (as a second service in the same project) or
+anywhere else that runs Next.js; either way both processes need to point at the **same**
+`DATABASE_URL` and `REDIS_URL`.
+
+1. **New Service → Deploy from GitHub repo**, pick this repo. Railway defaults the build root to
+   the repo root, which is what the worker's Dockerfile needs (it `COPY`s the whole monorepo, not
+   just `apps/worker`) - leave it there, do not set a root/working directory.
+2. **Settings → Build → Builder: Dockerfile**, path `infra/Dockerfile.worker`. Simplest: point
+   **Settings → Config-as-code path** at `infra/railway.worker.json` instead, which already
+   declares the Dockerfile path, the `/health` healthcheck, and a restart policy - one field
+   instead of several.
+3. **Variables** - paste in the production values from `.env` (see `TODO.md` §1 for which ones
+   need real values, not the dev placeholders): at minimum `DATABASE_URL`, `REDIS_URL`,
+   `CREDENTIAL_ENCRYPTION_KEY`, `APP_URL`, `S3_*`. `NODE_ENV` and `RELAY_ROLE` are already set
+   inside the Dockerfile - don't override `RELAY_ROLE`. `WORKER_HEALTH_PORT` can stay at its
+   default (`3100`) - no need to wire it to Railway's `PORT` variable.
+4. **Networking** - leave "Generate Domain" **off**. The worker never receives inbound HTTP from
+   anywhere but Railway's own healthcheck, which reaches it over the private network using the
+   port the Dockerfile's `EXPOSE 3100` already declares - no public URL, and one less thing
+   exposed to the internet.
+5. **Deploy.** Watch the build logs for `pnpm --filter @relay/db generate` succeeding and the
+   first log line naming every installed schedule (`packages/queue/src/queues.ts`); then confirm
+   the service goes healthy in the Railway dashboard.
+
+Scaling past one instance is safe if it's ever needed - every scheduled task and every outbox
+delivery is written to be idempotent (`RUNBOOK.md`'s "The scheduled work" table), so two workers
+racing the same job is a no-op, not a double send - but there is no throughput reason to start
+above `numReplicas: 1`.
+
 ---
 
 ## The scheduled work
