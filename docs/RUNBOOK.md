@@ -265,6 +265,19 @@ delivery is written to be idempotent (`RUNBOOK.md`'s "The scheduled work" table)
 racing the same job is a no-op, not a double send - but there is no throughput reason to start
 above `numReplicas: 1`.
 
+### Deploying `apps/web` to Railway too
+
+Nothing worker-specific about it - New Service → same repo → Railway's Nixpacks builder detects
+Next.js on its own, no Dockerfile needed. Two things worth setting deliberately: **the healthcheck
+path is `/api/health`, not `/health`** - that path only exists on the worker (a different service,
+a different port); pointing a Railway service at a path its own app doesn't serve reports a
+perfectly healthy deploy as unhealthy and kills it, exactly the failure this section exists to
+head off. And it needs the same `DATABASE_URL`, `SESSION_SIGNING_SECRET`,
+`CREDENTIAL_ENCRYPTION_KEY`, `REDIS_URL` as the worker (both processes share one database and one
+queue), plus `S3_*` for uploads. `infra/railway.web.json` already sets the healthcheck path as
+config-as-code - point **Settings → Config-as-code path** at it the same way the worker's steps
+above do.
+
 ---
 
 ## The scheduled work
