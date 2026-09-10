@@ -1,8 +1,26 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { NextConfig } from 'next';
+import { env, loadRootEnv } from '@relay/config';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+loadRootEnv();
+const s3 = env();
+/**
+ * Every origin a presigned upload could actually hit, derived from the real
+ * config rather than hardcoded - `S3_ENDPOINT` set (MinIO locally) takes
+ * that exact origin; otherwise both virtual-hosted (`<bucket>.s3.<region>...`)
+ * and path-style (`s3.<region>...`) forms of real AWS S3, since which one a
+ * presigned POST actually uses depends on `S3_FORCE_PATH_STYLE` and both
+ * cost nothing to allow.
+ */
+const s3ConnectSrc = s3.S3_ENDPOINT
+  ? [new URL(s3.S3_ENDPOINT).origin]
+  : [
+      `https://${s3.S3_BUCKET}.s3.${s3.S3_REGION}.amazonaws.com`,
+      `https://s3.${s3.S3_REGION}.amazonaws.com`,
+    ];
 
 const config: NextConfig = {
   reactStrictMode: true,
@@ -114,6 +132,19 @@ const config: NextConfig = {
         // needs `unsafe-eval` - webpack's Fast Refresh evaluates module code
         // as a string - which production never does; verified against a
         // real production build, not `next dev`, before trusting this.
+        //
+        // `connect-src` is the one exception to "nothing else-origin" above:
+        // both the attachment upload flow and bank-import's screenshot
+        // upload POST the file straight from the browser to the bucket via
+        // a presigned URL (`packages/storage/src/presign.ts`'s whole point -
+        // the file's bytes never pass through this server in flight), which
+        // is a `fetch` to the bucket's own origin, not this app's. Without
+        // it in `connect-src`, the browser silently blocks that fetch as a
+        // CSP violation - confirmed live: every upload failed with "The
+        // upload did not go through" and a browser console CSP violation
+        // naming the bucket's S3 origin, on a feature (attachments) that had
+        // shipped and gone unexercised by an actual file upload until
+        // bank-import's own end-to-end test caught it. See RUNBOOK.md.
         {
           key: 'Content-Security-Policy',
           value: [
@@ -122,7 +153,7 @@ const config: NextConfig = {
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data:",
             "font-src 'self' data:",
-            "connect-src 'self'",
+            `connect-src 'self' ${s3ConnectSrc.join(' ')}`,
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",

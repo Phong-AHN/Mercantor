@@ -515,6 +515,28 @@ dependency bump, rerun that shape of test before assuming the parser (not the OC
 fault - and if a deploy of this route ever fails again, read the actual Build Logs before assuming
 it is still building.
 
+**"The upload did not go through. Try again." on every upload, attachments included, not just
+bank-import.** The browser console shows a CSP violation naming the S3 bucket's own origin
+(`Refused to connect because it violates the document's Content-Security-Policy`). Both
+`features/attachments/actions.ts` and `features/bank-import/actions.ts` presign an upload and then
+the *browser* `fetch()`s the file straight to the bucket - `packages/storage/src/presign.ts`'s
+whole point, so the file's bytes never pass through this server - which is a cross-origin request
+the CSP's `connect-src 'self'` was blocking outright. **This was already broken for attachments
+before bank-import ever existed** - it shipped without an actual end-to-end file upload ever being
+exercised against production by anything in this repo's own verification scripts, only caught once
+bank-import's own live test tried a real upload. Fixed in `next.config.ts`: `connect-src` now
+includes the real S3 origin(s), derived from `@relay/config`'s `env()` rather than hardcoded
+(`S3_ENDPOINT`'s own origin if set - MinIO locally - otherwise both the virtual-hosted and
+path-style forms of real AWS S3, since which one a presigned POST lands on depends on
+`S3_FORCE_PATH_STYLE`). **`next.config.ts` calling `env()` at all is new, and only works locally
+with the workspace `.env` actually exported into the shell first** - `next build` always runs with
+`NODE_ENV=production` regardless of the shell's own value, so `loadRootEnv()`'s production
+no-op (correct for a real deploy, where the platform already supplies real env vars) means a bare
+`pnpm --filter @relay/web build` on a dev machine fails validating env vars that are normally only
+loaded by an explicit `loadRootEnv()` call elsewhere. To build locally after touching
+`next.config.ts`: `set -a && source .env && set +a` (also export `APP_URL` - `.env`'s own value is
+blank, which fails the schema's URL check) before `pnpm --filter @relay/web build`.
+
 ---
 
 ## Backups & data
