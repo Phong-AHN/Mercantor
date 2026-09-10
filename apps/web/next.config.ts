@@ -25,30 +25,26 @@ const config: NextConfig = {
   // Prisma's own documented fix for the failure (https://pris.ly/d/engine-not-found-nextjs):
   // force-include the engine binaries for every route regardless of what
   // tracing infers.
-  // `sharp` has the identical failure shape - a native `.node` binary
-  // resolved by a dynamic `require`, platform-specific package name decided
-  // at install time (`@img/sharp-linux-x64` on Vercel, not whatever this
-  // built on) - so it gets the same forced include rather than waiting to
-  // find out live in production a second time. `tesseract.js` ships its
-  // worker script and WASM core as plain files under its own package (no
-  // native binary), which tracing follows fine on its own, but the glob is
-  // cheap insurance since bank-import routes are exactly what would 500 if
-  // that assumption turns out wrong the same way Prisma's did.
+  // `sharp` and `tesseract.js` do NOT get the same forced-include treatment
+  // as Prisma, on purpose, even though `sharp` has the identical native-.node
+  // failure shape - tried that first and it broke deployment outright:
+  // "The framework produced an invalid deployment package for a Serverless
+  // Function... files in symlinked directories", from Vercel's own packaging
+  // step, not a Next.js error. pnpm's `.pnpm/<pkg>@<version>_<hash>/` store
+  // is real symlinks on Linux (junctions on Windows, which is why this built
+  // clean locally and still failed live) - `.pnpm/@img+sharp-*/**/*` walked
+  // straight through the *scoped* `@img/sharp-<platform>` package, itself a
+  // symlinked directory in pnpm's layout, and a symlinked directory among the
+  // traced files is exactly what Vercel's zip step rejects. Confirmed
+  // locally without any of this that Next's own tracer already resolves
+  // `sharp`'s native binary and `tessdata/*.gz` correctly on its own - see
+  // RUNBOOK.md's bank-import entry for how that was verified - so the
+  // Prisma-only entries below (already proven safe across several real
+  // deploys) are all that's here.
   outputFileTracingIncludes: {
     '/**/*': [
       '../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**/*',
       '../../node_modules/.prisma/client/**/*',
-      '../../node_modules/.pnpm/@img+sharp-*/node_modules/@img/**/*',
-      '../../node_modules/.pnpm/sharp@*/node_modules/sharp/**/*',
-      '../../node_modules/.pnpm/tesseract.js@*/node_modules/tesseract.js/**/*',
-      '../../node_modules/.pnpm/tesseract.js-core@*/node_modules/tesseract.js-core/**/*',
-      // The Vietnamese + English trained-data files bank-import's OCR step
-      // loads from disk (see apps/web/src/features/bank-import/ocr.ts) -
-      // bundled locally rather than fetched from a CDN at request time, on
-      // purpose: a cold serverless invocation fetching ~15MB over the
-      // network before OCR can even start is the kind of latency this app
-      // just spent a whole pass fixing (see RUNBOOK.md's region entry).
-      './tessdata/**/*',
     ],
   },
   // Workspace packages ship TypeScript source, not a build artefact.
@@ -65,20 +61,12 @@ const config: NextConfig = {
   ],
   // These are Node libraries with dynamic requires and native bits. Bundling
   // them breaks pino's transport resolution and BullMQ's optional drivers, so
-  // the server runtime loads them directly instead. `tesseract.js` and
-  // `sharp` join them for the same reason as `@prisma/client` above -
-  // `sharp` ships a native `.node` binary per platform, `tesseract.js` loads
-  // its worker script and WASM core through `require`/`fs` at runtime, and
-  // webpack bundling either one breaks that resolution.
-  serverExternalPackages: [
-    'bullmq',
-    'ioredis',
-    'pino',
-    'pino-pretty',
-    '@prisma/client',
-    'tesseract.js',
-    'sharp',
-  ],
+  // the server runtime loads them directly instead. `sharp` and
+  // `tesseract.js` are deliberately NOT here - Next already leaves them
+  // unbundled on its own (confirmed by inspecting the actual output; see the
+  // `outputFileTracingIncludes` comment above for what adding them here
+  // broke instead).
+  serverExternalPackages: ['bullmq', 'ioredis', 'pino', 'pino-pretty', '@prisma/client'],
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },

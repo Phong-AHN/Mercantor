@@ -471,26 +471,49 @@ are bundled with the deployment, not fetched from a CDN at request time.** tesse
 default behaviour is to fetch each language's trained data from a CDN on first use - fine for a
 long-lived server, a real liability for a cold serverless invocation, which would eat that fetch's
 latency (and its failure modes: CDN down, network blocked, the fetch alone can exceed a function's
-time budget) before OCR even starts. `ocr.ts` points `langPath`/`cachePath` at the local directory
-instead. Downloaded once from `https://tessdata.projectnaptha.com/4.0.0/{lang}.traineddata.gz` and
-committed as-is (still gzipped - tesseract.js's local loader expects that, no local decompression
-step needed).
+time budget) before OCR even starts. `ocr.ts` points `langPath` at that local, read-only directory.
+Downloaded once from `https://tessdata.projectnaptha.com/4.0.0/{lang}.traineddata.gz` and committed
+as-is (still gzipped - tesseract.js's local loader expects that, no local decompression step
+needed). **`cachePath` is a *different*, writable directory - `os.tmpdir()`, not `tessdata/`
+itself.** tesseract.js decompresses/caches into whatever `cachePath` points at; pointing it at the
+same read-only `tessdata/` directory as `langPath` worked locally (a real filesystem, writable) and
+would have crashed the first production request outright, since only `/tmp` is writable in a Vercel
+serverless function. Caught before shipping only because the pipeline was actually run end to end
+locally, not just built - see the smoke-test paragraph below.
 
-**`sharp` and `tesseract.js` are both in `next.config.ts`'s `serverExternalPackages`, the same
-`@prisma/client` is in and for the same reason** - both resolve a platform-specific native
-file (`sharp`'s `.node` binary; `tesseract.js`'s worker script and WASM core) through a dynamic
-`require` at runtime, which is exactly what breaks under webpack bundling. Follows from that:
-**`outputFileTracingIncludes` force-includes their files too**, belt-and-suspenders alongside the
-Prisma entry for the identical reason documented above - confirmed locally that both `sharp`'s
-platform binary and `tessdata/*.gz` show up in `apps/web/.next/server/app/**/*.nft.json` for the
-`/bank-transactions` route (`grep -o '"[^"]*tessdata[^"]*"' .../bank-transactions/page.js.nft.json`
-- same verification method as the Prisma entry, applied here before ever trusting a deploy).
+**`sharp` and `tesseract.js` are deliberately *not* in `next.config.ts`'s `serverExternalPackages`,
+unlike `@prisma/client` right above - tried that first, since `sharp` has the identical
+native-`.node`-via-dynamic-`require` shape, and it broke deployment outright.** Vercel's own
+packaging step failed with "The framework produced an invalid deployment package for a Serverless
+Function... files in symlinked directories" - not a Next.js error, a real deploy failure, caught
+live (the deploy sat as a stale 404 on the new route for the better part of 20 minutes before the
+dashboard's Build Logs actually showed the failure - a hung-looking deploy is worth checking there
+directly rather than continuing to poll the URL). `outputFileTracingIncludes` had also been given
+explicit globs for `sharp`/`tesseract.js` the same way as the Prisma entry above
+(`.pnpm/@img+sharp-*/node_modules/@img/**/*`, etc.) - **that combination is what actually broke
+it**, not `serverExternalPackages` alone. pnpm's `.pnpm/<pkg>@<version>_<hash>/` store is real
+symlinks on Linux (NTFS junctions on Windows, which is why this built clean locally and still
+failed live - a genuine blind spot of Windows-only local testing) - `@img/sharp-<platform>` is
+itself a *scoped* package, symlinked as a directory in pnpm's layout, and a symlinked directory
+among the force-included files is exactly what Vercel's zip step rejects. **The fix was to remove
+both** - not marked external, no explicit trace includes - because Next's own automatic tracing
+already resolves `sharp`'s native binary and `tessdata/*.gz` correctly on its own, confirmed
+locally beforehand: `grep -o '"[^"]*tessdata[^"]*"' .../bank-transactions/page.js.nft.json` and the
+equivalent for `sharp`'s `.node` file both returned real paths with neither package touched in
+`next.config.ts` at all. The Prisma engine's own forced include is unaffected by any of this and is
+still exactly as documented above.
+
 **A genuinely end-to-end smoke test - not just a build succeeding - ran locally before this
-shipped**: a synthetic PNG rendered with Vietnamese diacritics and a VND amount, piped through the
-real `extractTextFromImage` → `parseVietinbankOcrText` pipeline, correctly recognized "Chuyển tới",
-"Trạng thái", "Thành công" and "6,500,000 VND" using only the bundled local trained data, no
-network call. If OCR output ever looks wrong after a dependency bump, rerun that shape of test
-before assuming the parser (not the OCR step) is at fault.
+shipped, and is worth rerunning after touching this pipeline again**: a synthetic PNG rendered with
+Vietnamese diacritics and a VND amount, piped through the real `extractTextFromImage` ->
+`parseVietinbankOcrText` pipeline (`cwd` set to `apps/web`, matching where Next actually runs it, so
+`process.cwd()`-relative paths resolve the same way), correctly recognized "Chuyển tới", "Trạng
+thái", "Thành công" and "6,500,000 VND" using only the bundled local trained data, no network call -
+and this is exactly what caught the `cachePath` bug above, since the run failed loudly rather than
+falling back to something that happened to work locally. If OCR output ever looks wrong after a
+dependency bump, rerun that shape of test before assuming the parser (not the OCR step) is at
+fault - and if a deploy of this route ever fails again, read the actual Build Logs before assuming
+it is still building.
 
 ---
 
