@@ -356,9 +356,10 @@ model Organization {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  users        User[]
-  projects     Project[]
-  integrations OrganizationIntegration[]
+  users            User[]
+  projects         Project[]
+  integrations     OrganizationIntegration[]
+  bankTransactions BankTransaction[]
 }
 
 /// Each organization's own Slack/ClickUp/Resend credentials, self-configured
@@ -414,33 +415,34 @@ model User {
   updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
   deletedAt      DateTime?     @db.Timestamptz(3)
 
-  sessions               Session[]
-  passwordTokens         PasswordToken[]
-  configuredIntegrations OrganizationIntegration[]
-  projectMemberships     ProjectMember[]
-  managedProjects        Project[]                 @relation("ProjectAhnPm")
-  developedProjects      Project[]                 @relation("ProjectAhnDev")
-  accountManagedProject  Project[]                 @relation("ProjectShoplineAm")
-  engineeredProjects     Project[]                 @relation("ProjectShoplineSe")
-  nextActionProjects     Project[]                 @relation("ProjectNextActionOwner")
-  comments               Comment[]
-  mentions               CommentMention[]
-  stageChanges           StageEvent[]
-  blockersOwned          Blocker[]                 @relation("BlockerOwner")
-  blockersCreated        Blocker[]                 @relation("BlockerCreator")
-  blockerOwnerships      BlockerOwnership[]
-  issuesOwned            Issue[]                   @relation("IssueOwner")
-  issuesReported         Issue[]                   @relation("IssueReporter")
-  approvalsRequested     Approval[]                @relation("ApprovalRequester")
-  approvalsDecided       Approval[]                @relation("ApprovalDecider")
-  handoffsSubmitted      HandoffSubmission[]       @relation("HandoffSubmitter")
-  handoffsDecided        HandoffSubmission[]       @relation("HandoffDecider")
-  activities             ActivityEvent[]
-  notifications          Notification[]
-  attachments            Attachment[]
-  auditLogs              AuditLog[]
-  savedViews             SavedView[]
-  introEmailsSent        IntroductionEmail[]
+  sessions                 Session[]
+  passwordTokens           PasswordToken[]
+  configuredIntegrations   OrganizationIntegration[]
+  projectMemberships       ProjectMember[]
+  managedProjects          Project[]                 @relation("ProjectAhnPm")
+  developedProjects        Project[]                 @relation("ProjectAhnDev")
+  accountManagedProject    Project[]                 @relation("ProjectShoplineAm")
+  engineeredProjects       Project[]                 @relation("ProjectShoplineSe")
+  nextActionProjects       Project[]                 @relation("ProjectNextActionOwner")
+  comments                 Comment[]
+  mentions                 CommentMention[]
+  stageChanges             StageEvent[]
+  blockersOwned            Blocker[]                 @relation("BlockerOwner")
+  blockersCreated          Blocker[]                 @relation("BlockerCreator")
+  blockerOwnerships        BlockerOwnership[]
+  issuesOwned              Issue[]                   @relation("IssueOwner")
+  issuesReported           Issue[]                   @relation("IssueReporter")
+  approvalsRequested       Approval[]                @relation("ApprovalRequester")
+  approvalsDecided         Approval[]                @relation("ApprovalDecider")
+  handoffsSubmitted        HandoffSubmission[]       @relation("HandoffSubmitter")
+  handoffsDecided          HandoffSubmission[]       @relation("HandoffDecider")
+  activities               ActivityEvent[]
+  notifications            Notification[]
+  attachments              Attachment[]
+  auditLogs                AuditLog[]
+  savedViews               SavedView[]
+  introEmailsSent          IntroductionEmail[]
+  bankTransactionsImported BankTransaction[]
 
   @@index([organizationId])
   @@index([role])
@@ -610,25 +612,26 @@ model Project {
   nextActionOwner   User?    @relation("ProjectNextActionOwner", fields: [nextActionOwnerId], references: [id])
   currentBlocker    Blocker? @relation("ProjectCurrentBlocker", fields: [currentBlockerId], references: [id])
 
-  members       ProjectMember[]
-  stageEvents   StageEvent[]
-  slaBreaches   SlaBreach[]
-  blockers      Blocker[]           @relation("ProjectBlockers")
-  scopeItems    ScopeItem[]
-  accessItems   AccessItem[]
-  assetItems    AssetItem[]
-  attachments   Attachment[]
-  comments      Comment[]
-  activities    ActivityEvent[]
-  issues        Issue[]
-  invoices      Invoice[]
-  approvals     Approval[]
-  handoffs      HandoffSubmission[]
-  introEmails   IntroductionEmail[]
-  integrations  IntegrationLink[]
-  outbox        OutboxMessage[]
-  notifications Notification[]
-  auditLogs     AuditLog[]
+  members          ProjectMember[]
+  stageEvents      StageEvent[]
+  slaBreaches      SlaBreach[]
+  blockers         Blocker[]           @relation("ProjectBlockers")
+  scopeItems       ScopeItem[]
+  accessItems      AccessItem[]
+  assetItems       AssetItem[]
+  attachments      Attachment[]
+  comments         Comment[]
+  activities       ActivityEvent[]
+  issues           Issue[]
+  invoices         Invoice[]
+  approvals        Approval[]
+  handoffs         HandoffSubmission[]
+  introEmails      IntroductionEmail[]
+  integrations     IntegrationLink[]
+  outbox           OutboxMessage[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+  bankTransactions BankTransaction[]
 
   @@index([stage])
   @@index([health])
@@ -999,11 +1002,77 @@ model Invoice {
   /// ever writes it, and it is at most one invoice per scope item.
   scopeItemId String?       @unique @db.Uuid
 
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  scopeItem ScopeItem? @relation(fields: [scopeItemId], references: [id])
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scopeItem        ScopeItem?        @relation(fields: [scopeItemId], references: [id])
+  bankTransactions BankTransaction[]
 
   @@index([projectId, status])
   @@index([dueDate])
+}
+
+/// A row imported from a screenshot of a bank app's transaction history (VietinBank
+/// first - see `packages/core/src/bank-import`). Organization-scoped, not
+/// project-scoped: most imported rows are AHN's own vendor payments with no
+/// merchant on the other end at all, so `projectId`/`invoiceId` are optional,
+/// filled in only when someone deliberately links a row to a migration's costs.
+/// `rawText` and `screenshotUrl` are kept indefinitely - OCR is never perfect,
+/// and a misparsed row needs the source to fix by hand rather than re-upload.
+model BankTransaction {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projectId      String?      @db.Uuid
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  invoiceId      String?      @db.Uuid
+  invoice        Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  source    BankTransactionSource @default(VIETINBANK)
+  /// The bank app's own label for the transfer method, verbatim - "Nhanh
+  /// 24/7", "Trong VietinBank", etc. Free text on purpose: the set of labels
+  /// a bank uses is not this product's to enumerate.
+  direction String?
+  /// Whole units, not cents - VND has no subunit in practice, unlike the
+  /// USD `Minor` fields elsewhere in this schema.
+  amount    Int
+  currency  String                @default("VND")
+
+  recipientName          String?
+  recipientBank          String?
+  recipientAccountNumber String?
+  content                String?
+  /// The bank's own reference/transaction ID, when the screenshot shows one.
+  /// Not every screenshot includes it, so this cannot be the primary dedupe
+  /// key on its own - see the partial unique index below.
+  transactionRef         String?
+  status                 BankTransactionStatus @default(UNKNOWN)
+  occurredAt             DateTime?             @db.Timestamptz(3)
+
+  rawText       String
+  screenshotUrl String?
+
+  importedById String   @db.Uuid
+  importedBy   User     @relation(fields: [importedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  // A NULL transactionRef never collides with another NULL in Postgres, so
+  // this only actually dedupes the rows that had a reference to begin with -
+  // exactly the rows where re-importing the same screenshot twice would
+  // otherwise silently double an expense.
+  @@unique([organizationId, transactionRef])
+  @@index([organizationId, occurredAt])
+  @@index([projectId])
+  @@index([invoiceId])
+}
+
+enum BankTransactionSource {
+  VIETINBANK
+}
+
+enum BankTransactionStatus {
+  SUCCESS
+  FAILED
+  PENDING
+  UNKNOWN
 }
 
 // ---------------------------------------------------------------------------

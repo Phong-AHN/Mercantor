@@ -108,6 +108,13 @@ const GROUPS: readonly NavGroup[] = [
         description: 'Milestones, outstanding balances and overdue accounts.',
       },
       {
+        href: '/bank-transactions',
+        label: 'Bank transactions',
+        icon: 'Landmark',
+        permissions: ['bank_transaction:read'],
+        description: 'Imported from screenshots of the bank app - vendor payments and expenses.',
+      },
+      {
         href: '/merchants',
         label: 'Merchants',
         icon: 'Store',

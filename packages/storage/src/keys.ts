@@ -20,3 +20,21 @@ export function deriveAttachmentKey(input: { projectId: string; extension: strin
   const key = `project/${input.projectId}/${yyyy}/${mm}/${assetId}.${input.extension}`;
   return { key, assetId };
 }
+
+/**
+ * `bank-import/{organizationId}/{yyyy}/{mm}/{screenshotId}.{ext}` - a bank
+ * transaction screenshot is organization-scoped, not project-scoped (most
+ * imported rows have no project on the other end at all), so this keys off
+ * the organization the same way `deriveAttachmentKey` keys off the project.
+ */
+export function deriveBankImportKey(input: { organizationId: string; extension: string }): {
+  key: string;
+  screenshotId: string;
+} {
+  const screenshotId = randomUUID();
+  const now = clock.now();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const key = `bank-import/${input.organizationId}/${yyyy}/${mm}/${screenshotId}.${input.extension}`;
+  return { key, screenshotId };
+}

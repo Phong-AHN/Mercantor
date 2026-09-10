@@ -45,6 +45,8 @@ export const PERMISSIONS = [
   // Money
   'invoice:read',
   'invoice:manage',
+  'bank_transaction:read',
+  'bank_transaction:import',
 
   // Formal checkpoints
   'approval:read',

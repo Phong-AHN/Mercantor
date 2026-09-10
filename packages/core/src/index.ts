@@ -20,3 +20,4 @@ export * from './intro-email';
 export * from './notification-email';
 export * from './checklists';
 export * from './analytics';
+export * from './bank-import';

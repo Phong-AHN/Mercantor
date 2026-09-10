@@ -25,10 +25,30 @@ const config: NextConfig = {
   // Prisma's own documented fix for the failure (https://pris.ly/d/engine-not-found-nextjs):
   // force-include the engine binaries for every route regardless of what
   // tracing infers.
+  // `sharp` has the identical failure shape - a native `.node` binary
+  // resolved by a dynamic `require`, platform-specific package name decided
+  // at install time (`@img/sharp-linux-x64` on Vercel, not whatever this
+  // built on) - so it gets the same forced include rather than waiting to
+  // find out live in production a second time. `tesseract.js` ships its
+  // worker script and WASM core as plain files under its own package (no
+  // native binary), which tracing follows fine on its own, but the glob is
+  // cheap insurance since bank-import routes are exactly what would 500 if
+  // that assumption turns out wrong the same way Prisma's did.
   outputFileTracingIncludes: {
     '/**/*': [
       '../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**/*',
       '../../node_modules/.prisma/client/**/*',
+      '../../node_modules/.pnpm/@img+sharp-*/node_modules/@img/**/*',
+      '../../node_modules/.pnpm/sharp@*/node_modules/sharp/**/*',
+      '../../node_modules/.pnpm/tesseract.js@*/node_modules/tesseract.js/**/*',
+      '../../node_modules/.pnpm/tesseract.js-core@*/node_modules/tesseract.js-core/**/*',
+      // The Vietnamese + English trained-data files bank-import's OCR step
+      // loads from disk (see apps/web/src/features/bank-import/ocr.ts) -
+      // bundled locally rather than fetched from a CDN at request time, on
+      // purpose: a cold serverless invocation fetching ~15MB over the
+      // network before OCR can even start is the kind of latency this app
+      // just spent a whole pass fixing (see RUNBOOK.md's region entry).
+      './tessdata/**/*',
     ],
   },
   // Workspace packages ship TypeScript source, not a build artefact.
@@ -45,8 +65,20 @@ const config: NextConfig = {
   ],
   // These are Node libraries with dynamic requires and native bits. Bundling
   // them breaks pino's transport resolution and BullMQ's optional drivers, so
-  // the server runtime loads them directly instead.
-  serverExternalPackages: ['bullmq', 'ioredis', 'pino', 'pino-pretty', '@prisma/client'],
+  // the server runtime loads them directly instead. `tesseract.js` and
+  // `sharp` join them for the same reason as `@prisma/client` above -
+  // `sharp` ships a native `.node` binary per platform, `tesseract.js` loads
+  // its worker script and WASM core through `require`/`fs` at runtime, and
+  // webpack bundling either one breaks that resolution.
+  serverExternalPackages: [
+    'bullmq',
+    'ioredis',
+    'pino',
+    'pino-pretty',
+    '@prisma/client',
+    'tesseract.js',
+    'sharp',
+  ],
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },

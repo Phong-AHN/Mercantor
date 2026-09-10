@@ -25,6 +25,7 @@ import type {
   Team,
   UserRole,
 } from './enums';
+import type { BankTransactionStatusCode } from './bank-import';
 
 /**
  * Tones map onto the design system's semantic colours. Every map below is a
@@ -266,6 +267,13 @@ export const APPROVAL_TYPE_LABEL: Record<ApprovalType, Descriptor> = {
   QA: { label: 'QA approved', tone: 'accent' },
   MERCHANT_FINAL: { label: 'Merchant final approval', tone: 'warning' },
   SHOPLINE_DEPLOYMENT: { label: 'SHOPLINE deployment approved', tone: 'info' },
+};
+
+export const BANK_TRANSACTION_STATUS_LABEL: Record<BankTransactionStatusCode, Descriptor> = {
+  SUCCESS: { label: 'Success', tone: 'success' },
+  FAILED: { label: 'Failed', tone: 'danger' },
+  PENDING: { label: 'Pending', tone: 'warning' },
+  UNKNOWN: { label: 'Unknown', tone: 'muted', hint: 'OCR could not read a status.' },
 };
 
 export const APPROVAL_STATUS_LABEL: Record<ApprovalStatus, Descriptor> = {

@@ -70,6 +70,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'merchant:manage',
     'invoice:read',
     'invoice:manage',
+    'bank_transaction:read',
+    'bank_transaction:import',
     'approval:decide_internal',
     'approval:decide_merchant',
     'handoff:submit',
@@ -87,6 +89,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'merchant:manage',
     'invoice:read',
     'invoice:manage',
+    'bank_transaction:read',
+    'bank_transaction:import',
     'approval:decide_internal',
     // A PM may record a merchant decision that arrived by email or on a call.
     // The approval row keeps who recorded it and who decided it apart.

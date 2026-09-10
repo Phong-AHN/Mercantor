@@ -440,6 +440,60 @@ alone will not be enough to change it - check the dashboard first.
 
 ---
 
+## Bank transaction import (OCR)
+
+`/bank-transactions` reads a screenshot of VietinBank's own transaction list (currently the only
+source - `BankTransaction.source` is an enum for when a second bank is added) and turns it into
+rows via OCR, not a bank API integration - there is no VietinBank API credential anywhere in this
+system. Organization-scoped, not project-scoped: most imported rows are AHN's own vendor payments
+with no merchant on the other end at all; `projectCode` at confirm time is how someone deliberately
+links a row to a migration's costs.
+
+**The pipeline, and where each part lives:**
+
+1. `features/bank-import/actions.ts`'s `requestBankImportUploadAction` presigns an upload the same
+   way `features/attachments/actions.ts` does - the browser posts the screenshot straight to the
+   bucket, these bytes never pass through this server in flight.
+2. `previewBankImportAction` reads the object back (magic-number sniffed the same way an attachment
+   is - a declared `image/png` that is not actually one is rejected here, not trusted), runs OCR
+   (`features/bank-import/ocr.ts`: `sharp` preprocesses - grayscale, contrast, upscale - then
+   `tesseract.js` reads it), and returns parsed rows **without saving anything** - `@relay/core`'s
+   `parseVietinbankOcrText` is the actual parsing logic, pure text in/out and unit-tested
+   (`packages/core/src/bank-import.test.ts`) against real screenshot text, independent of the OCR
+   engine. A bad read gets fixed by eye (or just unchecked) in the review UI.
+3. `confirmBankImportAction` persists whatever rows the reviewer kept. The
+   `[organizationId, transactionRef]` unique index is the dedupe - importing the same screenshot
+   twice skips the rows that already exist rather than doubling an expense; a row with no reference
+   visible on the screenshot has nothing to dedupe against and is not deduped.
+
+**The Vietnamese + English trained-data files (`apps/web/tessdata/*.traineddata.gz`, ~15MB total)
+are bundled with the deployment, not fetched from a CDN at request time.** tesseract.js's own
+default behaviour is to fetch each language's trained data from a CDN on first use - fine for a
+long-lived server, a real liability for a cold serverless invocation, which would eat that fetch's
+latency (and its failure modes: CDN down, network blocked, the fetch alone can exceed a function's
+time budget) before OCR even starts. `ocr.ts` points `langPath`/`cachePath` at the local directory
+instead. Downloaded once from `https://tessdata.projectnaptha.com/4.0.0/{lang}.traineddata.gz` and
+committed as-is (still gzipped - tesseract.js's local loader expects that, no local decompression
+step needed).
+
+**`sharp` and `tesseract.js` are both in `next.config.ts`'s `serverExternalPackages`, the same
+`@prisma/client` is in and for the same reason** - both resolve a platform-specific native
+file (`sharp`'s `.node` binary; `tesseract.js`'s worker script and WASM core) through a dynamic
+`require` at runtime, which is exactly what breaks under webpack bundling. Follows from that:
+**`outputFileTracingIncludes` force-includes their files too**, belt-and-suspenders alongside the
+Prisma entry for the identical reason documented above - confirmed locally that both `sharp`'s
+platform binary and `tessdata/*.gz` show up in `apps/web/.next/server/app/**/*.nft.json` for the
+`/bank-transactions` route (`grep -o '"[^"]*tessdata[^"]*"' .../bank-transactions/page.js.nft.json`
+- same verification method as the Prisma entry, applied here before ever trusting a deploy).
+**A genuinely end-to-end smoke test - not just a build succeeding - ran locally before this
+shipped**: a synthetic PNG rendered with Vietnamese diacritics and a VND amount, piped through the
+real `extractTextFromImage` → `parseVietinbankOcrText` pipeline, correctly recognized "Chuyển tới",
+"Trạng thái", "Thành công" and "6,500,000 VND" using only the bundled local trained data, no
+network call. If OCR output ever looks wrong after a dependency bump, rerun that shape of test
+before assuming the parser (not the OCR step) is at fault.
+
+---
+
 ## Backups & data
 
 The project record is the product. Back up Postgres; everything else — Redis, the object store —

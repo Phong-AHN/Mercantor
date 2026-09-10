@@ -92,6 +92,22 @@ export async function readObjectHead(key: string, bytes = 4100): Promise<Buffer>
   return Buffer.concat(chunks);
 }
 
+/**
+ * The whole object, not just a head sample - for the one caller that
+ * actually needs every byte server-side (OCR on an uploaded screenshot),
+ * as opposed to `readObjectHead`'s magic-number sniff.
+ */
+export async function readObject(key: string): Promise<Buffer> {
+  const result = await s3Client().send(new GetObjectCommand({ Bucket: s3Bucket(), Key: key }));
+  const body = result.Body;
+  if (!body) return Buffer.alloc(0);
+  const chunks: Buffer[] = [];
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
 export async function deleteObject(key: string): Promise<void> {
   await s3Client().send(new DeleteObjectCommand({ Bucket: s3Bucket(), Key: key }));
 }
