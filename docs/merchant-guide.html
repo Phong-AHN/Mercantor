@@ -1,0 +1,1669 @@
+<title>Mercantor Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,440..600;1,9..144,440..560&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F6F7FB;
+    --surface: #FFFFFF;
+    --surface-2: #ECEEF7;
+    --ink: #171A2E;
+    --ink-soft: #454A6B;
+    --muted: #6C7093;
+    --faint: #9498B8;
+    --line: #E1E3EF;
+    --line-soft: #EBEDF6;
+
+    --accent: #4B46D6;
+    --accent-ink: #332FA3;
+    --accent-soft: #ECEBFC;
+
+    --shopline: #2E6FA8;
+    --shopline-soft: #E7F1FA;
+    --merchant: #B4650C;
+    --merchant-soft: #FBEEDC;
+
+    --success: #187A4C;
+    --success-ink: #106339;
+    --success-soft: #E3F5EC;
+    --warning: #A15B06;
+    --warning-soft: #FCF0D9;
+    --danger: #B23B3B;
+    --danger-soft: #FBEAEA;
+
+    --shadow: 0 1px 2px rgba(23,26,46,.04), 0 8px 24px -12px rgba(23,26,46,.12);
+    --radius: 14px;
+    --radius-sm: 9px;
+
+    /* Default chrome tint (switcher, brand mark) - each .audience-page
+       overrides these three to its own team colour, and every shared
+       component below reads --local-accent* instead of --accent* so one
+       set of rules re-tints itself per audience automatically. */
+    --local-accent: var(--accent);
+    --local-accent-ink: var(--accent-ink);
+    --local-accent-soft: var(--accent-soft);
+    --switcher-h: 55px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121324;
+      --surface: #191B2E;
+      --surface-2: #21233B;
+      --ink: #ECEDF9;
+      --ink-soft: #C6C9E6;
+      --muted: #9498BE;
+      --faint: #6B6F92;
+      --line: #2E3151;
+      --line-soft: #262848;
+
+      --accent: #8D87F7;
+      --accent-ink: #C6C2FC;
+      --accent-soft: #262A4C;
+
+      --shopline: #74AEE6;
+      --shopline-soft: #1C2E42;
+      --merchant: #E3A75B;
+      --merchant-soft: #3A2A14;
+
+      --success: #4FDB9B;
+      --success-ink: #8BEAC0;
+      --success-soft: #113626;
+      --warning: #F0BB5C;
+      --warning-soft: #3B2C10;
+      --danger: #E68F8F;
+      --danger-soft: #3B1F1F;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121324;
+    --surface: #191B2E;
+    --surface-2: #21233B;
+    --ink: #ECEDF9;
+    --ink-soft: #C6C9E6;
+    --muted: #9498BE;
+    --faint: #6B6F92;
+    --line: #2E3151;
+    --line-soft: #262848;
+
+    --accent: #8D87F7;
+    --accent-ink: #C6C2FC;
+    --accent-soft: #262A4C;
+
+    --shopline: #74AEE6;
+    --shopline-soft: #1C2E42;
+    --merchant: #E3A75B;
+    --merchant-soft: #3A2A14;
+
+    --success: #4FDB9B;
+    --success-ink: #8BEAC0;
+    --success-soft: #113626;
+    --warning: #F0BB5C;
+    --warning-soft: #3B2C10;
+    --danger: #E68F8F;
+    --danger-soft: #3B1F1F;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 {
+    font-family: 'Fraunces', ui-serif, Georgia, serif;
+    font-weight: 560;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  a { color: var(--accent-ink); }
+  code, .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  ::selection { background: var(--accent-soft); color: var(--accent-ink); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- Audience switcher ---------- */
+  .switcher {
+    position: sticky; top: 0; z-index: 40;
+    background: color-mix(in oklab, var(--bg) 90%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .switcher-inner {
+    max-width: 1180px; margin: 0 auto; padding: 12px 20px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .switcher-brand { display: flex; align-items: center; gap: 8px; margin-right: auto; }
+  .switcher-brand .brand-mark { width: 22px; height: 22px; border-radius: 7px; }
+  .switcher-brand .brand-mark svg { width: 12px; height: 12px; }
+  .switcher-brand span { font-size: 12.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink-soft); }
+  .switcher-tabs {
+    display: flex; gap: 3px; padding: 3px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px;
+  }
+  .switcher-tabs button {
+    font: inherit; font-family: 'Inter', sans-serif; font-size: 12.5px; font-weight: 600;
+    padding: 7px 14px; border-radius: 999px; border: none; cursor: pointer;
+    background: transparent; color: var(--muted);
+    display: flex; align-items: center; gap: 6px;
+    transition: background-color .15s, color .15s;
+  }
+  .switcher-tabs button .swatch {
+    width: 7px; height: 7px; border-radius: 999px; background: currentColor; opacity: .55;
+  }
+  .switcher-tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+  .switcher-tabs button[data-for="merchant"][aria-selected="true"] { color: var(--merchant); }
+  .switcher-tabs button[data-for="ahn"][aria-selected="true"] { color: var(--accent-ink); }
+  .switcher-tabs button[data-for="shopline"][aria-selected="true"] { color: var(--shopline); }
+
+  /* Each audience page re-tints every shared component (eyebrow, step
+     badges, callout rule, primary buttons, progress fills) by overriding
+     these three custom properties once, up at the container. */
+  .audience-page[data-audience="merchant"] { --local-accent: var(--merchant); --local-accent-ink: var(--merchant); --local-accent-soft: var(--merchant-soft); }
+  .audience-page[data-audience="ahn"] { --local-accent: var(--accent); --local-accent-ink: var(--accent-ink); --local-accent-soft: var(--accent-soft); }
+  .audience-page[data-audience="shopline"] { --local-accent: var(--shopline); --local-accent-ink: var(--shopline); --local-accent-soft: var(--shopline-soft); }
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 20px 80px;
+    display: grid;
+    grid-template-columns: 232px minmax(0, 760px);
+    gap: 56px;
+    justify-content: center;
+  }
+  @media (max-width: 900px) {
+    .page { grid-template-columns: 1fr; gap: 0; padding: 0 16px 64px; }
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    grid-column: 1 / -1;
+    padding: 44px 0 30px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 26px;
+  }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: var(--accent);
+    display: grid; place-items: center;
+    box-shadow: var(--shadow);
+  }
+  .brand-mark svg { width: 16px; height: 16px; }
+  .brand-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand-sub { font-size: 11px; color: var(--muted); letter-spacing: .02em; }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--local-accent-ink);
+    background: var(--local-accent-soft);
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 999px;
+    margin-bottom: 16px;
+  }
+  .masthead h1 {
+    font-size: clamp(30px, 4vw, 42px);
+    line-height: 1.08;
+    max-width: 19ch;
+    margin: 0 0 14px;
+  }
+  .masthead .lede {
+    font-size: 16.5px;
+    color: var(--ink-soft);
+    max-width: 56ch;
+    margin: 0 0 22px;
+  }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 20px;
+    font-size: 12.5px; color: var(--muted);
+  }
+  .meta-row span { display: flex; align-items: center; gap: 6px; }
+  .meta-row b { color: var(--ink-soft); font-weight: 600; }
+
+  /* ---------- TOC rail ---------- */
+  .toc {
+    align-self: start;
+    position: sticky;
+    top: calc(var(--switcher-h) + 24px);
+  }
+  .toc-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 0 0 12px;
+  }
+  .toc ol { list-style: none; margin: 0; padding: 0; position: relative; }
+  .toc ol::before {
+    content: ''; position: absolute; left: 11px; top: 6px; bottom: 6px;
+    width: 1px; background: var(--line);
+  }
+  .toc li { position: relative; margin: 0; }
+  .toc a {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 8px 4px 8px 0;
+    text-decoration: none;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .toc a:hover { color: var(--local-accent-ink); }
+  .toc .num {
+    position: relative; z-index: 1;
+    width: 23px; height: 23px; flex: none;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+  .toc a:hover .num { border-color: var(--local-accent); color: var(--local-accent-ink); }
+  .toc-note {
+    margin-top: 22px;
+    padding: 13px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  @media (max-width: 900px) {
+    .toc {
+      position: sticky; top: var(--switcher-h); z-index: 20;
+      background: color-mix(in oklab, var(--bg) 88%, transparent);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+      padding: 10px 0;
+      margin: 0 -16px 28px;
+    }
+    .toc-label, .toc-note { display: none; }
+    .toc ol { display: flex; gap: 6px; overflow-x: auto; padding: 0 16px; }
+    .toc ol::before { display: none; }
+    .toc li { flex: none; }
+    .toc a {
+      padding: 6px 12px 6px 8px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+  }
+
+  /* ---------- Main content ---------- */
+  main { min-width: 0; }
+  .quickfacts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 48px;
+    box-shadow: var(--shadow);
+  }
+  .quickfacts div { background: var(--surface); padding: 16px 18px; }
+  .quickfacts dt {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--faint); font-weight: 600; margin-bottom: 6px;
+  }
+  .quickfacts dd { margin: 0; font-size: 13.5px; font-weight: 500; color: var(--ink); }
+  @media (max-width: 620px) { .quickfacts { grid-template-columns: 1fr; } }
+
+  section.step {
+    padding: 46px 0;
+    border-bottom: 1px solid var(--line-soft);
+    scroll-margin-top: 90px;
+  }
+  section.step:last-of-type { border-bottom: none; }
+  .step-head { display: flex; gap: 16px; margin-bottom: 16px; }
+  .step-badge {
+    flex: none; width: 34px; height: 34px; border-radius: 10px;
+    background: var(--local-accent-soft); color: var(--local-accent-ink);
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600; font-size: 13px;
+  }
+  .step h2 { font-size: 22px; margin: 3px 0 6px; }
+  .step .dek { color: var(--muted); font-size: 13.5px; }
+  .step p { color: var(--ink-soft); max-width: 62ch; }
+  .step p.lead { font-size: 15px; color: var(--ink-soft); }
+
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--local-accent);
+    background: var(--surface);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 13px 16px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin: 18px 0;
+  }
+  .callout b { color: var(--ink); }
+  .callout.warn { border-left-color: var(--warning); background: var(--warning-soft); }
+  .callout.warn b { color: var(--warning); }
+  .callout.good { border-left-color: var(--success); background: var(--success-soft); }
+  .callout.good b { color: var(--success-ink); }
+
+  ul.plain, ol.plain { padding-left: 20px; color: var(--ink-soft); font-size: 13.5px; }
+  ul.plain li, ol.plain li { margin: 5px 0; }
+
+  kbd, .field {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: var(--surface-2);
+    color: var(--ink-soft);
+    padding: 2px 6px;
+    border-radius: 5px;
+    border: 1px solid var(--line);
+  }
+
+  /* ---------- Mock UI panels ---------- */
+  .mock {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px 20px;
+    margin: 20px 0;
+  }
+  .mock-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--faint); margin-bottom: 14px;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 600;
+    padding: 3px 9px; border-radius: 999px;
+    border: 1px solid transparent;
+  }
+  .chip.accent { background: var(--local-accent-soft); color: var(--local-accent-ink); }
+  .chip.success { background: var(--success-soft); color: var(--success-ink); }
+  .chip.warning { background: var(--warning-soft); color: var(--warning); }
+  .chip.danger { background: var(--danger-soft); color: var(--danger); }
+  .chip.outline { background: transparent; border-color: var(--line); color: var(--muted); }
+  .chip .dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+
+  .btn {
+    font-size: 12px; font-weight: 600;
+    padding: 6px 12px; border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--surface-2); color: var(--ink-soft);
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .btn.primary { background: var(--local-accent); border-color: var(--local-accent); color: white; }
+
+  /* Overview mock */
+  .ov-progress-track {
+    height: 7px; border-radius: 99px; background: var(--surface-2); overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  .ov-progress-fill { height: 100%; background: var(--local-accent); border-radius: 99px; }
+  .ov-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+  .ov-tile { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; }
+  .ov-tile .row { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; }
+  .ov-tile .bar { height: 5px; border-radius: 99px; background: var(--surface-2); margin: 9px 0 7px; overflow: hidden; }
+  .ov-tile .bar i { display: block; height: 100%; border-radius: 99px; }
+  .ov-tile small { font-size: 11px; color: var(--warning); font-weight: 600; }
+  .ov-alert {
+    background: var(--warning-soft); border: 1px solid color-mix(in oklab, var(--warning) 35%, transparent);
+    border-radius: var(--radius-sm); padding: 10px 13px; font-size: 12.5px; color: var(--warning);
+    font-weight: 600; margin-bottom: 14px;
+  }
+
+  /* Checklist row mock */
+  .clist { border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+  .crow {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 14px; border-bottom: 1px solid var(--line-soft);
+    font-size: 12.5px;
+  }
+  .crow:last-child { border-bottom: none; }
+  .crow .name { font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 7px; }
+  .crow .name small { font-weight: 400; color: var(--muted); display: block; margin-top: 2px; }
+  .crow .actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+  /* Approval pipeline mock */
+  .pipeline { display: flex; align-items: flex-start; margin-top: 6px; }
+  .pipe-step { flex: 1; text-align: center; position: relative; }
+  .pipe-step .connector {
+    position: absolute; top: 14px; left: -50%; width: 100%; height: 2px;
+    background: var(--line); z-index: 0;
+  }
+  .pipe-step.done .connector { background: var(--success); }
+  .pipe-step:first-child .connector { display: none; }
+  .pipe-dot {
+    position: relative; z-index: 1;
+    width: 28px; height: 28px; border-radius: 999px;
+    background: var(--surface-2); border: 2px solid var(--line);
+    display: grid; place-items: center; margin: 0 auto 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+    color: var(--muted);
+  }
+  .pipe-step.done .pipe-dot { background: var(--success); border-color: var(--success); color: white; }
+  .pipe-step.pending .pipe-dot { background: var(--warning-soft); border-color: var(--warning); color: var(--warning); }
+  .pipe-step .plabel { font-size: 10.5px; font-weight: 600; color: var(--ink-soft); line-height: 1.25; }
+  .pipe-step.pending .plabel { color: var(--warning); }
+  .pipe-step .psub { font-size: 9.5px; color: var(--faint); margin-top: 2px; }
+
+  /* Activity mock */
+  .msg {
+    display: flex; gap: 10px; margin-bottom: 14px;
+  }
+  .avatar {
+    width: 26px; height: 26px; border-radius: 999px; flex: none;
+    display: grid; place-items: center; font-size: 10px; font-weight: 700; color: white;
+  }
+  .msg .bubble {
+    background: var(--surface-2); border-radius: 10px; padding: 8px 12px;
+    font-size: 12.5px; color: var(--ink-soft);
+  }
+  .msg .who { font-size: 11px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+
+  /* Contact / FAQ cards */
+  .contact-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0 8px; }
+  @media (max-width: 640px) { .contact-grid { grid-template-columns: 1fr; } }
+  .contact-card {
+    border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px 16px;
+    background: var(--surface);
+  }
+  .contact-card .role { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); font-weight: 600; }
+  .contact-card .who { font-size: 13.5px; font-weight: 600; margin-top: 4px; color: var(--ink); }
+  .contact-card .where { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+
+  .demo-box {
+    border: 1.5px dashed color-mix(in oklab, var(--local-accent) 45%, var(--line));
+    background: var(--local-accent-soft);
+    border-radius: var(--radius-sm);
+    padding: 16px 18px;
+    margin: 20px 0;
+  }
+  .demo-box-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .demo-box-head .t {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--local-accent-ink); font-weight: 600;
+  }
+  .demo-box-head .pw { font-size: 12px; color: var(--ink-soft); }
+  .demo-box-head .pw span { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1px 7px; }
+  .demo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+  .demo-acct {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    padding: 9px 11px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    min-width: 0;
+  }
+  .demo-acct .e {
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto;
+  }
+  .demo-acct .r { font-size: 10px; color: var(--muted); white-space: nowrap; margin-left: 8px; flex: none; }
+
+  .rtable-wrap { overflow-x: auto; margin: 18px 0; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+  table.rtable { width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--surface); }
+  table.rtable th, table.rtable td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+  table.rtable tr:last-child td { border-bottom: none; }
+  table.rtable th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); font-weight: 600; background: var(--surface-2); }
+  table.rtable td.role-name { font-weight: 600; color: var(--ink); white-space: normal; }
+  table.rtable .yes { color: var(--success-ink); font-weight: 700; }
+  table.rtable .no { color: var(--faint); }
+
+  .phase-bar { display: flex; gap: 8px; margin: 16px 0 4px; }
+  .phase-cell { flex: 1; text-align: center; }
+  .phase-swatch { height: 8px; border-radius: 99px; margin-bottom: 7px; }
+  .phase-cell .plabel { font-size: 10.5px; font-weight: 700; color: var(--ink-soft); }
+  .phase-cell .psub { font-size: 9.5px; color: var(--faint); margin-top: 1px; }
+
+  .tabstrip { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tabstrip span {
+    font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 7px;
+    background: var(--surface-2); color: var(--muted); border: 1px solid var(--line);
+  }
+  .tabstrip span.active { background: var(--local-accent-soft); color: var(--local-accent-ink); border-color: transparent; }
+
+  details.faq {
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--surface); margin-bottom: 8px; overflow: hidden;
+  }
+  details.faq summary {
+    padding: 13px 16px; font-size: 13.5px; font-weight: 600; cursor: pointer;
+    list-style: none; display: flex; justify-content: space-between; align-items: center;
+    color: var(--ink);
+  }
+  details.faq summary::-webkit-details-marker { display: none; }
+  details.faq summary::after { content: '+'; color: var(--muted); font-weight: 400; font-size: 16px; }
+  details.faq[open] summary::after { content: '–'; }
+  details.faq .a { padding: 0 16px 15px; font-size: 13px; color: var(--ink-soft); margin: 0; }
+
+  footer {
+    grid-column: 1 / -1;
+    margin-top: 12px;
+    padding-top: 28px;
+    border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+    font-size: 11.5px; color: var(--faint);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    section.step { animation: rise .5s ease both; }
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+</style>
+
+<div class="switcher">
+  <div class="switcher-inner">
+    <div class="switcher-brand">
+      <span class="brand-mark" aria-hidden="true" style="background:var(--accent);display:grid;place-items:center;">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M5 17V9.5A4.5 4.5 0 0 1 9.5 5H12" stroke="white" stroke-width="2.6" stroke-linecap="round"/>
+          <path d="M19 7v7.5a4.5 4.5 0 0 1-4.5 4.5H12" stroke="white" stroke-opacity=".65" stroke-width="2.6" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span>Mercantor Guide</span>
+    </div>
+    <div class="switcher-tabs" role="tablist" aria-label="Choose your role">
+      <button type="button" role="tab" data-for="merchant" aria-selected="true"><span class="swatch" style="color:var(--merchant);"></span>Merchant</button>
+      <button type="button" role="tab" data-for="ahn" aria-selected="false"><span class="swatch" style="color:var(--accent);"></span>AHN</button>
+      <button type="button" role="tab" data-for="shopline" aria-selected="false"><span class="swatch" style="color:var(--shopline);"></span>SHOPLINE</button>
+    </div>
+  </div>
+</div>
+
+<div class="audience-page" data-audience="merchant" id="page-merchant">
+<div class="page">
+  <div class="masthead">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M5 17V9.5A4.5 4.5 0 0 1 9.5 5H12" stroke="white" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M19 7v7.5a4.5 4.5 0 0 1-4.5 4.5H12" stroke="white" stroke-opacity=".65" stroke-width="2.4" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span>
+        <span class="brand-name" style="display:block;">Mercantor</span>
+        <span class="brand-sub">AHN &times; SHOPLINE Migration Portal</span>
+      </span>
+    </div>
+    <p class="eyebrow">Merchant Guide</p>
+    <h1>Your Migration Guide</h1>
+    <p class="lede">
+      A short walkthrough of the Mercantor portal &mdash; the shared workspace where you, AHN, and
+      SHOPLINE track your move from your current platform to SHOPLINE, side by side. Ten minutes
+      now saves back-and-forth email later.
+    </p>
+    <div class="meta-row">
+      <span><b>Reading time</b> ~6 minutes</span>
+      <span><b>You'll need</b> the invite email sent to you</span>
+      <span><b>Works on</b> desktop and mobile browsers</span>
+    </div>
+  </div>
+
+  <nav class="toc" aria-label="Guide sections">
+    <p class="toc-label">In this guide</p>
+    <ol>
+      <li><a href="#signin"><span class="num">1</span> Sign in</a></li>
+      <li><a href="#overview"><span class="num">2</span> Overview</a></li>
+      <li><a href="#access"><span class="num">3</span> Access</a></li>
+      <li><a href="#assets"><span class="num">4</span> Assets</a></li>
+      <li><a href="#approvals"><span class="num">5</span> Approvals</a></li>
+      <li><a href="#activity"><span class="num">6</span> Activity</a></li>
+      <li><a href="#help"><span class="num">7</span> Getting help</a></li>
+    </ol>
+    <div class="toc-note">
+      Bookmark <span class="mono">mercantor.co/portal</span> &mdash; it's the one link you'll need
+      for the whole migration.
+    </div>
+  </nav>
+
+  <main>
+
+    <dl class="quickfacts">
+      <div>
+        <dt>Your portal</dt>
+        <dd class="mono" style="font-size:12.5px;">mercantor.co/portal</dd>
+      </div>
+      <div>
+        <dt>Sign in</dt>
+        <dd class="mono" style="font-size:12.5px;">mercantor.co/sign-in</dd>
+      </div>
+      <div>
+        <dt>Who can see this</dt>
+        <dd>Only you, AHN, and SHOPLINE &mdash; on your project</dd>
+      </div>
+    </dl>
+
+    <section class="step" id="signin">
+      <div class="step-head">
+        <span class="step-badge">1</span>
+        <div>
+          <h2>Sign in for the first time</h2>
+          <p class="dek">One email, one link, one password &mdash; you're in.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Your AHN or SHOPLINE contact set your migration up and sent you an email titled something
+        like <em>"You've been invited to Mercantor."</em> It contains a one-time link.
+      </p>
+      <ol class="plain">
+        <li>Open the email and click <b>Set your password</b>. The link is single-use and expires
+          after a few days &mdash; if it has already been used or you can't find the email, see
+          <a href="#help">Getting help</a> below for how to request a new one.</li>
+        <li>Choose a password of at least <span class="field">12 characters</span>. There's no need
+          to mix in symbols or numbers if you'd rather use a long, memorable phrase &mdash; length
+          is what matters most.</li>
+        <li>You're signed in immediately after &mdash; no separate confirmation step.</li>
+      </ol>
+
+      <div class="mock" role="img" aria-label="Set password screen showing a password field and a Set password button">
+        <p class="mock-label">mercantor.co/set-password</p>
+        <div style="max-width:320px;">
+          <p style="font-size:12px;font-weight:600;color:var(--ink);margin-bottom:4px;">New password<span style="color:var(--danger);">*</span></p>
+          <div style="border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:12.5px;color:var(--faint);background:var(--surface-2);margin-bottom:5px;">••••••••••••</div>
+          <p style="font-size:11px;color:var(--muted);margin-bottom:14px;">At least 12 characters.</p>
+          <span class="btn primary" style="width:100%;justify-content:center;">Set password &rarr;</span>
+        </div>
+      </div>
+
+      <div class="callout">
+        <b>Next time,</b> just go to <span class="mono">mercantor.co/sign-in</span> with your email
+        and this password. Forgot it later? Use <span class="mono">Forgot password</span> on that
+        page &mdash; it emails you a fresh reset link the same way.
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-box-head">
+          <span class="t">Testing? Skip the steps above</span>
+          <span class="pw">Shared password &middot; <span>relay-demo-password</span></span>
+        </div>
+        <div class="demo-grid">
+          <div class="demo-acct"><span class="e">owner@sunrisecoffee.example</span><span class="r">PRJ-0001</span></div>
+          <div class="demo-acct"><span class="e">ops@nordicthread.example</span><span class="r">PRJ-0002</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="step" id="overview">
+      <div class="step-head">
+        <span class="step-badge">2</span>
+        <div>
+          <h2>Your Overview page</h2>
+          <p class="dek">Where your migration stands, and what's waiting on you.</p>
+        </div>
+      </div>
+      <p class="lead">
+        This is the page you land on every time you sign in. It shows one project: yours. No
+        pricing, no internal notes &mdash; just where things stand and what's next.
+      </p>
+
+      <div class="mock" role="img" aria-label="Overview screen mockup showing migration progress, an alert for outstanding items, and Access and Assets tiles">
+        <p class="mock-label">mercantor.co/portal &mdash; Overview</p>
+        <div class="ov-alert">2 things need you</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px;">
+          <span>Migration progress</span><span class="mono" style="font-weight:500;color:var(--muted);">40%</span>
+        </div>
+        <div class="ov-progress-track"><div class="ov-progress-fill" style="width:40%;"></div></div>
+        <div class="ov-tiles">
+          <div class="ov-tile">
+            <div class="row"><span>Access</span><span class="mono" style="font-weight:500;">3/5</span></div>
+            <div class="bar"><i style="width:60%;background:var(--warning);"></i></div>
+            <small>2 still needed from you</small>
+          </div>
+          <div class="ov-tile">
+            <div class="row"><span>Assets</span><span class="mono" style="font-weight:500;">4/4</span></div>
+            <div class="bar"><i style="width:100%;background:var(--success);"></i></div>
+            <small style="color:var(--success-ink);">All done</small>
+          </div>
+        </div>
+      </div>
+
+      <p>Three things to notice on this page every time you visit:</p>
+      <ul class="plain">
+        <li><b style="color:var(--ink);">The step counter</b> (e.g. "Step 3 of 6") tells you where
+          your migration sits in the overall pipeline, from introduction to going live.</li>
+        <li><b style="color:var(--ink);">"Waiting on you"</b> is an amber banner that only appears
+          when something needs your action &mdash; click straight through to it.</li>
+        <li><b style="color:var(--ink);">Who to ask</b> lists your AHN project manager, AHN
+          developer, and SHOPLINE account manager by name, further down the page.</li>
+      </ul>
+    </section>
+
+    <section class="step" id="access">
+      <div class="step-head">
+        <span class="step-badge">3</span>
+        <div>
+          <h2>Providing access</h2>
+          <p class="dek">The credentials AHN needs to actually move your store.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Things like your current platform's admin login, DNS access, or a payment gateway key.
+        Anything marked <span class="chip danger" style="vertical-align:1px;"><span class="dot"></span>needed to start</span>
+        is blocking AHN from beginning work, so those are worth doing first.
+      </p>
+
+      <div class="mock" role="img" aria-label="Access checklist mockup with two example items and status controls">
+        <p class="mock-label">mercantor.co/portal/access</p>
+        <div class="clist">
+          <div class="crow">
+            <span class="name">Store admin login
+              <small>Shopify or your current platform's back office.</small>
+            </span>
+            <span class="actions">
+              <span class="chip warning"><span class="dot"></span>Requested</span>
+              <span class="btn">Attach link</span>
+              <span class="btn">Upload file</span>
+            </span>
+          </div>
+          <div class="crow">
+            <span class="name">DNS access
+              <small>Verified by AHN on Sep 4.</small>
+            </span>
+            <span class="actions">
+              <span class="chip success"><span class="dot"></span>Verified</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <p>For each item, you can:</p>
+      <ul class="plain">
+        <li><b style="color:var(--ink);">Attach a link</b> &mdash; to a shared doc, a password
+          manager entry, or wherever the credential already lives.</li>
+        <li><b style="color:var(--ink);">Upload a file</b> &mdash; if it's easier to send as a
+          document or screenshot.</li>
+        <li><b style="color:var(--ink);">Mark it Received or flag an Issue</b> &mdash; if you sent
+          it another way (email, a call) or something about it isn't working.</li>
+      </ul>
+      <div class="callout">
+        <b>Note:</b> only AHN can mark an item <span class="chip success" style="vertical-align:1px;"><span class="dot"></span>Verified</span>.
+        That's deliberate &mdash; it means someone has actually confirmed the credential works, not
+        just that it was sent.
+      </div>
+    </section>
+
+    <section class="step" id="assets">
+      <div class="step-head">
+        <span class="step-badge">4</span>
+        <div>
+          <h2>Sharing your assets</h2>
+          <p class="dek">Brand files, product data, policies, and your redirect map.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Separate from access, this is the creative and content material AHN needs to actually build
+        your new store &mdash; logos, product photography, copy, and policy pages. Items marked
+        <span class="chip warning" style="vertical-align:1px;">required</span> block launch until
+        they're in; anything else is optional but helps.
+      </p>
+
+      <div class="mock" role="img" aria-label="Assets checklist mockup showing a required item with a due date and an approved item">
+        <p class="mock-label">mercantor.co/portal/assets</p>
+        <div class="clist">
+          <div class="crow">
+            <span class="name">Logo &amp; brand kit <span class="chip warning" style="margin-left:4px;">required</span>
+              <small>due Sep 15</small>
+            </span>
+            <span class="actions">
+              <span class="btn">Attach link</span>
+              <span class="btn">Upload file</span>
+            </span>
+          </div>
+          <div class="crow">
+            <span class="name">Product data export
+              <small>approved Sep 6</small>
+            </span>
+            <span class="actions"><span class="chip success"><span class="dot"></span>Approved</span></span>
+          </div>
+        </div>
+      </div>
+      <p>
+        A link to a shared folder (Google Drive, Dropbox) works just as well as a direct upload
+        &mdash; use whichever is easier for a given file. AHN reviews and approves each one; you'll
+        see the date once they have.
+      </p>
+    </section>
+
+    <section class="step" id="approvals">
+      <div class="step-head">
+        <span class="step-badge">5</span>
+        <div>
+          <h2>Approving your store</h2>
+          <p class="dek">Five checkpoints between the first design and going live &mdash; one of them is yours.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Every migration passes through the same pipeline. The first three are internal quality
+        checks by AHN and SHOPLINE; the fourth is your sign-off, and nothing goes live until you
+        give it.
+      </p>
+
+      <div class="mock" role="img" aria-label="Five-step approval pipeline: Design, Development, QA, Your approval pending, SHOPLINE deployment not started">
+        <p class="mock-label">mercantor.co/portal/approvals</p>
+        <div class="pipeline">
+          <div class="pipe-step done">
+            <div class="connector"></div>
+            <div class="pipe-dot">&check;</div>
+            <div class="plabel">Design</div>
+            <div class="psub">AHN</div>
+          </div>
+          <div class="pipe-step done">
+            <div class="connector"></div>
+            <div class="pipe-dot">&check;</div>
+            <div class="plabel">Development</div>
+            <div class="psub">AHN</div>
+          </div>
+          <div class="pipe-step done">
+            <div class="connector"></div>
+            <div class="pipe-dot">&check;</div>
+            <div class="plabel">QA</div>
+            <div class="psub">AHN + SHOPLINE</div>
+          </div>
+          <div class="pipe-step pending">
+            <div class="connector"></div>
+            <div class="pipe-dot">4</div>
+            <div class="plabel">Your approval</div>
+            <div class="psub">pending</div>
+          </div>
+          <div class="pipe-step">
+            <div class="connector"></div>
+            <div class="pipe-dot">5</div>
+            <div class="plabel">SHOPLINE deploys</div>
+            <div class="psub">goes live</div>
+          </div>
+        </div>
+      </div>
+
+      <p>When your step is reached, you'll see an alert on your Overview page and a card here
+        titled <b style="color:var(--ink);">Your approval</b>. Review the finished store, then
+        either approve it or leave a note explaining what needs to change first.</p>
+      <div class="callout good">
+        <b>Recorded, not assumed.</b> Every approval is stamped with your name and the exact
+        moment you gave it &mdash; it's the official record that you signed off, not just a
+        conversation that happened somewhere else.
+      </div>
+    </section>
+
+    <section class="step" id="activity">
+      <div class="step-head">
+        <span class="step-badge">6</span>
+        <div>
+          <h2>Activity &amp; conversation</h2>
+          <p class="dek">One thread with AHN and SHOPLINE, plus a running log of what's happened.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Instead of a scattered email chain, questions and updates live on your project, where
+        everyone involved can see the same history.
+      </p>
+
+      <div class="mock" role="img" aria-label="Activity feed mockup showing a conversation between the merchant and AHN, and a milestone timeline">
+        <p class="mock-label">mercantor.co/portal/activity</p>
+        <div class="msg">
+          <span class="avatar" style="background:var(--accent);">AL</span>
+          <div>
+            <div class="who">Alex Lin &middot; AHN project manager</div>
+            <div class="bubble">Your redirect map looks good &mdash; QA starts tomorrow.</div>
+          </div>
+        </div>
+        <div class="msg">
+          <span class="avatar" style="background:var(--merchant);">YOU</span>
+          <div>
+            <div class="who">You</div>
+            <div class="bubble">Great, let me know if anything comes up.</div>
+          </div>
+        </div>
+      </div>
+      <p>
+        Use it for anything that isn't a specific access or asset item &mdash; a question about
+        timeline, a change request, or just a heads-up. Replies notify the right person by email
+        automatically, so nothing sits unread in a portal nobody checks.
+      </p>
+    </section>
+
+    <section class="step" id="help" style="border-bottom:none; padding-bottom: 8px;">
+      <div class="step-head">
+        <span class="step-badge">7</span>
+        <div>
+          <h2>Getting help</h2>
+          <p class="dek">Two people, always named, always one click away.</p>
+        </div>
+      </div>
+      <p class="lead">
+        You are never routed through a general support queue. Your project has two named people
+        responsible for it, both listed on your <a href="#overview">Overview</a> page under
+        <b style="color:var(--ink);">Who to ask</b>.
+      </p>
+
+      <div class="contact-grid">
+        <div class="contact-card">
+          <div class="role">Product &amp; timeline</div>
+          <div class="who">Your AHN project manager</div>
+          <div class="where">Runs the migration day to day</div>
+        </div>
+        <div class="contact-card">
+          <div class="role">Technical build</div>
+          <div class="who">Your AHN developer</div>
+          <div class="where">Builds and QAs the migrated store</div>
+        </div>
+        <div class="contact-card">
+          <div class="role">Your SHOPLINE relationship</div>
+          <div class="who">Your SHOPLINE account manager</div>
+          <div class="where">Owns the platform side of the move</div>
+        </div>
+      </div>
+
+      <details class="faq" open>
+        <summary>I lost my invite email, or the link expired</summary>
+        <p class="a">Go to <span class="mono">mercantor.co/forgot-password</span> and enter the
+          email your migration was set up with. If an account exists for it, a fresh reset link
+          arrives within a few minutes &mdash; check spam if it doesn't.</p>
+      </details>
+      <details class="faq">
+        <summary>Can more than one person at my company get access?</summary>
+        <p class="a">Yes &mdash; ask your AHN project manager or SHOPLINE account manager to invite
+          a teammate. Each person gets their own login scoped to the same project.</p>
+      </details>
+      <details class="faq">
+        <summary>Will you ever ask for my password over email or phone?</summary>
+        <p class="a">No. AHN and SHOPLINE will never ask you to share your Mercantor password.
+          The only legitimate password links come from <span class="mono">mercantor.co</span>
+          itself, sent when you request them.</p>
+      </details>
+      <details class="faq">
+        <summary>What if something on the portal looks wrong?</summary>
+        <p class="a">Leave a note in <a href="#activity">Activity</a> or message your project
+          manager directly &mdash; whichever is faster for you.</p>
+      </details>
+    </section>
+
+  </main>
+
+  <footer>
+    <span>Mercantor &mdash; a joint workspace by AHN Media and SHOPLINE.</span>
+    <span>Keep this guide handy until your store is live.</span>
+  </footer>
+</div>
+</div><!-- /page-merchant -->
+
+<div class="audience-page" data-audience="ahn" id="page-ahn" hidden>
+<div class="page">
+  <div class="masthead">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M5 17V9.5A4.5 4.5 0 0 1 9.5 5H12" stroke="white" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M19 7v7.5a4.5 4.5 0 0 1-4.5 4.5H12" stroke="white" stroke-opacity=".65" stroke-width="2.4" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span>
+        <span class="brand-name" style="display:block;">Mercantor</span>
+        <span class="brand-sub">AHN &times; SHOPLINE Migration Portal</span>
+      </span>
+    </div>
+    <p class="eyebrow">AHN Guide</p>
+    <h1>Running Migrations on Mercantor</h1>
+    <p class="lede">
+      Mercantor is where every SHOPLINE migration lives end to end &mdash; the portfolio view,
+      the checklists, the approvals, and the one thread the merchant and SHOPLINE both see. This
+      covers the day-to-day for AHN project managers, developers, and admins.
+    </p>
+    <div class="meta-row">
+      <span><b>Reading time</b> ~8 minutes</span>
+      <span><b>Sign in at</b> mercantor.co/sign-in</span>
+      <span><b>Your account</b> comes from an invite &mdash; ask your admin</span>
+    </div>
+  </div>
+
+  <nav class="toc" aria-label="Guide sections">
+    <p class="toc-label">In this guide</p>
+    <ol>
+      <li><a href="#a-dashboard"><span class="num">1</span> Dashboard</a></li>
+      <li><a href="#a-create"><span class="num">2</span> Bring a merchant on</a></li>
+      <li><a href="#a-invite"><span class="num">3</span> Invite people</a></li>
+      <li><a href="#a-project"><span class="num">4</span> Work a project</a></li>
+      <li><a href="#a-pipeline"><span class="num">5</span> The pipeline</a></li>
+      <li><a href="#a-approvals"><span class="num">6</span> Approvals &amp; handoff</a></li>
+      <li><a href="#a-admin"><span class="num">7</span> Admin toolkit</a></li>
+    </ol>
+    <div class="toc-note">
+      Every write that crosses a permission boundary is recorded in the
+      <span class="mono">Audit log</span> &mdash; nothing here is silent.
+    </div>
+  </nav>
+
+  <main>
+    <dl class="quickfacts">
+      <div>
+        <dt>Sign in</dt>
+        <dd class="mono" style="font-size:12.5px;">mercantor.co/sign-in</dd>
+      </div>
+      <div>
+        <dt>Portfolio</dt>
+        <dd class="mono" style="font-size:12.5px;">mercantor.co/dashboard</dd>
+      </div>
+      <div>
+        <dt>Who can see this</dt>
+        <dd>Your organization &mdash; AHN and SHOPLINE, project by project</dd>
+      </div>
+    </dl>
+
+    <section class="step" id="a-dashboard">
+      <div class="step-head">
+        <span class="step-badge">1</span>
+        <div>
+          <h2>Sign in and your dashboard</h2>
+          <p class="dek">The whole portfolio, in one place, before you open a single project.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Sign in at <span class="mono">mercantor.co/sign-in</span> with the email your admin
+        invited you with. You land on <span class="mono">/dashboard</span> &mdash; portfolio
+        health, where every project sits in the pipeline, and what is ageing.
+      </p>
+
+      <div class="mock" role="img" aria-label="Dashboard mockup showing four pipeline phases with project counts and a health breakdown">
+        <p class="mock-label">mercantor.co/dashboard</p>
+        <div class="phase-bar">
+          <div class="phase-cell"><div class="phase-swatch" style="background:var(--accent);"></div><div class="plabel">Onboarding</div><div class="psub">4 projects</div></div>
+          <div class="phase-cell"><div class="phase-swatch" style="background:var(--accent);opacity:.8;"></div><div class="plabel">Build</div><div class="psub">7 projects</div></div>
+          <div class="phase-cell"><div class="phase-swatch" style="background:var(--accent);opacity:.6;"></div><div class="plabel">Review</div><div class="psub">3 projects</div></div>
+          <div class="phase-cell"><div class="phase-swatch" style="background:var(--accent);opacity:.4;"></div><div class="plabel">Launch</div><div class="psub">2 projects</div></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+          <span class="chip success"><span class="dot"></span>11 on track</span>
+          <span class="chip warning"><span class="dot"></span>4 at risk</span>
+          <span class="chip danger"><span class="dot"></span>1 blocked</span>
+        </div>
+      </div>
+
+      <p>Four things live on this page, all filtered to what you're allowed to see:</p>
+      <ul class="plain">
+        <li><b style="color:var(--ink);">Stage breakdown</b> &mdash; every project bucketed into
+          <span class="mono">Onboarding</span>, <span class="mono">Build</span>,
+          <span class="mono">Review</span>, or <span class="mono">Launch</span>.</li>
+        <li><b style="color:var(--ink);">Health</b> &mdash; On track, At risk, or Blocked, derived
+          automatically from open blockers and ageing, not set by hand.</li>
+        <li><b style="color:var(--ink);">Ageing</b> &mdash; how long each project has sat in its
+          current stage against its target.</li>
+        <li><b style="color:var(--ink);">Money</b> &mdash; visible only if your role holds
+          <span class="mono">invoice:read</span> (AHN Admin/PM, SHOPLINE Admin/AM).</li>
+      </ul>
+      <p>
+        <span class="mono">Analytics</span> (next to Dashboard) has the same data as trends over
+        time &mdash; throughput, cycle time, SLA breaches. <span class="mono">My work</span>
+        narrows everything down to what is waiting specifically on you.
+      </p>
+
+      <div class="demo-box">
+        <div class="demo-box-head">
+          <span class="t">Demo accounts &mdash; testing only</span>
+          <span class="pw">Shared password &middot; <span>relay-demo-password</span></span>
+        </div>
+        <div class="demo-grid">
+          <div class="demo-acct"><span class="e">admin@ahnmedia.example</span><span class="r">Admin</span></div>
+          <div class="demo-acct"><span class="e">linh.tran@ahnmedia.example</span><span class="r">PM</span></div>
+          <div class="demo-acct"><span class="e">david.pham@ahnmedia.example</span><span class="r">PM</span></div>
+          <div class="demo-acct"><span class="e">marcus.hale@ahnmedia.example</span><span class="r">Developer</span></div>
+          <div class="demo-acct"><span class="e">anh.vu@ahnmedia.example</span><span class="r">Developer</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="step" id="a-create">
+      <div class="step-head">
+        <span class="step-badge">2</span>
+        <div>
+          <h2>Bring a merchant on</h2>
+          <p class="dek">One form creates the merchant record, the project, and every checklist.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Go to <span class="mono">/projects/new</span>. AHN Admin, AHN Project Manager, and every
+        SHOPLINE role can do this &mdash; AHN Developer cannot, by design.
+      </p>
+
+      <div class="mock" role="img" aria-label="New project form mockup with merchant name, contact fields, and migration type">
+        <p class="mock-label">mercantor.co/projects/new</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:520px;">
+          <div>
+            <p style="font-size:11px;font-weight:600;color:var(--ink);margin-bottom:4px;">Merchant name</p>
+            <div style="border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:12px;color:var(--ink-soft);background:var(--surface-2);">Sunrise Coffee Co.</div>
+          </div>
+          <div>
+            <p style="font-size:11px;font-weight:600;color:var(--ink);margin-bottom:4px;">Migration type</p>
+            <div style="border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:12px;color:var(--ink-soft);background:var(--surface-2);">One-to-one</div>
+          </div>
+          <div>
+            <p style="font-size:11px;font-weight:600;color:var(--ink);margin-bottom:4px;">Contact name</p>
+            <div style="border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:12px;color:var(--ink-soft);background:var(--surface-2);">Jamie Rivera</div>
+          </div>
+          <div>
+            <p style="font-size:11px;font-weight:600;color:var(--ink);margin-bottom:4px;">Contact email</p>
+            <div style="border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:12px;color:var(--ink-soft);background:var(--surface-2);">jamie@sunrisecoffee.co</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;"><span class="btn primary">Create project &rarr;</span></div>
+      </div>
+
+      <p>Submitting it does five things at once:</p>
+      <ol class="plain">
+        <li>Creates the <span class="mono">Merchant</span> record and its primary contact.</li>
+        <li>Creates the <span class="mono">Project</span> with a code like
+          <span class="mono">PRJ-0042</span>, starting in stage <b style="color:var(--ink);">Introduction</b>.</li>
+        <li>Seeds the Access, Asset, and Scope checklists from your organization's standard
+          templates &mdash; nothing starts from a blank page.</li>
+        <li>Creates all five approval steps (Design, Development, QA, Merchant Final, SHOPLINE
+          Deployment) as <span class="mono">Not requested</span>.</li>
+        <li>Notifies whoever you assigned as AHN PM, AHN developer, or SHOPLINE AM/SE.</li>
+      </ol>
+      <div class="callout">
+        <b>Searching first matters.</b> The form looks up existing merchants as you type, scoped to
+        your organization &mdash; use it before creating a duplicate record for a merchant you're
+        already migrating a second store for.
+      </div>
+    </section>
+
+    <section class="step" id="a-invite">
+      <div class="step-head">
+        <span class="step-badge">3</span>
+        <div>
+          <h2>Invite people</h2>
+          <p class="dek">Two different invite flows &mdash; your colleagues, and the merchant.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Staff (AHN or SHOPLINE) get an org-wide account from <span class="mono">/people</span>.
+        A merchant gets an account scoped to exactly one project, from inside that project.
+      </p>
+      <div class="clist">
+        <div class="crow">
+          <span class="name">AHN &amp; SHOPLINE colleagues
+            <small><span class="mono">/people</span> &middot; requires "Manage people"</small>
+          </span>
+          <span class="actions"><span class="chip accent">Invite</span></span>
+        </div>
+        <div class="crow">
+          <span class="name">The merchant
+            <small>project &rarr; <span class="mono">Settings</span> tab &middot; requires "Manage merchant"</small>
+          </span>
+          <span class="actions"><span class="chip accent">Invite merchant</span></span>
+        </div>
+      </div>
+      <p>
+        Either way it's the same underlying pattern: a real user record is created immediately
+        with an unusable password, a one-time <span class="mono">/set-password</span> link is
+        emailed out, and the account only becomes usable once that link is opened. Re-inviting an
+        email that already has an account restores it rather than duplicating it.
+      </p>
+    </section>
+
+    <section class="step" id="a-project">
+      <div class="step-head">
+        <span class="step-badge">4</span>
+        <div>
+          <h2>Work a project day to day</h2>
+          <p class="dek">Everything about one migration lives behind its own tab strip.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Open any project from <span class="mono">/projects</span> and every view is a tab, not a
+        separate page &mdash; each one is a real link, so pasting a project into Slack takes people
+        straight to the right tab.
+      </p>
+      <div class="mock" role="img" aria-label="Project tab strip mockup listing every section of a project">
+        <p class="mock-label">mercantor.co/projects/PRJ-0042</p>
+        <div class="tabstrip">
+          <span class="active">Overview</span><span>Time &amp; SLA</span><span>Scope</span>
+          <span>Access</span><span>Assets</span><span>Activity</span><span>Blockers</span>
+          <span>Issues</span><span>Approvals</span><span>Invoices</span>
+          <span>SHOPLINE handoff</span><span>Timeline</span><span>Settings</span>
+        </div>
+      </div>
+      <div class="rtable-wrap">
+        <table class="rtable">
+          <thead><tr><th>Tab</th><th>What it's for</th></tr></thead>
+          <tbody>
+            <tr><td class="role-name">Time &amp; SLA</td><td>Every blocker-ownership span, with who it's currently charged to and why.</td></tr>
+            <tr><td class="role-name">Scope</td><td>What's in vs. out of scope for this migration type &mdash; the shared source of truth for "did we agree to build that."</td></tr>
+            <tr><td class="role-name">Access / Assets</td><td>The same checklists the merchant sees on their side &mdash; you verify access, approve assets.</td></tr>
+            <tr><td class="role-name">Blockers</td><td>Anything actively stopping the launch, with an owner and a next action.</td></tr>
+            <tr><td class="role-name">Issues</td><td>Bugs and escalations, by severity.</td></tr>
+            <tr><td class="role-name">Invoices</td><td>Milestone billing for this project. Only shown if your role can see money.</td></tr>
+            <tr><td class="role-name">SHOPLINE handoff</td><td>Where AHN submits the finished build for SHOPLINE's review &mdash; see the next section.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="step" id="a-pipeline">
+      <div class="step-head">
+        <span class="step-badge">5</span>
+        <div>
+          <h2>The pipeline, phase by phase</h2>
+          <p class="dek">Seventeen stages, four phases, one owner at a time.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Every project moves through the same ordered stages. At any moment exactly one team owns
+        the next move &mdash; the Overview tab always names it.
+      </p>
+      <div class="rtable-wrap">
+        <table class="rtable">
+          <thead><tr><th>Phase</th><th>Example stages</th><th>Mostly owned by</th></tr></thead>
+          <tbody>
+            <tr><td class="role-name">Onboarding</td><td>Introduction &rarr; Merchant Contacted &rarr; Kickoff &rarr; Waiting for Access &rarr; Assets Collection</td><td>SHOPLINE, then the merchant</td></tr>
+            <tr><td class="role-name">Build</td><td>Migration &rarr; Design &rarr; Development</td><td>AHN</td></tr>
+            <tr><td class="role-name">Review</td><td>Merchant Design Review &rarr; Internal QA &rarr; Merchant QA &rarr; Migration Validation</td><td>Alternates AHN / merchant</td></tr>
+            <tr><td class="role-name">Launch</td><td>Ready for SHOPLINE Review &rarr; SHOPLINE Review &rarr; Ready for Deployment &rarr; Deployed / Live &rarr; Completed</td><td>SHOPLINE, then AHN closes it out</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warn">
+        <b>On Hold / Blocked</b> sits outside the linear track on purpose &mdash; it's an exception
+        state a project enters and leaves, not a step anyone passes through in order.
+      </div>
+    </section>
+
+    <section class="step" id="a-approvals">
+      <div class="step-head">
+        <span class="step-badge">6</span>
+        <div>
+          <h2>Approvals &amp; the SHOPLINE handoff</h2>
+          <p class="dek">Five sign-offs, three different people deciding them.</p>
+        </div>
+      </div>
+      <div class="mock" role="img" aria-label="Approval pipeline mockup with owners for each of the five steps">
+        <p class="mock-label">mercantor.co/projects/PRJ-0042/approvals</p>
+        <div class="pipeline">
+          <div class="pipe-step done"><div class="connector"></div><div class="pipe-dot">&check;</div><div class="plabel">Design</div><div class="psub">AHN decides</div></div>
+          <div class="pipe-step done"><div class="connector"></div><div class="pipe-dot">&check;</div><div class="plabel">Development</div><div class="psub">AHN decides</div></div>
+          <div class="pipe-step done"><div class="connector"></div><div class="pipe-dot">&check;</div><div class="plabel">QA</div><div class="psub">AHN decides</div></div>
+          <div class="pipe-step pending"><div class="connector"></div><div class="pipe-dot">4</div><div class="plabel">Merchant Final</div><div class="psub">merchant decides</div></div>
+          <div class="pipe-step"><div class="connector"></div><div class="pipe-dot">5</div><div class="plabel">SHOPLINE Deployment</div><div class="psub">SHOPLINE decides</div></div>
+        </div>
+      </div>
+      <p>
+        Design, Development, and QA are decided by AHN (any delivery role). Merchant Final is the
+        merchant's own call &mdash; though an AHN Admin or PM can record a decision that arrived by
+        phone or email on their behalf, kept separately from who actually decided it.
+      </p>
+      <p>
+        Once Design, Development, QA and Merchant Final are all approved and the in-scope data is
+        verified, the <span class="mono">SHOPLINE handoff</span> tab shows a checklist and a
+        <b style="color:var(--ink);">Submit for review</b> button becomes available (AHN Admin/PM).
+        SHOPLINE then decides: approve it &mdash; which opens the final
+        <b style="color:var(--ink);">SHOPLINE Deployment</b> approval &mdash; or send it back with
+        what needs fixing.
+      </p>
+      <div class="callout good">
+        Nothing here is a status update someone forgot to send. Every decision is a row with a
+        name and a timestamp &mdash; that record is what the Audit log and the Timeline tab both
+        read from.
+      </div>
+    </section>
+
+    <section class="step" id="a-admin" style="border-bottom:none;">
+      <div class="step-head">
+        <span class="step-badge">7</span>
+        <div>
+          <h2>Admin toolkit &amp; roles</h2>
+          <p class="dek">Integrations, settings, audit &mdash; and who can touch what.</p>
+        </div>
+      </div>
+      <div class="contact-grid">
+        <div class="contact-card">
+          <div class="role">Integrations</div>
+          <div class="who">Slack, ClickUp, email</div>
+          <div class="where">Connect via OAuth or a pasted token, per organization</div>
+        </div>
+        <div class="contact-card">
+          <div class="role">Settings</div>
+          <div class="who">Ageing thresholds</div>
+          <div class="where">Checklists and notification rules</div>
+        </div>
+        <div class="contact-card">
+          <div class="role">Audit log</div>
+          <div class="who">Every privileged write</div>
+          <div class="where">Who changed what, and when</div>
+        </div>
+      </div>
+
+      <p style="margin-top:22px;">What each AHN role can actually do:</p>
+      <div class="rtable-wrap">
+        <table class="rtable">
+          <thead><tr><th>Can&hellip;</th><th>Admin</th><th>Project Manager</th><th>Developer</th></tr></thead>
+          <tbody>
+            <tr><td class="role-name">Create &amp; assign projects</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">&mdash;</td></tr>
+            <tr><td class="role-name">Invite merchant / manage checklists</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">&mdash;</td></tr>
+            <tr><td class="role-name">Decide Design / Development / QA</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+            <tr><td class="role-name">See &amp; manage invoices</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">&mdash;</td></tr>
+            <tr><td class="role-name">Invite staff / manage integrations</td><td class="yes">Yes</td><td class="yes" style="opacity:.7">Integrations only</td><td class="no">&mdash;</td></tr>
+            <tr><td class="role-name">Delete a project</td><td class="yes">Yes</td><td class="no">&mdash;</td><td class="no">&mdash;</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <b>Forgot your password?</b> <span class="mono">mercantor.co/forgot-password</span> works
+        the same way for staff as it does for merchants &mdash; enter your email, follow the reset
+        link.
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Mercantor &mdash; a joint workspace by AHN Media and SHOPLINE.</span>
+    <span>Questions about access or roles go to your org's Admin.</span>
+  </footer>
+</div>
+</div><!-- /page-ahn -->
+
+<div class="audience-page" data-audience="shopline" id="page-shopline" hidden>
+<div class="page">
+  <div class="masthead">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M5 17V9.5A4.5 4.5 0 0 1 9.5 5H12" stroke="white" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M19 7v7.5a4.5 4.5 0 0 1-4.5 4.5H12" stroke="white" stroke-opacity=".65" stroke-width="2.4" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span>
+        <span class="brand-name" style="display:block;">Mercantor</span>
+        <span class="brand-sub">AHN &times; SHOPLINE Migration Portal</span>
+      </span>
+    </div>
+    <p class="eyebrow">SHOPLINE Guide</p>
+    <h1>Your Merchants' Migrations</h1>
+    <p class="lede">
+      Mercantor is the shared workspace AHN uses to move your merchants onto SHOPLINE. You see
+      every account you're attached to, own the introduction, and get the final say before AHN's
+      build goes live.
+    </p>
+    <div class="meta-row">
+      <span><b>Reading time</b> ~5 minutes</span>
+      <span><b>Sign in at</b> mercantor.co/sign-in</span>
+      <span><b>Your account</b> comes from an invite &mdash; ask an AHN Admin</span>
+    </div>
+  </div>
+
+  <nav class="toc" aria-label="Guide sections">
+    <p class="toc-label">In this guide</p>
+    <ol>
+      <li><a href="#s-dashboard"><span class="num">1</span> Dashboard</a></li>
+      <li><a href="#s-accounts"><span class="num">2</span> Your accounts</a></li>
+      <li><a href="#s-start"><span class="num">3</span> Start a migration</a></li>
+      <li><a href="#s-intro"><span class="num">4</span> Own the introduction</a></li>
+      <li><a href="#s-handoff"><span class="num">5</span> Review &amp; clear for launch</a></li>
+      <li><a href="#s-roles"><span class="num">6</span> Roles on your team</a></li>
+      <li><a href="#s-help"><span class="num">7</span> Getting help</a></li>
+    </ol>
+    <div class="toc-note">
+      You only ever see the projects your account is attached to &mdash; never another agency's.
+    </div>
+  </nav>
+
+  <main>
+    <dl class="quickfacts">
+      <div>
+        <dt>Sign in</dt>
+        <dd class="mono" style="font-size:12.5px;">mercantor.co/sign-in</dd>
+      </div>
+      <div>
+        <dt>Your accounts</dt>
+        <dd class="mono" style="font-size:12.5px;">mercantor.co/projects</dd>
+      </div>
+      <div>
+        <dt>Who can see this</dt>
+        <dd>You, AHN, and the merchant &mdash; on that project only</dd>
+      </div>
+    </dl>
+
+    <section class="step" id="s-dashboard">
+      <div class="step-head">
+        <span class="step-badge">1</span>
+        <div>
+          <h2>Sign in and your dashboard</h2>
+          <p class="dek">Every migration you're attached to, its stage, and its health.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Sign in at <span class="mono">mercantor.co/sign-in</span>. Your
+        <span class="mono">/dashboard</span> shows the same portfolio view AHN sees &mdash; stage,
+        health, and ageing &mdash; scoped to your organization's projects.
+      </p>
+      <div class="mock" role="img" aria-label="Dashboard mockup with a health summary">
+        <p class="mock-label">mercantor.co/dashboard</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <span class="chip success"><span class="dot"></span>9 on track</span>
+          <span class="chip warning"><span class="dot"></span>2 at risk</span>
+          <span class="chip accent"><span class="dot"></span>3 in Launch phase</span>
+        </div>
+      </div>
+      <p>
+        Account Managers and Admins also see invoice totals here; Solutions Engineers see
+        everything else but not money &mdash; the brief keeps SHOPLINE's technical role
+        deliberately clear of anything commercial.
+      </p>
+
+      <div class="demo-box">
+        <div class="demo-box-head">
+          <span class="t">Demo accounts &mdash; testing only</span>
+          <span class="pw">Shared password &middot; <span>relay-demo-password</span></span>
+        </div>
+        <div class="demo-grid">
+          <div class="demo-acct"><span class="e">ops@shopline.example</span><span class="r">Admin</span></div>
+          <div class="demo-acct"><span class="e">priya.raman@shopline.example</span><span class="r">Account Mgr</span></div>
+          <div class="demo-acct"><span class="e">jonas.weber@shopline.example</span><span class="r">Account Mgr</span></div>
+          <div class="demo-acct"><span class="e">dan.okafor@shopline.example</span><span class="r">Solutions Eng</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="step" id="s-accounts">
+      <div class="step-head">
+        <span class="step-badge">2</span>
+        <div>
+          <h2>Your accounts</h2>
+          <p class="dek">Every migration, filterable &mdash; and what's waiting on you specifically.</p>
+        </div>
+      </div>
+      <p class="lead">
+        <span class="mono">/projects</span> lists every migration you can see, filterable by stage
+        or health. <span class="mono">/my-work</span> narrows that down to items that need you by
+        name &mdash; a faster way to start your day than scanning the full list.
+      </p>
+    </section>
+
+    <section class="step" id="s-start">
+      <div class="step-head">
+        <span class="step-badge">3</span>
+        <div>
+          <h2>Start or refer a migration</h2>
+          <p class="dek">SHOPLINE roles can create a project too, not just AHN.</p>
+        </div>
+      </div>
+      <p class="lead">
+        When a merchant on your side is ready to move, use <span class="mono">/projects/new</span>
+        &mdash; the same form AHN uses. It creates the merchant record, the project, and every
+        checklist in one step, and notifies whoever you assign as the AHN project manager and
+        developer.
+      </p>
+      <div class="callout">
+        Search for the merchant by name first &mdash; if they already have a project (a second
+        store, say), the form finds it instead of creating a duplicate record.
+      </div>
+    </section>
+
+    <section class="step" id="s-intro">
+      <div class="step-head">
+        <span class="step-badge">4</span>
+        <div>
+          <h2>Own the introduction</h2>
+          <p class="dek">The first stage is yours by design &mdash; AHN can't start without it.</p>
+        </div>
+      </div>
+      <p class="lead">
+        Every project opens in stage <b style="color:var(--ink);">Introduction</b>, owned by
+        SHOPLINE. That's the send-the-introduction-email step &mdash; getting the merchant looped
+        in and expecting AHN's outreach. From there the merchant moves it into
+        <b style="color:var(--ink);">Merchant Contacted</b>.
+      </p>
+      <p>
+        Once the build is underway, the <span class="mono">Activity</span> tab on the project is
+        where you stay in the loop &mdash; comment there rather than a side email thread, so AHN
+        and the merchant see the same conversation you do.
+      </p>
+    </section>
+
+    <section class="step" id="s-handoff">
+      <div class="step-head">
+        <span class="step-badge">5</span>
+        <div>
+          <h2>Review &amp; clear for launch</h2>
+          <p class="dek">The two moments only SHOPLINE can decide.</p>
+        </div>
+      </div>
+      <div class="mock" role="img" aria-label="Pipeline mockup showing SHOPLINE Review and SHOPLINE Deployment as the final two steps">
+        <p class="mock-label">mercantor.co/projects/PRJ-0042/handoff</p>
+        <div class="pipeline">
+          <div class="pipe-step done"><div class="connector"></div><div class="pipe-dot">&check;</div><div class="plabel">AHN build</div><div class="psub">design + dev + QA</div></div>
+          <div class="pipe-step done"><div class="connector"></div><div class="pipe-dot">&check;</div><div class="plabel">Merchant Final</div><div class="psub">merchant approved</div></div>
+          <div class="pipe-step pending"><div class="connector"></div><div class="pipe-dot">R</div><div class="plabel">SHOPLINE Review</div><div class="psub">your decision</div></div>
+          <div class="pipe-step"><div class="connector"></div><div class="pipe-dot">D</div><div class="plabel">SHOPLINE Deployment</div><div class="psub">clears it live</div></div>
+        </div>
+      </div>
+      <p>
+        AHN submits the finished build on the <span class="mono">SHOPLINE handoff</span> tab once
+        their own checklist is fully met (scope verified, Design/Development/QA/Merchant Final all
+        approved) &mdash; you can't be handed something half-done. From there:
+      </p>
+      <ol class="plain">
+        <li><b style="color:var(--ink);">Approve</b> the handoff, or send it back with what needs
+          fixing &mdash; either way it's a real decision recorded with your name.</li>
+        <li>Once approved, decide the final <b style="color:var(--ink);">SHOPLINE Deployment</b>
+          approval &mdash; the moment the store actually goes live is yours to clear, not AHN's.</li>
+      </ol>
+      <div class="callout good">
+        This is the one approval type only SHOPLINE roles can decide &mdash; not even an AHN Admin
+        can grant it on your behalf.
+      </div>
+    </section>
+
+    <section class="step" id="s-roles">
+      <div class="step-head">
+        <span class="step-badge">6</span>
+        <div>
+          <h2>Roles on your team</h2>
+          <p class="dek">Three SHOPLINE roles, one shared base.</p>
+        </div>
+      </div>
+      <div class="rtable-wrap">
+        <table class="rtable">
+          <thead><tr><th>Can&hellip;</th><th>Admin</th><th>Account Manager</th><th>Solutions Engineer</th></tr></thead>
+          <tbody>
+            <tr><td class="role-name">Create &amp; assign projects</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">Create only</td></tr>
+            <tr><td class="role-name">Send the introduction</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+            <tr><td class="role-name">Decide SHOPLINE Review / Deployment</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+            <tr><td class="role-name">See invoices</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">&mdash;</td></tr>
+            <tr><td class="role-name">Manage issues</td><td class="yes">Yes</td><td class="no">&mdash;</td><td class="yes">Yes</td></tr>
+            <tr><td class="role-name">Invite staff / manage integrations</td><td class="yes">Yes</td><td class="no">&mdash;</td><td class="no">&mdash;</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Solutions Engineer is deliberately kept clear of anything commercial &mdash; same technical
+        visibility as an Account Manager, no invoices.
+      </p>
+    </section>
+
+    <section class="step" id="s-help" style="border-bottom:none;">
+      <div class="step-head">
+        <span class="step-badge">7</span>
+        <div>
+          <h2>Getting help</h2>
+          <p class="dek">Account setup and access questions go to an AHN Admin.</p>
+        </div>
+      </div>
+      <details class="faq" open>
+        <summary>I need a teammate added</summary>
+        <p class="a">Ask an AHN Admin to invite them from <span class="mono">/people</span> with
+          the SHOPLINE role that fits &mdash; Admin, Account Manager, or Solutions Engineer.</p>
+      </details>
+      <details class="faq">
+        <summary>I forgot my password</summary>
+        <p class="a">Use <span class="mono">mercantor.co/forgot-password</span> with your work
+          email &mdash; a reset link arrives within a few minutes.</p>
+      </details>
+      <details class="faq">
+        <summary>Can I see another agency's projects?</summary>
+        <p class="a">No &mdash; every list and search is scoped to your own organization's
+          projects only, by design, at the database level.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer>
+    <span>Mercantor &mdash; a joint workspace by AHN Media and SHOPLINE.</span>
+    <span>Account and role questions go to an AHN Admin.</span>
+  </footer>
+</div>
+</div><!-- /page-shopline -->
+
+<script>
+(function () {
+  var VALID = ['merchant', 'ahn', 'shopline'];
+  var pages = {
+    merchant: document.getElementById('page-merchant'),
+    ahn: document.getElementById('page-ahn'),
+    shopline: document.getElementById('page-shopline'),
+  };
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('.switcher-tabs button'));
+
+  function show(id, opts) {
+    if (VALID.indexOf(id) === -1) id = 'merchant';
+    VALID.forEach(function (key) {
+      pages[key].hidden = key !== id;
+    });
+    buttons.forEach(function (btn) {
+      btn.setAttribute('aria-selected', String(btn.getAttribute('data-for') === id));
+    });
+    if (!opts || opts.scroll !== false) window.scrollTo(0, 0);
+    if (!opts || opts.pushHash !== false) history.replaceState(null, '', '#' + id);
+  }
+
+  buttons.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      show(btn.getAttribute('data-for'));
+    });
+  });
+
+  window.addEventListener('hashchange', function () {
+    show(location.hash.replace('#', ''), { scroll: false, pushHash: false });
+  });
+
+  var initial = location.hash.replace('#', '');
+  show(VALID.indexOf(initial) !== -1 ? initial : 'merchant', { scroll: false, pushHash: false });
+})();
+</script>
