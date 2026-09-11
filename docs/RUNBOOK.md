@@ -150,16 +150,31 @@ exists`** the moment two queries in a row reuse a pooled connection PgBouncer ha
    each hold their own copy of `DATABASE_URL`/`DIRECT_URL`, set separately on each platform, and
    fixing one does nothing for the other.
 
-**Since D-052, `SLACK_BOT_TOKEN` / `CLICKUP_API_TOKEN` / `RESEND_API_KEY` in `.env` do nothing.**
-Every organization now self-configures its own credentials at `/integrations` (encrypted at rest,
-`packages/integrations/src/registry.ts`'s `integrationsFor(organizationId)`), resolved fresh from
-the database per organization rather than from the process environment. These three env vars are
-still declared in `packages/config/src/env.ts` (harmless, optional, unread) only because removing
-a declared env var is a separate cleanup with no functional upside — nothing breaks by leaving
-them. `pnpm test:integration` now always runs against the mock adapter regardless of what is in
-`.env`, since no test fixture organization has a configured `OrganizationIntegration` row unless a
-test deliberately creates one — a fresh failure there is a regression, not a live-API false
-positive, and there is no env var left to blank before re-running.
+**Since D-052, every organization first tries its own self-configured credentials at
+`/integrations`** (encrypted at rest, `packages/integrations/src/registry.ts`'s
+`integrationsFor(organizationId)`), resolved fresh from the database per organization rather than
+from the process environment - self-service is the intended long-term shape, and a stored token can
+change at any moment, so nothing here is cached. **`SLACK_BOT_TOKEN` / `CLICKUP_API_TOKEN` /
+`RESEND_API_KEY` in `.env` are the fallback, not dead** (reverted back from "do nothing" - in
+practice most organizations here are still using AHN's own shared account, not one of their own,
+and requiring every one of them to separately connect a working token before Slack/ClickUp/email
+did anything real broke exactly that, live). The order per provider: an organization's own active,
+decryptable row wins; missing or undecryptable (wrong/rotated `CREDENTIAL_ENCRYPTION_KEY`,
+corruption) falls to the matching env var; both absent falls to the mock, same meaning an absent
+env var always carried. Verified directly against production (read-only): a fake organization id
+with no `OrganizationIntegration` rows at all resolved to `live`/`reachable` for all three
+providers using only the env credentials, and resolved to `mock` for all three once those env vars
+were unset.
+
+**`apps/web/test/integration-setup.ts` deletes these three env vars at the top, on purpose.** A
+developer's real `.env` has real values for them (that is the whole point of the fallback above) -
+without deleting them before any test runs, no test fixture organization has a configured
+`OrganizationIntegration` row (nothing creates one unless a test deliberately does), so every one
+of them would now fall through to those real, working credentials and integration tests would post
+real Slack messages, create real ClickUp tasks and send real email on every run, not hit the mock.
+`env()` caches its result after first call, so this only works because it runs before anything in
+the test file's own import graph has called `env()` yet - the same setup-file-runs-first ordering
+this file already relies on for its `next/headers`/`next/cache` mocks.
 
 **A Redis instance at its `maxmemory` cap rejects the Lua scripts BullMQ needs to schedule
 jobs** (`OOM command not allowed when used memory > 'maxmemory'`), which reads in the worker log
