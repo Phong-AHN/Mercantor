@@ -129,6 +129,13 @@ export interface ClickUpTaskDraft {
   assigneeTeam?: Team;
 }
 
+export interface ClickUpWebhook {
+  webhookId: string;
+  /** Signs every delivery (`X-Signature`) - stored alongside the token, only
+   * ever compared, never sent anywhere after this. */
+  secret: string;
+}
+
 export interface ClickUpProvider {
   readonly name: 'CLICKUP';
   health(): Promise<ProviderHealth>;
@@ -136,6 +143,10 @@ export interface ClickUpProvider {
   createTask(draft: ClickUpTaskDraft): Promise<ProviderResult<ClickUpTaskRef>>;
   updateStatus(update: ClickUpStatusUpdate): Promise<ProviderResult>;
   comment(taskId: string, body: string): Promise<ProviderResult>;
+  /** Registers one webhook (`taskStatusUpdated`) for the whole team, so a
+   * manual move on any linked task's list reaches `/api/webhooks/clickup`. */
+  createWebhook(teamId: string, endpointUrl: string): Promise<ProviderResult<ClickUpWebhook>>;
+  deleteWebhook(webhookId: string): Promise<ProviderResult>;
 }
 
 // ---------------------------------------------------------------------------

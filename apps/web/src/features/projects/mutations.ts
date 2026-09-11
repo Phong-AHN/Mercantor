@@ -2,6 +2,7 @@ import 'server-only';
 import { revalidatePath } from 'next/cache';
 import {
   APPROVAL_TYPE_LABEL,
+  checkTransition,
   clock,
   detectOpenBreaches,
   NotFoundError,
@@ -12,7 +13,8 @@ import {
   type Team,
 } from '@relay/core';
 import { assessHealth } from '@relay/core';
-import { db, type DbTransaction, type Prisma } from '@relay/db';
+import { db, transaction, type DbTransaction, type Prisma } from '@relay/db';
+import { clickUpStatusForTrackedStage } from '@relay/integrations';
 import { projectScopeWhere, type Principal } from '@relay/rbac';
 import { enqueue } from '@relay/queue';
 import { logger } from '@relay/observability';
@@ -273,6 +275,10 @@ export async function fanOut(tx: DbTransaction, update: OutboundUpdate): Promise
     select: { provider: true, externalId: true },
   });
 
+  // Only fetched when a ClickUp link actually needs it - most fan-outs are
+  // Slack-only or have no ClickUp link at all.
+  let trackedStages: ProjectStage[] | null = null;
+
   const ids: string[] = [];
   for (const link of links) {
     if (link.provider === 'SLACK') {
@@ -293,6 +299,28 @@ export async function fanOut(tx: DbTransaction, update: OutboundUpdate): Promise
       );
     }
     if (link.provider === 'CLICKUP' && update.clickUpStage) {
+      if (trackedStages === null) {
+        const project = await tx.project.findUnique({
+          where: { id: update.projectId },
+          select: { clickUpTrackedStages: true },
+        });
+        trackedStages = project?.clickUpTrackedStages ?? [];
+      }
+
+      // A project that opted into precise two-way sync only ever pushes the
+      // stages it actually tracks - the exact, unambiguous label for that
+      // stage, not the generic many-to-one default map. A stage outside the
+      // tracked set is invisible on purpose: skip it rather than push
+      // something the reverse direction (the webhook) could never read back
+      // correctly. A project that never opted in (`trackedStages` empty)
+      // keeps the old one-way, best-effort default-map behaviour, resolved
+      // by the worker itself - `statusName: null` here means "let the worker
+      // fall back", not "nothing to sync".
+      const statusName = trackedStages.length
+        ? clickUpStatusForTrackedStage(update.clickUpStage, trackedStages)
+        : null;
+      if (trackedStages.length && statusName === null) continue;
+
       ids.push(
         await queueOutbox(tx, {
           projectId: update.projectId,
@@ -301,6 +329,7 @@ export async function fanOut(tx: DbTransaction, update: OutboundUpdate): Promise
           payload: {
             taskId: link.externalId,
             stage: update.clickUpStage,
+            statusName,
             note: update.title,
           },
         }),
@@ -308,6 +337,102 @@ export async function fanOut(tx: DbTransaction, update: OutboundUpdate): Promise
     }
   }
   return ids;
+}
+
+export type ClickUpSyncOutcome =
+  { applied: true; from: ProjectStage; to: ProjectStage } | { applied: false; reason: string };
+
+/**
+ * The reverse of `fanOut`'s ClickUp branch - a manual move on the linked
+ * ClickUp task's list, delivered by `/api/webhooks/clickup`, applied back to
+ * the project. Deliberately does **not** call `fanOut` for ClickUp: pushing
+ * the same status straight back at the task that just reported it would be
+ * a redundant round trip at best and a feedback loop at worst. Slack still
+ * hears about it - a real stage change either way - just not ClickUp.
+ *
+ * Attributed to the project's own AHN project manager (the closest thing to
+ * an accountable actor a webhook has) rather than left blank -
+ * `StageEvent.changedById` is not nullable, and a real person's audit trail
+ * for a monitored change beats inventing a system user for one caller. A
+ * project with no PM assigned cannot be synced this way - reported back as
+ * `applied: false`, never silently skipped.
+ */
+export async function applyClickUpStatusSync(input: {
+  projectId: string;
+  to: ProjectStage;
+}): Promise<ClickUpSyncOutcome> {
+  const project = await db.project.findUnique({
+    where: { id: input.projectId },
+    select: {
+      code: true,
+      stage: true,
+      ahnProjectManagerId: true,
+      merchant: { select: { name: true } },
+    },
+  });
+  if (!project) return { applied: false, reason: 'Project not found.' };
+  if (project.stage === input.to) {
+    return { applied: false, reason: `Already at ${STAGES[input.to].label}.` };
+  }
+  if (!project.ahnProjectManagerId) {
+    return {
+      applied: false,
+      reason: 'No AHN project manager is assigned to this project to attribute the change to.',
+    };
+  }
+
+  const check = checkTransition(project.stage, input.to);
+  if (!check.allowed) {
+    return { applied: false, reason: check.reason ?? 'That stage change is not allowed.' };
+  }
+
+  const from = project.stage;
+  const reason = 'Synced automatically from a ClickUp status change.';
+
+  await transaction(async (tx) => {
+    await moveStage(tx, {
+      projectId: input.projectId,
+      to: input.to,
+      changedById: project.ahnProjectManagerId!,
+      reason: check.requiresReason ? reason : null,
+    });
+
+    await recordActivity(tx, {
+      projectId: input.projectId,
+      type: 'STAGE_CHANGED',
+      actorId: null,
+      summary: `Stage moved to ${STAGES[input.to].label} (synced from ClickUp).`,
+      visibility: 'EVERYONE',
+      payload: { from, to: input.to, source: 'clickup_webhook' },
+    });
+
+    await audit(tx, {
+      principal: null,
+      projectId: input.projectId,
+      action: 'clickup.webhook.stage_sync',
+      entityType: 'Project',
+      entityId: input.projectId,
+      before: { stage: from },
+      after: { stage: input.to },
+      reason,
+    });
+
+    await recomputeHealth(tx, input.projectId);
+
+    await fanOut(tx, {
+      projectId: input.projectId,
+      projectCode: project.code,
+      title: `${project.merchant.name} moved to ${STAGES[input.to].label}`,
+      body: 'Synced from a ClickUp status change.',
+      tone: 'info',
+      fields: [{ label: 'From', value: STAGES[from].label }],
+      // No `clickUpStage` here - this is the one call site that must never
+      // push back to ClickUp; see the function doc above.
+    });
+  });
+
+  revalidateProject(project.code);
+  return { applied: true, from, to: input.to };
 }
 
 /**

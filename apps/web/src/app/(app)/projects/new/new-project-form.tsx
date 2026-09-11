@@ -3,13 +3,21 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
-import { MIGRATION_TYPE_LABEL, MIGRATION_TYPES, type MigrationType } from '@relay/core';
+import {
+  MIGRATION_TYPE_LABEL,
+  MIGRATION_TYPES,
+  PROJECT_STAGES,
+  STAGES,
+  type MigrationType,
+  type ProjectStage,
+} from '@relay/core';
 import {
   Alert,
   Button,
   Card,
   CardBody,
   CardHeader,
+  Checkbox,
   Field,
   Fieldset,
   FormActions,
@@ -55,6 +63,7 @@ export function NewProjectForm({
     ahnDeveloperId: '',
     shoplineAmId: '',
     shoplineSeId: '',
+    clickUpTrackedStages: [] as ProjectStage[],
   });
 
   const action = useAction(createProjectAction, {
@@ -62,6 +71,15 @@ export function NewProjectForm({
   });
 
   const set = (key: keyof typeof form) => (value: string) => setForm({ ...form, [key]: value });
+
+  function toggleTrackedStage(stage: ProjectStage) {
+    setForm((current) => ({
+      ...current,
+      clickUpTrackedStages: current.clickUpTrackedStages.includes(stage)
+        ? current.clickUpTrackedStages.filter((value) => value !== stage)
+        : [...current.clickUpTrackedStages, stage],
+    }));
+  }
 
   return (
     <Card>
@@ -306,6 +324,32 @@ export function NewProjectForm({
           </div>
         </Fieldset>
 
+        <Fieldset
+          legend="ClickUp status sync"
+          description="Pick the stages worth tracking two-way with the linked ClickUp task - a manual move on ClickUp's side will update this project too, not just the other way around. Leave all unchecked to keep the old one-way push only."
+        >
+          <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {PROJECT_STAGES.map((stage) => (
+              <Checkbox
+                key={stage}
+                id={`track-${stage}`}
+                label={STAGES[stage].label}
+                checked={form.clickUpTrackedStages.includes(stage)}
+                onChange={() => toggleTrackedStage(stage)}
+              />
+            ))}
+          </div>
+          {form.clickUpTrackedStages.length > 0 && (
+            <Alert tone="info" dense>
+              After creating, set up a status on the linked ClickUp list for each stage checked
+              above, named exactly the same -{' '}
+              {form.clickUpTrackedStages.map((stage) => `"${STAGES[stage].label}"`).join(', ')}.
+              Once both sides have the same statuses, moving the task on either side keeps the other
+              in sync.
+            </Alert>
+          )}
+        </Fieldset>
+
         <FormActions>
           <Button
             variant="primary"
@@ -331,6 +375,7 @@ export function NewProjectForm({
                 ahnDeveloperId: form.ahnDeveloperId || undefined,
                 shoplineAmId: form.shoplineAmId || undefined,
                 shoplineSeId: form.shoplineSeId || undefined,
+                clickUpTrackedStages: form.clickUpTrackedStages,
               })
             }
           >

@@ -1,4 +1,4 @@
-import type { ProjectStage } from '@relay/core';
+import { STAGES, type ProjectStage } from '@relay/core';
 import type {
   ClickUpProvider,
   ClickUpStatusUpdate,
@@ -49,6 +49,35 @@ export function clickUpStatusFor(
   overrides?: Partial<Record<ProjectStage, string>>,
 ): string {
   return overrides?.[stage] ?? DEFAULT_CLICKUP_STATUS_MAP[stage];
+}
+
+/**
+ * The precise alternative to the map above, for a project that opted into
+ * two-way status sync (`Project.clickUpTrackedStages`). A genuine *subset* of
+ * stages, not the full 17-stage machine, chosen deliberately so each tracked
+ * stage's own label - already unique across every stage that exists - can be
+ * the exact ClickUp status name, with no many-to-one collision to disambiguate.
+ * Two-way sync only ever applies within that tracked set; a stage the project
+ * did not opt into is invisible to both directions, on purpose - see
+ * `apps/web/src/app/api/webhooks/clickup/route.ts` for the reverse direction.
+ */
+export function clickUpStatusForTrackedStage(
+  stage: ProjectStage,
+  trackedStages: readonly ProjectStage[],
+): string | null {
+  return trackedStages.includes(stage) ? STAGES[stage].label : null;
+}
+
+/** The reverse of the above - a ClickUp status name back to the one stage it
+ * can only ever mean, or `null` if it matches none of what this project
+ * tracks (a status the project never opted into, or a typo on the ClickUp
+ * side - both are reported to the caller as "no match", not guessed at). */
+export function stageForClickUpStatus(
+  statusName: string,
+  trackedStages: readonly ProjectStage[],
+): ProjectStage | null {
+  const normalized = statusName.trim().toLowerCase();
+  return trackedStages.find((stage) => STAGES[stage].label.toLowerCase() === normalized) ?? null;
 }
 
 export function createClickUpProvider(apiToken: string): ClickUpProvider {
@@ -166,6 +195,32 @@ export function createClickUpProvider(apiToken: string): ClickUpProvider {
         body: { comment_text: body, notify_all: false },
       });
       return result.ok ? { ok: true, externalRef: taskId } : { ok: false, error: result.error };
+    },
+
+    async createWebhook(teamId: string, endpointUrl: string) {
+      const result = await call<{ id: string; webhook?: { secret?: string } }>(
+        `/team/${encodeURIComponent(teamId)}/webhook`,
+        {
+          method: 'POST',
+          body: { endpoint: endpointUrl, events: ['taskStatusUpdated'] },
+        },
+      );
+      if (!result.ok || !result.data?.webhook?.secret) {
+        return {
+          ok: false,
+          error: result.error ?? {
+            code: 'UNAVAILABLE' as const,
+            userMessage: 'ClickUp did not return a webhook.',
+            retryable: true,
+          },
+        };
+      }
+      return { ok: true, data: { webhookId: result.data.id, secret: result.data.webhook.secret } };
+    },
+
+    async deleteWebhook(webhookId: string) {
+      const result = await call(`/webhook/${encodeURIComponent(webhookId)}`, { method: 'DELETE' });
+      return result.ok ? { ok: true } : { ok: false, error: result.error };
     },
   };
 }

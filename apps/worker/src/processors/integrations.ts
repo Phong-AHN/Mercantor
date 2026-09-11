@@ -183,10 +183,15 @@ async function deliver(
   if (provider === 'CLICKUP') {
     if (kind === 'stage_sync') {
       const stage = payload.stage as ProjectStage;
+      // A precisely-resolved name (a project that opted into tracked-stage
+      // sync - see mutations.ts's `fanOut`) wins; otherwise the old
+      // generic, many-to-one default map, exactly as before.
+      const statusName =
+        (payload.statusName as string | null | undefined) ?? clickUpStatusFor(stage);
       return registry.clickup.updateStatus({
         taskId: String(payload.taskId ?? ''),
         stage,
-        statusName: clickUpStatusFor(stage),
+        statusName,
         note: payload.note
           ? `${String(payload.note)}\n\nPortal stage: ${STAGES[stage].label}\n${context.projectUrl}`
           : undefined,

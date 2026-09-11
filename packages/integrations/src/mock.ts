@@ -144,6 +144,14 @@ export const mockClickUpProvider: ClickUpProvider = {
     record('CLICKUP', 'comment', { taskId, body });
     return { ok: true, externalRef: taskId };
   },
+  async createWebhook(teamId: string, endpointUrl: string) {
+    record('CLICKUP', 'create_webhook', { teamId, endpointUrl });
+    return { ok: true, data: { webhookId: `mock-webhook-${teamId}`, secret: 'mock-secret' } };
+  },
+  async deleteWebhook(webhookId: string) {
+    record('CLICKUP', 'delete_webhook', { webhookId });
+    return { ok: true };
+  },
 };
 
 export const mockEmailProvider: EmailProvider = {

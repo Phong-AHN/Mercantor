@@ -370,23 +370,31 @@ model Organization {
 /// runs the mock adapter for it, the same meaning an absent env var used to
 /// carry.
 model OrganizationIntegration {
-  id              String              @id @default(uuid(7)) @db.Uuid
-  organizationId  String              @db.Uuid
-  provider        IntegrationProvider
+  id                String              @id @default(uuid(7)) @db.Uuid
+  organizationId    String              @db.Uuid
+  provider          IntegrationProvider
   /// `iv:authTag:ciphertext`, each base64 - see `encryptSecret`. Decrypts to
   /// a JSON object shaped per provider (e.g. Slack: `{botToken}`; ClickUp:
   /// `{apiToken, teamId?}`; Email: `{apiKey, from}`).
-  encryptedConfig String
-  isActive        Boolean             @default(true)
-  configuredById  String?             @db.Uuid
-  createdAt       DateTime            @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime            @updatedAt @db.Timestamptz(3)
+  encryptedConfig   String
+  isActive          Boolean             @default(true)
+  configuredById    String?             @db.Uuid
+  /// ClickUp's own webhook id (plaintext - not a secret, ClickUp assigns it).
+  /// The signing secret ClickUp issues alongside it lives inside
+  /// `encryptedConfig` like everything else; this column exists only so the
+  /// webhook receiver can find *which* organization a delivery belongs to
+  /// without decrypting every ClickUp row on every request - ClickUp's
+  /// payload carries its own `webhook_id`, not an organization id.
+  externalWebhookId String?
+  createdAt         DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime            @updatedAt @db.Timestamptz(3)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   configuredBy User?        @relation(fields: [configuredById], references: [id], onDelete: SetNull)
 
   @@unique([organizationId, provider])
   @@index([organizationId])
+  @@index([externalWebhookId])
 }
 
 // ---------------------------------------------------------------------------
@@ -597,6 +605,18 @@ model Project {
   currency           String @default("USD")
 
   deploymentNotes String?
+
+  /// The stages this project's ClickUp task actually tracks for two-way
+  /// status sync, chosen at creation - a real subset, not the full pipeline,
+  /// on purpose: each tracked stage's own label becomes the exact ClickUp
+  /// status name expected on the linked list (see
+  /// `packages/integrations/src/clickup.ts`'s `clickUpStatusMapFor`), which
+  /// only stays an unambiguous one-to-one mapping because it is deliberately
+  /// smaller than the full 17-stage state machine, not a subset of a
+  /// many-to-one generic map. Empty means this project has not opted in -
+  /// stage changes still push to ClickUp one-way as free text, and nothing
+  /// syncs back.
+  clickUpTrackedStages ProjectStage[] @default([])
 
   createdAt DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @db.Timestamptz(3)

@@ -33,9 +33,12 @@ import type { ClickUpProvider, EmailProvider, IntegrationRegistry, SlackProvider
 interface SlackConfig {
   botToken: string;
 }
-interface ClickUpConfig {
+export interface ClickUpConfig {
   apiToken: string;
   teamId?: string;
+  /** Set automatically when a webhook is registered - signs every delivery
+   * to `/api/webhooks/clickup`. Never written any other way. */
+  webhookSecret?: string;
 }
 interface EmailConfig {
   apiKey: string;
@@ -148,6 +151,8 @@ export async function setOrganizationIntegration(input: {
   config: SlackConfig | ClickUpConfig | EmailConfig | null;
   configuredById: string;
 }): Promise<void> {
+  if (input.provider === 'CLICKUP') await teardownClickUpWebhook(input.organizationId);
+
   if (input.config === null) {
     await db.organizationIntegration.deleteMany({
       where: { organizationId: input.organizationId, provider: input.provider },
@@ -155,10 +160,31 @@ export async function setOrganizationIntegration(input: {
     return;
   }
 
-  const encryptedConfig = encryptSecret(
-    JSON.stringify(input.config),
-    env().CREDENTIAL_ENCRYPTION_KEY,
-  );
+  let config = input.config;
+  let externalWebhookId: string | null = null;
+
+  // A ClickUp team id is what a webhook registers against - reconnecting
+  // (or connecting for the first time) tries to set one up so a manual move
+  // on the linked list reaches `/api/webhooks/clickup`. Best effort only: a
+  // missing team id, or ClickUp rejecting the request, still saves the token
+  // and leaves the existing one-way push working exactly as before this
+  // feature existed - it never blocks saving credentials.
+  if (input.provider === 'CLICKUP') {
+    const clickupConfig = config as ClickUpConfig;
+    if (clickupConfig.teamId) {
+      const provider = createClickUpProvider(clickupConfig.apiToken);
+      const webhook = await provider.createWebhook(
+        clickupConfig.teamId,
+        `${env().APP_URL}/api/webhooks/clickup`,
+      );
+      if (webhook.ok && webhook.data) {
+        externalWebhookId = webhook.data.webhookId;
+        config = { ...clickupConfig, webhookSecret: webhook.data.secret };
+      }
+    }
+  }
+
+  const encryptedConfig = encryptSecret(JSON.stringify(config), env().CREDENTIAL_ENCRYPTION_KEY);
 
   await db.organizationIntegration.upsert({
     where: {
@@ -169,11 +195,65 @@ export async function setOrganizationIntegration(input: {
       provider: input.provider,
       encryptedConfig,
       configuredById: input.configuredById,
+      externalWebhookId,
     },
     update: {
       encryptedConfig,
       isActive: true,
       configuredById: input.configuredById,
+      externalWebhookId,
     },
   });
+}
+
+/** Deletes whatever webhook the organization's *current* ClickUp row points
+ * at, if any - called before every reconnect and every disconnect, so a
+ * rotated token never leaves an orphaned webhook still delivering to this
+ * app with a secret nothing has anymore. Best effort: ClickUp being
+ * unreachable here never blocks saving or clearing the org's own config. */
+async function teardownClickUpWebhook(organizationId: string): Promise<void> {
+  const existing = await db.organizationIntegration.findUnique({
+    where: { organizationId_provider: { organizationId, provider: 'CLICKUP' } },
+    select: { encryptedConfig: true, externalWebhookId: true },
+  });
+  if (!existing?.externalWebhookId) return;
+
+  try {
+    const decrypted = decryptSecret(existing.encryptedConfig, env().CREDENTIAL_ENCRYPTION_KEY);
+    const config = JSON.parse(decrypted) as ClickUpConfig;
+    await createClickUpProvider(config.apiToken).deleteWebhook(existing.externalWebhookId);
+  } catch {
+    // Undecryptable or ClickUp unreachable - an orphaned webhook on
+    // ClickUp's side is harmless (it just posts to an endpoint nothing
+    // looks up anymore, since the row itself is about to change) and never
+    // worth blocking a reconnect or disconnect over.
+  }
+}
+
+/**
+ * The webhook receiver's one lookup: which organization does this delivery
+ * belong to, and what secret signs it. `webhook_id` is the only identifier
+ * ClickUp's payload actually carries - there is no organization id in it -
+ * which is the whole reason `externalWebhookId` exists as a plain, indexed
+ * column rather than something the receiver would have to decrypt every
+ * ClickUp row to find.
+ */
+export async function findClickUpWebhookSecret(
+  webhookId: string,
+): Promise<{ organizationId: string; secret: string } | null> {
+  const row = await db.organizationIntegration.findFirst({
+    where: { provider: 'CLICKUP', externalWebhookId: webhookId, isActive: true },
+    select: { organizationId: true, encryptedConfig: true },
+  });
+  if (!row) return null;
+
+  try {
+    const decrypted = decryptSecret(row.encryptedConfig, env().CREDENTIAL_ENCRYPTION_KEY);
+    const config = JSON.parse(decrypted) as ClickUpConfig;
+    return config.webhookSecret
+      ? { organizationId: row.organizationId, secret: config.webhookSecret }
+      : null;
+  } catch {
+    return null;
+  }
 }

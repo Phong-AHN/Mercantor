@@ -455,6 +455,60 @@ alone will not be enough to change it - check the dashboard first.
 
 ---
 
+## ClickUp two-way status sync
+
+The ClickUp push (`features/projects/mutations.ts`'s `fanOut`) was one-way by design (D-052-era
+comment: "the portal pushes stage changes at it and never reads status back as the truth") -
+moving a task's status manually on ClickUp never updated the project here. Changed because in
+practice PMs do move tasks by hand, and the project silently kept showing a stale stage.
+
+**Why the old `DEFAULT_CLICKUP_STATUS_MAP` (`packages/integrations/src/clickup.ts`) could not just
+be read backwards**: it maps many stages onto the same ClickUp status name on purpose (e.g.
+`INTRODUCTION` and `MERCHANT_CONTACTED` both push `"to do"`) - fine for a one-way push, useless for
+the reverse, since seeing `"to do"` come back could mean either stage. Only 3 of its 12 distinct
+status strings map to exactly one stage.
+
+**Fixed with an opt-in, always-unambiguous second mapping** rather than trying to disambiguate the
+old one: a project picks a genuine *subset* of stages to track
+(`Project.clickUpTrackedStages`, chosen at creation in `/projects/new`'s "ClickUp status sync"
+section). Each tracked stage's own label - e.g. "Introduction", "Merchant Design Review" - already
+unique across all 18 stages - becomes the exact ClickUp status name expected on the linked list
+(`clickUpStatusForTrackedStage` / `stageForClickUpStatus` in `clickup.ts`, unit-tested in
+`clickup-status-sync.test.ts`). A stage outside the tracked set is invisible to both directions -
+`fanOut` skips pushing it, and an incoming webhook for an untracked status name is reported back as
+"not tracked," never guessed at. A project with an empty tracked set keeps the old one-way,
+best-effort default-map push exactly as before - this is additive, not a breaking change for any
+project that has not opted in.
+
+**The webhook, `/api/webhooks/clickup`**: registered per organization by
+`setOrganizationIntegration` (`packages/integrations/src/registry.ts`) whenever a ClickUp team id
+is saved - best effort, never blocks saving the token itself if ClickUp rejects the registration
+(no team id configured, most commonly). The returned `webhookId` is stored in
+`OrganizationIntegration.externalWebhookId` **in plaintext, deliberately** - not a secret, just how
+the receiver finds which organization a delivery belongs to without decrypting every ClickUp row on
+every request, since ClickUp's payload carries its own `webhook_id`, not an organization id. The
+actual signing `secret` ClickUp issues alongside it stays inside the encrypted config like
+everything else, and every delivery's `X-Signature` header is verified against it
+(`timingSafeEqual`) before anything in the payload is trusted.
+
+**Applying an incoming change deliberately does not call `fanOut`'s ClickUp branch**
+(`applyClickUpStatusSync` in `features/projects/mutations.ts`) - pushing the same status straight
+back at the task that just reported it would be a redundant round trip at best, a feedback loop at
+worst. Slack still hears about it; ClickUp does not hear its own news back. Attributed to the
+project's own AHN project manager (`StageEvent.changedById` is not nullable, and a real person's
+audit trail beats inventing a system user) - **a project with no PM assigned cannot be synced this
+way**, reported back as a `lastError` on the `IntegrationLink`, never silently dropped.
+`checkTransition` (the same state-machine rules a manual move in this app already obeys) still
+applies - an illegal move on the ClickUp side is not applied here either, and is reported back the
+same way as an unmatched status.
+
+**Reconnecting or disconnecting ClickUp always tears down the previous webhook first**
+(`teardownClickUpWebhook`) - best effort (ClickUp unreachable never blocks saving/clearing the
+org's own config), but without it a rotated token would leave an orphaned webhook on ClickUp's side
+still trying to deliver with a secret nothing has anymore.
+
+---
+
 ## Backups & data
 
 The project record is the product. Back up Postgres; everything else — Redis, the object store —

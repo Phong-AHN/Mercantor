@@ -7,6 +7,7 @@ import {
   DEFAULT_ASSET_CHECKLIST,
   DEFAULT_SCOPE_TEMPLATE,
   MIGRATION_TYPES,
+  PROJECT_STAGES,
   ValidationError,
   type MigrationType,
 } from '@relay/core';
@@ -46,6 +47,13 @@ export const createProjectAction = defineAction({
     ahnDeveloperId: z.string().uuid().optional(),
     shoplineAmId: z.string().uuid().optional(),
     shoplineSeId: z.string().uuid().optional(),
+
+    /** Which stages this project's ClickUp task will two-way sync on - see
+     * `packages/integrations/src/clickup.ts`'s `clickUpStatusForTrackedStage`.
+     * A real subset, not the full pipeline, chosen here so each tracked
+     * stage's own label can be the exact ClickUp status name with no
+     * ambiguity to resolve later. */
+    clickUpTrackedStages: z.array(z.enum(PROJECT_STAGES)).default([]),
   }),
   async handler(input, ctx) {
     // `PLATFORM_ADMIN` operates the whole product, not one tenant - it has
@@ -114,6 +122,7 @@ export const createProjectAction = defineAction({
           nextAction: 'Send the introduction email to the merchant.',
           nextActionOwnerId: input.shoplineAmId ?? null,
           nextActionOwnerTeam: 'SHOPLINE',
+          clickUpTrackedStages: input.clickUpTrackedStages,
           stageEvents: {
             create: { stage: 'INTRODUCTION', enteredAt: now, changedById: ctx.principal.id },
           },
