@@ -148,6 +148,13 @@ const GROUPS: readonly NavGroup[] = [
         permissions: ['audit:read'],
         description: 'Every write that crossed a permission boundary.',
       },
+      {
+        href: '/admin/platform',
+        label: 'Platform config',
+        icon: 'ShieldCheck',
+        permissions: ['platform:manage'],
+        description: 'Shared fallback credentials and the role permission matrix.',
+      },
     ],
   },
 ];

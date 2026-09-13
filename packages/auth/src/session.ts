@@ -1,7 +1,7 @@
 import { clock, UnauthenticatedError, USER_ROLE_TEAM } from '@relay/core';
 import { hashToken, randomToken } from '@relay/core/server';
 import { db } from '@relay/db';
-import type { Principal } from '@relay/rbac';
+import { effectivePermissions, type Principal } from '@relay/rbac';
 
 export const SESSION_COOKIE = 'relay_session';
 export const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -105,6 +105,15 @@ export async function resolveSession(token: string | undefined): Promise<Resolve
     await db.session.update({ where: { id: session.id }, data: { lastSeenAt: now } });
   }
 
+  // Overrides are keyed by role, not by user - one PLATFORM_ADMIN edit
+  // applies to everyone holding that role, immediately, same as the role
+  // change itself: read fresh from Postgres on every request, never cached
+  // on the cookie.
+  const overrides = await db.rolePermissionOverride.findMany({
+    where: { role: session.user.role },
+    select: { permission: true, granted: true },
+  });
+
   return {
     sessionId: session.id,
     expiresAt: session.expiresAt,
@@ -117,6 +126,7 @@ export async function resolveSession(token: string | undefined): Promise<Resolve
       team: USER_ROLE_TEAM[session.user.role] ?? session.user.team,
       isActive: session.user.isActive,
       organizationId: session.user.organizationId,
+      permissions: effectivePermissions(session.user.role, overrides),
     },
   };
 }

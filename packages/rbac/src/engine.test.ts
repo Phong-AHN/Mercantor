@@ -9,6 +9,7 @@ import {
   readableVisibilities,
   type Principal,
 } from './engine';
+import { ROLE_PERMISSIONS } from './matrix';
 import { navigationFor } from './navigation';
 
 const principal = (role: UserRole, overrides: Partial<Principal> = {}): Principal => ({
@@ -19,6 +20,7 @@ const principal = (role: UserRole, overrides: Partial<Principal> = {}): Principa
   team: 'AHN',
   isActive: true,
   organizationId: 'org-1',
+  permissions: ROLE_PERMISSIONS[role],
   ...overrides,
 });
 
@@ -48,6 +50,20 @@ describe('can', () => {
     for (const role of USER_ROLES.filter((r) => r.startsWith('SHOPLINE'))) {
       expect(can(principal(role, { team: 'SHOPLINE' }), 'comment:internal')).toBe(false);
     }
+  });
+
+  it('reads permissions off the principal, so a PLATFORM_ADMIN override takes effect without touching the matrix', () => {
+    // A revoke: this role would normally have it.
+    const revoked = principal('AHN_DEVELOPER', {
+      permissions: ROLE_PERMISSIONS.AHN_DEVELOPER.filter((p) => p !== 'asset:manage'),
+    });
+    expect(can(revoked, 'asset:manage')).toBe(false);
+
+    // A grant: this role would not normally have it.
+    const granted = principal('AHN_DEVELOPER', {
+      permissions: [...ROLE_PERMISSIONS.AHN_DEVELOPER, 'invoice:read'],
+    });
+    expect(can(granted, 'invoice:read')).toBe(true);
   });
 });
 

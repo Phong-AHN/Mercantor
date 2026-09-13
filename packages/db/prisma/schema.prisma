@@ -397,6 +397,50 @@ model OrganizationIntegration {
   @@index([externalWebhookId])
 }
 
+/// The platform-wide fallback credential for a provider - what
+/// `packages/integrations/src/registry.ts` used to read from `.env`
+/// (`SLACK_BOT_TOKEN` / `CLICKUP_API_TOKEN` / `RESEND_API_KEY`), now
+/// editable by `PLATFORM_ADMIN` from `/admin/integrations` instead of a
+/// redeploy. One row per provider (no organization - this is the shared
+/// fallback every organization without its own configured credential
+/// falls back to), same encrypted-JSON shape as `OrganizationIntegration`.
+/// `.env` stays the very last resort if even this is unset - see
+/// `envFallbackConfig` in `registry.ts`.
+model PlatformIntegration {
+  provider        IntegrationProvider @id
+  encryptedConfig String
+  updatedById     String?             @db.Uuid
+  updatedAt       DateTime            @updatedAt @db.Timestamptz(3)
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+/// A `PLATFORM_ADMIN`-authored change to the hardcoded default permission
+/// matrix (`packages/rbac/src/matrix.ts`'s `ROLE_PERMISSIONS`) - additive on
+/// top of it, never a replacement: a role with no override row here has
+/// exactly the permissions the matrix already says it does.
+/// `permission` is a plain string, not a DB enum, because `Permission` is a
+/// TypeScript-only union (`packages/rbac/src/permissions.ts`) with no
+/// corresponding Postgres type; `applyPermissionOverrides` validates every
+/// row against the current, real permission list before trusting it, so a
+/// permission renamed or removed in a later release cannot silently leave a
+/// stale, meaningless row still in effect.
+model RolePermissionOverride {
+  role        UserRole
+  permission  String
+  /// true grants a permission the role would not otherwise have; false
+  /// revokes one it would. Never a duplicate no-op of the default - see
+  /// `setRolePermissionOverrideAction`, which deletes the row instead of
+  /// writing it when the requested state already matches the default.
+  granted     Boolean
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@id([role, permission])
+}
+
 // ---------------------------------------------------------------------------
 // Identity
 // ---------------------------------------------------------------------------
@@ -422,33 +466,35 @@ model User {
   updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
   deletedAt      DateTime?     @db.Timestamptz(3)
 
-  sessions               Session[]
-  passwordTokens         PasswordToken[]
-  configuredIntegrations OrganizationIntegration[]
-  projectMemberships     ProjectMember[]
-  managedProjects        Project[]                 @relation("ProjectAhnPm")
-  developedProjects      Project[]                 @relation("ProjectAhnDev")
-  accountManagedProject  Project[]                 @relation("ProjectShoplineAm")
-  engineeredProjects     Project[]                 @relation("ProjectShoplineSe")
-  nextActionProjects     Project[]                 @relation("ProjectNextActionOwner")
-  comments               Comment[]
-  mentions               CommentMention[]
-  stageChanges           StageEvent[]
-  blockersOwned          Blocker[]                 @relation("BlockerOwner")
-  blockersCreated        Blocker[]                 @relation("BlockerCreator")
-  blockerOwnerships      BlockerOwnership[]
-  issuesOwned            Issue[]                   @relation("IssueOwner")
-  issuesReported         Issue[]                   @relation("IssueReporter")
-  approvalsRequested     Approval[]                @relation("ApprovalRequester")
-  approvalsDecided       Approval[]                @relation("ApprovalDecider")
-  handoffsSubmitted      HandoffSubmission[]       @relation("HandoffSubmitter")
-  handoffsDecided        HandoffSubmission[]       @relation("HandoffDecider")
-  activities             ActivityEvent[]
-  notifications          Notification[]
-  attachments            Attachment[]
-  auditLogs              AuditLog[]
-  savedViews             SavedView[]
-  introEmailsSent        IntroductionEmail[]
+  sessions                       Session[]
+  passwordTokens                 PasswordToken[]
+  configuredIntegrations         OrganizationIntegration[]
+  platformIntegrationsUpdated    PlatformIntegration[]
+  rolePermissionOverridesUpdated RolePermissionOverride[]
+  projectMemberships             ProjectMember[]
+  managedProjects                Project[]                 @relation("ProjectAhnPm")
+  developedProjects              Project[]                 @relation("ProjectAhnDev")
+  accountManagedProject          Project[]                 @relation("ProjectShoplineAm")
+  engineeredProjects             Project[]                 @relation("ProjectShoplineSe")
+  nextActionProjects             Project[]                 @relation("ProjectNextActionOwner")
+  comments                       Comment[]
+  mentions                       CommentMention[]
+  stageChanges                   StageEvent[]
+  blockersOwned                  Blocker[]                 @relation("BlockerOwner")
+  blockersCreated                Blocker[]                 @relation("BlockerCreator")
+  blockerOwnerships              BlockerOwnership[]
+  issuesOwned                    Issue[]                   @relation("IssueOwner")
+  issuesReported                 Issue[]                   @relation("IssueReporter")
+  approvalsRequested             Approval[]                @relation("ApprovalRequester")
+  approvalsDecided               Approval[]                @relation("ApprovalDecider")
+  handoffsSubmitted              HandoffSubmission[]       @relation("HandoffSubmitter")
+  handoffsDecided                HandoffSubmission[]       @relation("HandoffDecider")
+  activities                     ActivityEvent[]
+  notifications                  Notification[]
+  attachments                    Attachment[]
+  auditLogs                      AuditLog[]
+  savedViews                     SavedView[]
+  introEmailsSent                IntroductionEmail[]
 
   @@index([organizationId])
   @@index([role])

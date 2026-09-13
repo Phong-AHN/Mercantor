@@ -16,18 +16,20 @@ import type { ClickUpProvider, EmailProvider, IntegrationRegistry, SlackProvider
  * any moment, and a stale cached adapter serving the *previous* token is a
  * worse bug than the extra database read.
  *
- * **Falls back to the process-wide `.env` credentials when an organization
- * has not configured its own (or its stored one fails to decrypt) - only
- * then does it fall to the mock.** Self-service per-organization credentials
- * are the intended long-term shape, but in practice most organizations here
- * are still using AHN's own single shared Slack/ClickUp/Resend account, not
- * one of their own - requiring every one of them to separately paste a
- * working token before Slack/ClickUp/email would do anything real broke
- * exactly that, live, for organizations that had never gone through
- * `/integrations` at all. `envFallbackConfig` below is what makes
- * `SLACK_BOT_TOKEN` / `CLICKUP_API_TOKEN` / `RESEND_API_KEY` do something
- * again - declared in `packages/config/src/env.ts` all along, unread since
- * D-052 until now.
+ * **Falls back three deep: an organization's own config, then
+ * `PlatformIntegration` (one shared credential per provider, set by
+ * PLATFORM_ADMIN from `/admin/platform` rather than a file on disk), then
+ * the process-wide `.env` - only then does it fall to the mock.**
+ * Self-service per-organization credentials are the intended long-term
+ * shape, but in practice most organizations here are still using AHN's own
+ * single shared Slack/ClickUp/Resend account, not one of their own -
+ * requiring every one of them to separately paste a working token before
+ * Slack/ClickUp/email would do anything real broke exactly that, live, for
+ * organizations that had never gone through `/integrations` at all.
+ * `PlatformIntegration` is that same shared account, but rotatable from the
+ * portal itself rather than requiring a redeploy to change an env var -
+ * `envFallbackConfig` stays underneath it as the deploy-time floor, read
+ * once from `SLACK_BOT_TOKEN` / `CLICKUP_API_TOKEN` / `RESEND_API_KEY`.
  */
 
 interface SlackConfig {
@@ -76,6 +78,29 @@ function envFallbackConfig<T>(provider: IntegrationProvider): T | null {
   }
 }
 
+/**
+ * The platform-wide fallback tier: one credential per provider, shared by
+ * every organization that has not configured its own. Same encrypted-JSON
+ * shape and same "decrypt failure falls through rather than throws" rule as
+ * `loadConfig` below, for the same reason - a rotated
+ * `CREDENTIAL_ENCRYPTION_KEY` must degrade to `.env` (or the mock), never
+ * take down every organization still relying on the shared account.
+ */
+async function loadPlatformConfig<T>(provider: IntegrationProvider): Promise<T | null> {
+  const row = await db.platformIntegration.findUnique({
+    where: { provider },
+    select: { encryptedConfig: true },
+  });
+  if (!row) return null;
+
+  try {
+    const decrypted = decryptSecret(row.encryptedConfig, env().CREDENTIAL_ENCRYPTION_KEY);
+    return JSON.parse(decrypted) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function loadConfig<T>(
   organizationId: string,
   provider: IntegrationProvider,
@@ -92,10 +117,13 @@ async function loadConfig<T>(
     } catch {
       // A blob that fails to decrypt (wrong/rotated CREDENTIAL_ENCRYPTION_KEY,
       // corruption) must not crash whatever called this - fall through to
-      // the environment fallback below, same as never having configured the
-      // provider at all.
+      // the platform and environment fallbacks below, same as never having
+      // configured the provider at all.
     }
   }
+
+  const platformConfig = await loadPlatformConfig<T>(provider);
+  if (platformConfig) return platformConfig;
 
   return envFallbackConfig<T>(provider);
 }
@@ -203,6 +231,73 @@ export async function setOrganizationIntegration(input: {
       configuredById: input.configuredById,
       externalWebhookId,
     },
+  });
+}
+
+const PLATFORM_INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = ['SLACK', 'CLICKUP', 'EMAIL'];
+
+export interface PlatformIntegrationStatus {
+  provider: IntegrationProvider;
+  configured: boolean;
+  updatedAt: Date | null;
+  updatedByName: string | null;
+}
+
+/**
+ * For the `/admin/platform` screen: whether each provider has a shared
+ * fallback credential set, and by whom - never the credential itself. The
+ * same "prove it out of band, never echo it back" rule `credentials-panel.tsx`
+ * already follows for an organization's own tokens.
+ */
+export async function platformIntegrationStatus(): Promise<PlatformIntegrationStatus[]> {
+  const rows = await db.platformIntegration.findMany({
+    select: { provider: true, updatedAt: true, updatedBy: { select: { name: true } } },
+  });
+  const byProvider = new Map(rows.map((row) => [row.provider, row]));
+
+  return PLATFORM_INTEGRATION_PROVIDERS.map((provider) => {
+    const row = byProvider.get(provider);
+    return {
+      provider,
+      configured: row !== undefined,
+      updatedAt: row?.updatedAt ?? null,
+      updatedByName: row?.updatedBy?.name ?? null,
+    };
+  });
+}
+
+/**
+ * Encrypts and upserts the one shared fallback credential for a provider -
+ * `PlatformIntegration.encryptedConfig` is never written any other way.
+ * `config: null` clears it, dropping every organization without its own
+ * config for this provider back to `.env` (or the mock).
+ *
+ * Deliberately no webhook registration here, unlike
+ * `setOrganizationIntegration`'s ClickUp branch: a ClickUp webhook delivery
+ * carries only a `webhook_id`, resolved back to an organization via
+ * `findClickUpWebhookSecret` - there is no organization to attribute a
+ * platform-level webhook to, so this tier only ever pushes status one way,
+ * the same as an organization that has not linked one.
+ */
+export async function setPlatformIntegration(input: {
+  provider: IntegrationProvider;
+  config: SlackConfig | ClickUpConfig | EmailConfig | null;
+  updatedById: string;
+}): Promise<void> {
+  if (input.config === null) {
+    await db.platformIntegration.deleteMany({ where: { provider: input.provider } });
+    return;
+  }
+
+  const encryptedConfig = encryptSecret(
+    JSON.stringify(input.config),
+    env().CREDENTIAL_ENCRYPTION_KEY,
+  );
+
+  await db.platformIntegration.upsert({
+    where: { provider: input.provider },
+    create: { provider: input.provider, encryptedConfig, updatedById: input.updatedById },
+    update: { encryptedConfig, updatedById: input.updatedById },
   });
 }
 

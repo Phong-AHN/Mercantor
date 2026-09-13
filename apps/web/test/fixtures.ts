@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { USER_ROLE_TEAM, type UserRole } from '@relay/core';
 import { createSession } from '@relay/auth';
 import { db } from '@relay/db';
-import type { Principal } from '@relay/rbac';
+import { ROLE_PERMISSIONS, type Principal } from '@relay/rbac';
 import { createProjectAction } from '@/features/projects/create';
 import { actingAs } from './request-context';
 
@@ -93,7 +93,9 @@ export async function createTestUser(
     },
   });
   createdUserIds.push(user.id);
-  return user;
+  // No RolePermissionOverride rows in play here - a test that exercises an
+  // override applies it explicitly and builds its own Principal.
+  return { ...user, permissions: ROLE_PERMISSIONS[role] };
 }
 
 /** Mints a real, hashed session row and points the mocked request at it. */

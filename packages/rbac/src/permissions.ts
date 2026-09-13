@@ -67,6 +67,15 @@ export const PERMISSIONS = [
   'user:manage',
   'audit:read',
   'settings:manage',
+
+  /**
+   * The portal-wide config screen: env-fallback integration credentials and
+   * the role permission matrix itself. Deliberately separate from
+   * `settings:manage` (an org's own aging thresholds and checklists,
+   * held by AHN_ADMIN/SHOPLINE_ADMIN too) - this one reaches across every
+   * tenant, so only PLATFORM_ADMIN ever holds it.
+   */
+  'platform:manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

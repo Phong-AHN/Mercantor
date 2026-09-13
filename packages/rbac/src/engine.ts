@@ -6,7 +6,6 @@ import {
   type Team,
   type UserRole,
 } from '@relay/core';
-import { ROLE_PERMISSIONS } from './matrix';
 import type { Permission } from './permissions';
 
 /**
@@ -27,6 +26,15 @@ export interface Principal {
    * `schema.prisma`.
    */
   organizationId: string | null;
+  /**
+   * What `can()` actually checks - the role's default from `ROLE_PERMISSIONS`
+   * with any `RolePermissionOverride` rows already applied. Computed once,
+   * at session resolution (`effectivePermissions` in `matrix.ts`), so `can()`
+   * itself stays a synchronous, DB-free read. A caller that builds a
+   * `Principal` without overrides in play (a fixture, a test) can just pass
+   * `ROLE_PERMISSIONS[role]` straight through.
+   */
+  permissions: readonly Permission[];
 }
 
 export function principalTeam(principal: Principal): Team {
@@ -37,7 +45,7 @@ export function principalTeam(principal: Principal): Team {
 
 export function can(principal: Principal, permission: Permission): boolean {
   if (!principal.isActive) return false;
-  return ROLE_PERMISSIONS[principal.role].includes(permission);
+  return principal.permissions.includes(permission);
 }
 
 export function canAny(principal: Principal, permissions: readonly Permission[]): boolean {

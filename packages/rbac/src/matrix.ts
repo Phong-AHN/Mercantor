@@ -146,3 +146,43 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
 export function permissionsForRole(role: UserRole): Permission[] {
   return [...new Set(ROLE_PERMISSIONS[role])].sort();
 }
+
+/**
+ * A `RolePermissionOverride` row as loaded from the database: `permission`
+ * is a plain string there (there is no Postgres enum matching the
+ * `Permission` union), so it is validated against `PERMISSIONS` here rather
+ * than trusted at the type level.
+ */
+export interface RolePermissionOverrideInput {
+  permission: string;
+  granted: boolean;
+}
+
+const PERMISSION_SET = new Set<string>(PERMISSIONS);
+
+/**
+ * The matrix in `ROLE_PERMISSIONS` is the default, not the last word:
+ * PLATFORM_ADMIN can grant a role a permission it would not otherwise have,
+ * or revoke one it would. Overrides apply on top of the default every time -
+ * there is no "reset to custom baseline", only "reset to default" (delete
+ * the override row) or "change the default" (edit code and ship it). A
+ * row for a permission that no longer exists, or a role that no longer
+ * carries it in the matrix by name, is ignored rather than throwing - the
+ * matrix is allowed to evolve without a stale override row breaking login.
+ */
+export function effectivePermissions(
+  role: UserRole,
+  overrides: readonly RolePermissionOverrideInput[],
+): Permission[] {
+  const result = new Set<Permission>(ROLE_PERMISSIONS[role]);
+  for (const override of overrides) {
+    if (!PERMISSION_SET.has(override.permission)) continue;
+    const permission = override.permission as Permission;
+    if (override.granted) {
+      result.add(permission);
+    } else {
+      result.delete(permission);
+    }
+  }
+  return [...result].sort();
+}

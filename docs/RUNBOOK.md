@@ -509,6 +509,47 @@ still trying to deliver with a secret nothing has anymore.
 
 ---
 
+## Platform config (PLATFORM_ADMIN)
+
+`/admin/platform` is the one screen for what used to only live in `.env` or in code, gated by a
+dedicated `platform:manage` permission that only `PLATFORM_ADMIN` ever holds (kept separate from
+`settings:manage`, which `AHN_ADMIN`/`SHOPLINE_ADMIN` also have for their own organization's
+aging thresholds - this one reaches across every tenant). Two unrelated things live there because
+they were the two pieces of "portal-wide config" nothing but a redeploy could previously change:
+
+**Shared fallback integration credentials** (`PlatformIntegration` in the schema,
+`setPlatformIntegration`/`platformIntegrationStatus`/`loadPlatformConfig` in
+`packages/integrations/src/registry.ts`). `integrationsFor` now falls back three deep: an
+organization's own `OrganizationIntegration` row, then this one shared `PlatformIntegration` row
+per provider, then `envFallbackConfig` reading `.env` directly - only then the mock. Practically,
+this replaces "ask someone with Vercel access to rotate `CLICKUP_API_TOKEN` and redeploy" with "a
+PLATFORM_ADMIN pastes a new token on `/admin/platform`," same encrypted-JSON storage and same
+"verify live before saving" rule `setOrganizationIntegration` already used.
+Deliberately no webhook registration at this tier - a ClickUp webhook delivery is resolved back to
+an organization via `findClickUpWebhookSecret`, and there is no organization to attribute a
+platform-level webhook to, so a ClickUp fallback credential only ever pushes status one way.
+
+**Role permission overrides** (`RolePermissionOverride` in the schema, `effectivePermissions` in
+`packages/rbac/src/matrix.ts`). `ROLE_PERMISSIONS` in code is still the default; a
+`RolePermissionOverride` row is a per-(role, permission) exception on top of it, additive or
+subtractive (`granted: true` grants something the role would not otherwise have, `granted: false`
+revokes something it would). `Principal` now carries a resolved `permissions` array
+(`resolveSession` in `packages/auth/src/session.ts` computes it fresh from the database on every
+request, same as the role itself - never cached on the cookie) and `can()` reads that array rather
+than indexing `ROLE_PERMISSIONS` directly. **Every place that builds a `Principal` by hand -
+`apps/web/test/fixtures.ts`, `packages/rbac/src/engine.test.ts`'s local fixture - must set
+`permissions` too**, or the type does not compile; the fixtures default it to
+`ROLE_PERMISSIONS[role]` (no overrides applied), which is deliberate - overrides are for the real
+app, not integration test scaffolding. `PLATFORM_ADMIN` cannot be overridden at all (rejected
+server-side in `setRolePermissionOverrideAction`, and left out of the `/admin/platform` grid
+entirely) - it holds every permission in code, unconditionally, specifically so an override on that
+role can never lock every operator out of the one screen that would undo it. Clicking a matrix cell
+back to what `ROLE_PERMISSIONS` already says by default **deletes** the override row rather than
+writing a redundant one that happens to agree with the code - "back to default" is the absence of a
+row, not a row that matches.
+
+---
+
 ## Backups & data
 
 The project record is the product. Back up Postgres; everything else — Redis, the object store —

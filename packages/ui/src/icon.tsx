@@ -15,6 +15,7 @@ import {
   Receipt,
   ScrollText,
   Settings,
+  ShieldCheck,
   Store,
   Users,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   FolderOpen,
   MessagesSquare,
   LineChart,
+  ShieldCheck,
 };
 
 export function NavIcon({ name, className }: { name: string; className?: string }) {

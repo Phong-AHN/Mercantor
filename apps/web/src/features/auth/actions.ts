@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import {
+  requireSession,
   revokeSession,
   SESSION_COOKIE,
   sessionCookieOptions,
@@ -11,7 +12,6 @@ import {
 } from '@relay/auth';
 import { landingPathFor } from '@relay/rbac';
 import { isAppError, ValidationError } from '@relay/core';
-import { db } from '@relay/db';
 import { logger } from '@relay/observability';
 import { requestMeta } from '@/server/session';
 import { actionError, type ActionResult } from '@/server/action';
@@ -49,25 +49,18 @@ export async function signInAction(_prev: unknown, form: FormData): Promise<Acti
   let destination: string;
   try {
     const meta = await requestMeta();
-    const { session, userId } = await performSignIn(parsed.data.email, parsed.data.password, meta);
+    const { session } = await performSignIn(parsed.data.email, parsed.data.password, meta);
 
     const store = await cookies();
     store.set(SESSION_COOKIE, session.token, sessionCookieOptions());
 
-    const user = await db.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        team: true,
-        isActive: true,
-        organizationId: true,
-      },
-    });
+    // Reuses `resolveSession` rather than re-querying `user` directly, so the
+    // landing path is computed from the same effective-permissions merge
+    // (role default + any `RolePermissionOverride` rows) that every later
+    // request on this session will use.
+    const resolved = await requireSession(session.token);
 
-    const fallback = landingPathFor(user);
+    const fallback = landingPathFor(resolved.principal);
     // Only same-origin paths are honoured, so `?next=` cannot become an open
     // redirect to somebody else's site.
     const requested = parsed.data.next;
