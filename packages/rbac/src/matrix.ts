@@ -35,6 +35,11 @@ const AHN_DELIVERY: Permission[] = [
   'user:read',
 ];
 
+// No `invoice:read` here, on purpose - SHOPLINE never sees a project's
+// commercial figures (AHN's contract value with the merchant, milestone
+// billing, overdue balances). Was previously inherited by SHOPLINE_ADMIN
+// and SHOPLINE_ACCOUNT_MANAGER through this base, filtered back out only
+// for SHOPLINE_SOLUTIONS_ENGINEER - now consistent across all three.
 const SHOPLINE_BASE: Permission[] = [
   'portfolio:read',
   'project:read',
@@ -49,7 +54,6 @@ const SHOPLINE_BASE: Permission[] = [
   'comment:create',
   'issue:read',
   'issue:create',
-  'invoice:read',
   'approval:read',
   'approval:decide_shopline',
   'handoff:decide',
@@ -117,10 +121,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   SHOPLINE_ACCOUNT_MANAGER: [...SHOPLINE_BASE, 'project:assign', 'comment:manage'],
 
   // Technical counterpart: same visibility, no commercial or assignment rights.
-  SHOPLINE_SOLUTIONS_ENGINEER: [
-    ...SHOPLINE_BASE.filter((permission) => permission !== 'invoice:read'),
-    'issue:manage',
-  ],
+  SHOPLINE_SOLUTIONS_ENGINEER: [...SHOPLINE_BASE, 'issue:manage'],
 
   // Optional limited access: upload assets, provide access, review designs,
   // give feedback, approve. Nothing else - and never anything commercial.

@@ -123,12 +123,14 @@ describe('navigationFor', () => {
     }
   });
 
-  it('gives an account manager the delivery section it exists for', () => {
+  it('gives an account manager the delivery section, but never commercial figures', () => {
     const groups = navigationFor(principal('SHOPLINE_ACCOUNT_MANAGER', { team: 'SHOPLINE' }));
     const hrefs = groups.flatMap((group) => group.items.map((item) => item.href));
     expect(hrefs).toContain('/blockers');
     expect(hrefs).toContain('/approvals');
-    expect(hrefs).toContain('/invoices');
+    // SHOPLINE never sees a project's commercial figures - AHN's contract
+    // value with the merchant, milestone billing, overdue balances.
+    expect(hrefs).not.toContain('/invoices');
     expect(hrefs).not.toContain('/settings');
   });
 
