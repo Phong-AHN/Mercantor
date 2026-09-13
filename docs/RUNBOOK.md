@@ -550,6 +550,47 @@ row, not a row that matches.
 
 ---
 
+## Money visibility for SHOPLINE
+
+SHOPLINE never sees a project's commercial figures - AHN's contract value with the merchant,
+milestone billing, overdue balances. `invoice:read` was dropped from `SHOPLINE_BASE`
+(`packages/rbac/src/matrix.ts`), which closed the obvious doors: the dedicated `/invoices` tab, the
+portfolio table's money column, the CSV export, the dashboard's outstanding-balance stat, and the
+project overview's "Has AHN been paid?" answer tile (`buildAnswers` in `packages/core/src/answers.ts`
+takes `invoice` as optional now and only builds that tile when it is given - not built-then-hidden,
+never built at all for a caller without the permission).
+
+**That was not the whole leak.** A SHOPLINE Account Manager reported still seeing an invoice amount
+live, after all of the above shipped. The actual door was the activity feed: `ActivityEvent` rows
+are filtered purely by `visibility` (`readableVisibilities` in `packages/rbac/src/engine.ts`), with
+no additional per-type permission check, and three call sites had been writing money straight into
+an `AHN_SHOPLINE`-visible `summary` string, from back when "money is an AHN/SHOPLINE conversation,
+never a merchant-facing one" was the actual policy:
+
+- `upsertInvoiceAction` and `recordPaymentAction` (`apps/web/src/features/invoices/actions.ts`) -
+  now `visibility: 'INTERNAL_AHN'`.
+- Approving a scope change request (`apps/web/src/features/checklists/actions.ts`) - split into
+  **two** `recordActivity` calls instead of flipping visibility outright, since SHOPLINE does hold
+  `scope:read` and reasonably expects to see a change request get approved. The AHN_SHOPLINE-visible
+  one states the fact with no number; a second, INTERNAL_AHN-only one carries the amount.
+- `chaseInvoiceAction`'s `notify()` call also had `shoplineAmId` in its recipient list - a
+  notification whose body states the exact outstanding balance. Removed; it now notifies the AHN
+  project manager only.
+- The same change-request approval's `fanOut` (Slack/ClickUp) message body also dropped its amount,
+  for the same reason: the linked Slack channel is not guaranteed AHN-only, and there is no reason
+  for this rule to have a gap on that surface either.
+
+**The lesson, if another money leak turns up**: `invoice:read` (and `showMoney` gates built on it)
+only ever governs pages and queries built specifically around invoices. Anything that writes a
+human-readable `summary`/`detail`/notification `body` string containing a formatted amount is a
+second, independent surface - `visibility`/notification-recipient lists are their own gate, entirely
+unrelated to whether the reader holds `invoice:read`. Grep `formatMoney` and `amountMinor` across
+`apps/web/src` before trusting a permission fix is complete;
+`apps/web/src/features/invoices/actions.integration.test.ts`'s `money stays out of
+SHOPLINE-visible channels` suite is the regression test for this specific gap.
+
+---
+
 ## Backups & data
 
 The project record is the product. Back up Postgres; everything else — Redis, the object store —

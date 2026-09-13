@@ -97,8 +97,9 @@ export const upsertInvoiceAction = defineAction({
         type: 'INVOICE_UPDATED',
         actorId: ctx.principal.id,
         summary: `Invoice updated: ${input.milestone} (${formatMoney(amountMinor)}).`,
-        // Money is an AHN/SHOPLINE conversation, never a merchant-facing one.
-        visibility: 'AHN_SHOPLINE',
+        // AHN's own commercial figures - never merchant-facing, and not a
+        // SHOPLINE-visible one either (SHOPLINE holds no invoice:read).
+        visibility: 'INTERNAL_AHN',
       });
 
       await recomputeHealth(tx, project.id);
@@ -153,7 +154,9 @@ export const recordPaymentAction = defineAction({
         type: 'INVOICE_UPDATED',
         actorId: ctx.principal.id,
         summary: `Payment recorded: ${formatMoney(amountMinor, invoice.currency)} against ${invoice.milestone}.`,
-        visibility: 'AHN_SHOPLINE',
+        // Same as invoice.upsert above - a commercial figure, not visible to
+        // SHOPLINE (no invoice:read) or the merchant.
+        visibility: 'INTERNAL_AHN',
       });
 
       await audit(tx, {
@@ -189,15 +192,17 @@ export const chaseInvoiceAction = defineAction({
       });
       if (!invoice) throw new ConflictError('That invoice is not on this project.');
 
+      // AHN-only: the notification body states the exact outstanding
+      // balance, and SHOPLINE holds no invoice:read - this used to also
+      // notify `shoplineAmId`, back when money was still an AHN/SHOPLINE
+      // conversation.
       const watchers = await tx.project.findUnique({
         where: { id: project.id },
-        select: { shoplineAmId: true, ahnProjectManagerId: true },
+        select: { ahnProjectManagerId: true },
       });
 
       await notify(tx, {
-        userIds: [watchers?.shoplineAmId, watchers?.ahnProjectManagerId].filter(
-          (id): id is string => typeof id === 'string',
-        ),
+        userIds: [watchers?.ahnProjectManagerId].filter((id): id is string => typeof id === 'string'),
         projectId: project.id,
         type: 'INVOICE_OVERDUE',
         title: `${project.merchantName}: ${invoice.milestone} still outstanding`,

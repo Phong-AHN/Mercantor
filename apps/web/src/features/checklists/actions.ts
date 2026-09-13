@@ -489,14 +489,28 @@ export const approveChangeRequestAction = defineAction({
         select: { id: true },
       });
 
+      // Split in two: the approval itself is a scope fact SHOPLINE already
+      // has scope:read for, but the amount is a commercial figure it does
+      // not have invoice:read for - one event carries the fact without the
+      // number, a second, AHN-only one carries the number.
       await recordActivity(tx, {
         projectId: project.id,
         type: 'SCOPE_CHANGED',
         actorId: ctx.principal.id,
-        summary: `Change request approved: ${item.label} (${formatMoney(amountMinor, project.currency)})`,
+        summary: `Change request approved: ${item.label}`,
         detail: 'Added as a new invoice line.',
         visibility: 'AHN_SHOPLINE',
         payload: { itemId: item.id, invoiceId: invoice.id },
+      });
+      await recordActivity(tx, {
+        projectId: project.id,
+        type: 'SCOPE_CHANGED',
+        actorId: ctx.principal.id,
+        summary: `Change request priced at ${formatMoney(amountMinor, project.currency)}: ${item.label}`,
+        detail: 'Added as a new invoice line.',
+        visibility: 'INTERNAL_AHN',
+        payload: { itemId: item.id, invoiceId: invoice.id },
+        touchProject: false,
       });
 
       await audit(tx, {
@@ -512,11 +526,15 @@ export const approveChangeRequestAction = defineAction({
 
       await recomputeHealth(tx, project.id);
 
+      // No amount here either - the linked Slack channel/ClickUp task is not
+      // guaranteed AHN-only, and the same "SHOPLINE never sees a commercial
+      // figure" rule the activity feed just applied above should not have a
+      // gap on this other surface.
       return fanOut(tx, {
         projectId: project.id,
         projectCode: project.code,
         title: `Change request approved on ${project.merchantName}: ${item.label}`,
-        body: `${formatMoney(amountMinor, project.currency)} added as a new invoice line.`,
+        body: 'Added as a new invoice line.',
         tone: 'info',
       });
     });

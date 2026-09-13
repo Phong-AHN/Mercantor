@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '@relay/db';
+import { readableVisibilities } from '@relay/rbac';
 import {
   cleanupFixtures,
   createTestProject,
@@ -7,7 +8,7 @@ import {
   signInAs,
   type TestUser,
 } from '../../../test/fixtures';
-import { recordPaymentAction, upsertInvoiceAction } from './actions';
+import { chaseInvoiceAction, recordPaymentAction, upsertInvoiceAction } from './actions';
 
 /**
  * Money as integer minor units, end to end (D-016): a payment tips an
@@ -120,5 +121,82 @@ describe('invoice payment arithmetic', () => {
     const invoice = await db.invoice.findUniqueOrThrow({ where: { id: second.id } });
     expect(invoice.paidMinor).toBe(35_000);
     expect(invoice.status).toBe('PARTIALLY_PAID');
+  });
+});
+
+/**
+ * Regression coverage for a real leak: SHOPLINE lost `invoice:read` (the
+ * dedicated tab, the portfolio table's money column, the answer-tile strip),
+ * but the activity feed and a chase notification kept surfacing the same
+ * figures through a different door - `visibility: 'AHN_SHOPLINE'` on the
+ * activity rows, and `shoplineAmId` in the chase notification's recipients.
+ * A SHOPLINE Account Manager reported still seeing an invoice amount on the
+ * live site; this is exactly where it was coming from.
+ */
+describe('money stays out of SHOPLINE-visible channels', () => {
+  let pm: TestUser;
+  let shoplineAm: TestUser;
+  let projectCode: string;
+  let projectId: string;
+  let invoiceId: string;
+
+  beforeAll(async () => {
+    pm = await createTestUser('AHN_PROJECT_MANAGER');
+    shoplineAm = await createTestUser('SHOPLINE_ACCOUNT_MANAGER');
+    const project = await createTestProject({
+      as: pm,
+      ahnProjectManagerId: pm.id,
+      shoplineAmId: shoplineAm.id,
+    });
+    projectCode = project.code;
+    projectId = project.id;
+
+    await signInAs(pm);
+    const created = await upsertInvoiceAction({
+      code: projectCode,
+      milestone: 'Deposit',
+      number: 'INV-2001',
+      amount: 2500,
+      status: 'INVOICE_SENT',
+      invoiceDate: '2026-01-01',
+    });
+    expect(created.ok).toBe(true);
+    invoiceId = (
+      await db.invoice.findFirstOrThrow({ where: { projectId }, select: { id: true } })
+    ).id;
+
+    await recordPaymentAction({ code: projectCode, invoiceId, amount: 500 });
+    await chaseInvoiceAction({ code: projectCode, invoiceId });
+  });
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('records the invoice-update and payment activity as INTERNAL_AHN, not readable by SHOPLINE', async () => {
+    const events = await db.activityEvent.findMany({
+      where: { projectId, type: 'INVOICE_UPDATED' },
+      select: { visibility: true, summary: true },
+    });
+    expect(events.length).toBeGreaterThanOrEqual(2);
+    for (const event of events) {
+      expect(event.visibility).toBe('INTERNAL_AHN');
+    }
+
+    const shoplineVisible = readableVisibilities(shoplineAm);
+    expect(shoplineVisible).not.toContain('INTERNAL_AHN');
+    for (const event of events) {
+      expect(shoplineVisible).not.toContain(event.visibility);
+    }
+  });
+
+  it('never notifies the SHOPLINE account manager when an invoice is chased', async () => {
+    // Filtered to this action's own notification type - project creation
+    // legitimately sends the SHOPLINE AM an unrelated "you were assigned"
+    // notification, which is not what this test is guarding against.
+    const notifications = await db.notification.findMany({
+      where: { userId: shoplineAm.id, projectId, type: 'INVOICE_OVERDUE' },
+    });
+    expect(notifications).toHaveLength(0);
   });
 });
