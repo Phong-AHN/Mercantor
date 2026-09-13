@@ -1,10 +1,20 @@
 import type { Metadata } from 'next';
-import { Mail, MessageSquare, ShieldCheck, SquareKanban } from 'lucide-react';
+import Link from 'next/link';
+import { Mail, MessageSquare, ShieldCheck, SquareKanban, UserPlus } from 'lucide-react';
 import { formatDateTime } from '@relay/core';
 import { platformIntegrationStatus, type PlatformIntegrationStatus } from '@relay/integrations';
 import type { IntegrationProvider } from '@relay/db';
 import { can } from '@relay/rbac';
-import { Alert, Badge, Card, CardBody, CardHeader, PageHeader, PermissionDenied } from '@relay/ui';
+import {
+  Alert,
+  Badge,
+  buttonStyles,
+  Card,
+  CardBody,
+  CardHeader,
+  PageHeader,
+  PermissionDenied,
+} from '@relay/ui';
 import { getRoleMatrix } from '@/features/platform/service';
 import { requirePrincipalOrRedirect } from '@/server/session';
 import { PermissionMatrix, ResetHint } from './permission-matrix';
@@ -62,6 +72,20 @@ export default async function PlatformAdminPage() {
         title="Platform config"
         description="Portal-wide values and features, not one organization's own settings. Visible and editable only here."
       />
+
+      <Card>
+        <CardHeader
+          icon={<UserPlus className="size-4" />}
+          title="Accounts"
+          description="Create a staff account in any organization, another PLATFORM_ADMIN, or a merchant on any project - the reach /people's own invite button does not have."
+          actions={
+            <Link href="/admin/platform/people" className={buttonStyles('secondary', 'sm')}>
+              <UserPlus className="size-3.5" />
+              Create account
+            </Link>
+          }
+        />
+      </Card>
 
       <Card>
         <CardHeader

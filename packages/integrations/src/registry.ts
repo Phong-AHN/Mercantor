@@ -85,12 +85,26 @@ function envFallbackConfig<T>(provider: IntegrationProvider): T | null {
  * `loadConfig` below, for the same reason - a rotated
  * `CREDENTIAL_ENCRYPTION_KEY` must degrade to `.env` (or the mock), never
  * take down every organization still relying on the shared account.
+ *
+ * The lookup itself is wrapped too, not just the decrypt step: this runs on
+ * every `integrationsFor` call for every organization that lacks its own
+ * active config for a provider - effectively most of them, most of the time
+ * - so a migration not yet applied (`PlatformIntegration` not existing yet)
+ * or the table briefly unreachable must fail open to ".env or the mock",
+ * the same way `resolveSession`'s `RolePermissionOverride` lookup does,
+ * rather than take down every project page, invite, or Slack/ClickUp link
+ * for every such organization.
  */
 async function loadPlatformConfig<T>(provider: IntegrationProvider): Promise<T | null> {
-  const row = await db.platformIntegration.findUnique({
-    where: { provider },
-    select: { encryptedConfig: true },
-  });
+  let row: { encryptedConfig: string } | null;
+  try {
+    row = await db.platformIntegration.findUnique({
+      where: { provider },
+      select: { encryptedConfig: true },
+    });
+  } catch {
+    return null;
+  }
   if (!row) return null;
 
   try {
@@ -130,12 +144,23 @@ async function loadConfig<T>(
 
 /**
  * `organizationId: null` (only `PLATFORM_ADMIN` - the SaaS operator, not a
- * tenant - ever has one) always gets every mock adapter: there is no
- * organization whose credentials it could possibly use.
+ * tenant - ever has one) always mocks Slack and ClickUp: both are a
+ * specific workspace's/team's credential, and there is no organization
+ * whose workspace this could possibly be. Email is different - a provider
+ * API key, not a workspace - so it still tries the platform fallback, then
+ * `.env`, before mocking: inviting a `PLATFORM_ADMIN` account (the one role
+ * with no organization at all) still needs a real way to deliver that
+ * invite.
  */
 export async function integrationsFor(organizationId: string | null): Promise<IntegrationRegistry> {
   if (!organizationId) {
-    return { slack: mockSlackProvider, clickup: mockClickUpProvider, email: mockEmailProvider };
+    const emailConfig =
+      (await loadPlatformConfig<EmailConfig>('EMAIL')) ?? envFallbackConfig<EmailConfig>('EMAIL');
+    return {
+      slack: mockSlackProvider,
+      clickup: mockClickUpProvider,
+      email: emailConfig ? createResendProvider(emailConfig.apiKey, emailConfig.from) : mockEmailProvider,
+    };
   }
 
   const [slackConfig, clickupConfig, emailConfig] = await Promise.all([

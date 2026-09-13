@@ -25,3 +25,18 @@ export const INVITABLE_ROLES = [
   'SHOPLINE_ACCOUNT_MANAGER',
   'SHOPLINE_SOLUTIONS_ENGINEER',
 ] as const;
+
+/**
+ * The `/admin/platform` invite screen's own, wider list: every organization
+ * role above, plus `PLATFORM_ADMIN` itself. Granting the one role with
+ * unrestricted reach is exactly what `INVITABLE_ROLES`'s comment says a
+ * `user:manage`-gated form should never offer - but this list is offered
+ * nowhere near that form. It backs `platformInviteUserAction`, gated by
+ * `platform:manage`, which only an existing `PLATFORM_ADMIN` holds - a
+ * categorically smaller, more trusted circle than everyone with
+ * `user:manage` across every organization. `MERCHANT` still is not here:
+ * a merchant belongs to a project, not an organization, and is invited from
+ * that project's own Settings tab (`inviteMerchantAction`) regardless of
+ * who is doing the inviting.
+ */
+export const PLATFORM_INVITABLE_ROLES = [...INVITABLE_ROLES, 'PLATFORM_ADMIN'] as const;

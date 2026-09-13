@@ -548,6 +548,38 @@ back to what `ROLE_PERMISSIONS` already says by default **deletes** the override
 writing a redundant one that happens to agree with the code - "back to default" is the absence of a
 row, not a row that matches.
 
+**Account creation** (`/admin/platform/people`, `platformInviteUserAction` in
+`apps/web/src/features/people/actions.ts`). `/people`'s own invite button (`inviteUserAction`) is
+deliberately narrower - scoped to the inviter's own organization, and refuses to grant
+`PLATFORM_ADMIN` or `MERCHANT` (see that action's comment) - which left no way for a
+`PLATFORM_ADMIN` to create *any* account at all: it has no organization of its own to invite into,
+and the very first `PLATFORM_ADMIN` on this portal had to be inserted by hand with a throwaway
+script. This screen is the proper replacement: any role including `PLATFORM_ADMIN` itself, any
+organization chosen explicitly (required for every role except `PLATFORM_ADMIN`, which must have
+none), or a merchant on any project (routed to the existing project-scoped `inviteMerchantAction`
+instead, since a merchant belongs to one project, never a tenant). Granting `PLATFORM_ADMIN` here
+is safe specifically *because* it sits behind `platform:manage` rather than the far more widely
+held `user:manage` - only an existing `PLATFORM_ADMIN` can reach the button that mints another one.
+Both invite actions now share one `createInvitedUser` helper (the create-or-reactivate-and-audit
+transaction) and one `deliverInviteEmail` helper (token + template + send) - they only ever
+differed in how `organizationId` was decided and which permission/role list gated the call.
+
+**Two related fixes surfaced while building this**, both in `packages/integrations/src/registry.ts`:
+
+- `loadPlatformConfig`'s own database lookup was not wrapped in the same try/catch as its decrypt
+  step, unlike its doc comment claimed. It runs on every `integrationsFor` call for every
+  organization that lacks its own active config for a provider - effectively most organizations,
+  most of the time - so a migration not yet applied, or the table briefly unreachable, would have
+  thrown through project pages, invites, and Slack/ClickUp linking for all of them. Only pure luck
+  (the one real organization happened to have all three providers configured) kept this from
+  biting in production before it was caught. Now fails open to `null`, same as the decrypt step.
+- `integrationsFor(null)` (only `PLATFORM_ADMIN`, which has no organization) used to hard-mock
+  every provider unconditionally. Slack and ClickUp still do - both are a specific workspace's
+  credential, and there is no organization whose workspace this could be - but email is a
+  provider-level API key, not a workspace, so it now still tries the platform fallback then `.env`
+  before mocking. Without this, inviting a `PLATFORM_ADMIN` account would create the user but could
+  never actually deliver the set-password link.
+
 ---
 
 ## Money visibility for SHOPLINE

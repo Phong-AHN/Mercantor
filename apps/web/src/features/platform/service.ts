@@ -72,3 +72,25 @@ export async function getRoleMatrix(): Promise<RoleMatrix> {
     updatedByName: overrides[0]?.updatedBy?.name ?? null,
   };
 }
+
+/** For the account-creation form's organization picker: every tenant a new
+ * AHN/SHOPLINE staff account could be placed in. */
+export async function listOrganizationsForInvite(): Promise<{ id: string; name: string }[]> {
+  return db.organization.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } });
+}
+
+/** For the same form's merchant path: a merchant belongs to one project, not
+ * an organization, so the picker is projects rather than tenants. */
+export async function listProjectsForMerchantInvite(): Promise<
+  { code: string; label: string }[]
+> {
+  const projects = await db.project.findMany({
+    where: { deletedAt: null },
+    select: { code: true, merchant: { select: { name: true } } },
+    orderBy: { merchant: { name: 'asc' } },
+  });
+  return projects.map((project) => ({
+    code: project.code,
+    label: `${project.merchant.name} (${project.code})`,
+  }));
+}
