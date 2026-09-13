@@ -848,8 +848,20 @@ model AssetItem {
   approvedAt DateTime?   @db.Timestamptz(3)
   notes      String?
   sortOrder  Int         @default(0)
-  createdAt  DateTime    @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime    @updatedAt @db.Timestamptz(3)
+
+  /// The file spec AHN expects for this item - shown to the merchant so they
+  /// know what to prepare before they upload, not enforced against the
+  /// actual file (a merchant genuinely knows their own logo's dimensions
+  /// better than a strict rejection would help them). Free text on
+  /// `requiredDimensions` and short labels on `requiredFileTypes` on
+  /// purpose - "PNG or SVG", "1200x630px minimum" reads as a real spec;
+  /// forcing a strict enum or numeric width/height would not fit every
+  /// asset kind AHN asks for (a data export has no "dimensions" at all).
+  requiredFileTypes  String[] @default([])
+  requiredDimensions String?
+  maxSizeMb          Int?
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(3)
 
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   attachments Attachment[]

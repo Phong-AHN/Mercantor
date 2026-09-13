@@ -217,6 +217,72 @@ export const setAssetStatusAction = defineAction({
   },
 });
 
+/**
+ * The file spec AHN expects for one asset item - shown to the merchant so
+ * they know what to prepare before uploading, never checked against the
+ * actual file (see the field comments on `AssetItem` in schema.prisma for
+ * why this stays advisory rather than an enforced validation).
+ */
+export const updateAssetRequirementsAction = defineAction({
+  name: 'asset.update_requirements',
+  permission: 'asset:manage',
+  input: z.object({
+    code: z.string().min(1),
+    itemId: z.string().uuid(),
+    requiredFileTypes: z.array(z.string().trim().min(1).max(20)).max(10),
+    requiredDimensions: z.string().trim().max(120).optional(),
+    maxSizeMb: z.coerce.number().int().min(1).max(10_000).optional(),
+  }),
+  async handler(input, ctx) {
+    const project = await resolveProject(ctx.principal, input.code);
+
+    await transaction(async (tx) => {
+      const item = await tx.assetItem.findFirst({
+        where: { id: input.itemId, projectId: project.id },
+        select: {
+          id: true,
+          label: true,
+          requiredFileTypes: true,
+          requiredDimensions: true,
+          maxSizeMb: true,
+        },
+      });
+      if (!item) throw new ConflictError('That asset is not on this project.');
+
+      await tx.assetItem.update({
+        where: { id: item.id },
+        data: {
+          requiredFileTypes: input.requiredFileTypes,
+          requiredDimensions: input.requiredDimensions || null,
+          maxSizeMb: input.maxSizeMb ?? null,
+        },
+      });
+
+      await audit(tx, {
+        principal: ctx.principal,
+        projectId: project.id,
+        action: 'asset.update_requirements',
+        entityType: 'AssetItem',
+        entityId: item.id,
+        before: {
+          requiredFileTypes: item.requiredFileTypes,
+          requiredDimensions: item.requiredDimensions,
+          maxSizeMb: item.maxSizeMb,
+        },
+        after: {
+          requiredFileTypes: input.requiredFileTypes,
+          requiredDimensions: input.requiredDimensions ?? null,
+          maxSizeMb: input.maxSizeMb ?? null,
+        },
+        ip: ctx.ip,
+      });
+    });
+
+    revalidateProject(input.code);
+    return actionOk(undefined, 'Requirements updated.');
+  },
+});
+
 export const attachLinkAction = defineAction({
   name: 'attachment.add_link',
   permission: ['asset:upload'],

@@ -6,6 +6,7 @@ import {
   AttachLinkButton,
   FileUploadButton,
 } from '@/app/(app)/projects/[code]/access/access-controls';
+import { AssetRequirementsSummary } from '@/app/(app)/projects/[code]/assets/asset-requirements';
 import { DueDate } from '@/components/domain';
 import { getPortalProject } from '@/features/portal/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
@@ -71,6 +72,11 @@ export default async function PortalAssetsPage() {
                       {item.notes && (
                         <p className="text-muted mt-0.5 text-[12px] leading-4">{item.notes}</p>
                       )}
+                      <AssetRequirementsSummary
+                        requiredFileTypes={item.requiredFileTypes}
+                        requiredDimensions={item.requiredDimensions}
+                        maxSizeMb={item.maxSizeMb}
+                      />
                       <p className="text-faint mt-1 flex flex-wrap gap-x-3 text-[11.5px]">
                         {item.dueDate && (
                           <span>

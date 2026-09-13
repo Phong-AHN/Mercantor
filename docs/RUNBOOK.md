@@ -469,7 +469,7 @@ the reverse, since seeing `"to do"` come back could mean either stage. Only 3 of
 status strings map to exactly one stage.
 
 **Fixed with an opt-in, always-unambiguous second mapping** rather than trying to disambiguate the
-old one: a project picks a genuine *subset* of stages to track
+old one: a project picks a genuine _subset_ of stages to track
 (`Project.clickUpTrackedStages`, chosen at creation in `/projects/new`'s "ClickUp status sync"
 section). Each tracked stage's own label - e.g. "Introduction", "Merchant Design Review" - already
 unique across all 18 stages - becomes the exact ClickUp status name expected on the linked list

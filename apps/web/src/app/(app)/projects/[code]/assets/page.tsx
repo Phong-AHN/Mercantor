@@ -5,6 +5,7 @@ import { DueDate } from '@/components/domain';
 import { getProject } from '@/features/projects/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
 import { AssetStatusPicker, AttachLinkButton, FileUploadButton } from '../access/access-controls';
+import { AssetRequirementsSummary, EditAssetRequirementsButton } from './asset-requirements';
 
 export const dynamic = 'force-dynamic';
 
@@ -107,6 +108,11 @@ export default async function ProjectAssetsPage({ params }: { params: Promise<{ 
                       {item.notes && (
                         <p className="text-muted mt-0.5 text-[12px] leading-4">{item.notes}</p>
                       )}
+                      <AssetRequirementsSummary
+                        requiredFileTypes={item.requiredFileTypes}
+                        requiredDimensions={item.requiredDimensions}
+                        maxSizeMb={item.maxSizeMb}
+                      />
                       <p className="text-faint mt-1 flex flex-wrap items-center gap-x-3 text-[11.5px]">
                         {item.dueDate && (
                           <span>
@@ -149,6 +155,15 @@ export default async function ProjectAssetsPage({ params }: { params: Promise<{ 
                       )}
                       {(manage || upload) && (
                         <div className="flex flex-wrap justify-end gap-1">
+                          {manage && (
+                            <EditAssetRequirementsButton
+                              code={project.code}
+                              itemId={item.id}
+                              requiredFileTypes={item.requiredFileTypes}
+                              requiredDimensions={item.requiredDimensions}
+                              maxSizeMb={item.maxSizeMb}
+                            />
+                          )}
                           <AttachLinkButton
                             code={project.code}
                             assetItemId={item.id}
