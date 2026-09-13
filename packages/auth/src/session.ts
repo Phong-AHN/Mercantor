@@ -108,11 +108,20 @@ export async function resolveSession(token: string | undefined): Promise<Resolve
   // Overrides are keyed by role, not by user - one PLATFORM_ADMIN edit
   // applies to everyone holding that role, immediately, same as the role
   // change itself: read fresh from Postgres on every request, never cached
-  // on the cookie.
-  const overrides = await db.rolePermissionOverride.findMany({
-    where: { role: session.user.role },
-    select: { permission: true, granted: true },
-  });
+  // on the cookie. Every request that authenticates anyone goes through
+  // this query, so it fails open to "no overrides" (the code default via
+  // `ROLE_PERMISSIONS` alone) rather than throwing - a migration not yet
+  // applied, or the table briefly unreachable, must not take down sign-in
+  // itself for every role, only silently ignore whatever override was set.
+  let overrides: { permission: string; granted: boolean }[] = [];
+  try {
+    overrides = await db.rolePermissionOverride.findMany({
+      where: { role: session.user.role },
+      select: { permission: true, granted: true },
+    });
+  } catch {
+    overrides = [];
+  }
 
   return {
     sessionId: session.id,
