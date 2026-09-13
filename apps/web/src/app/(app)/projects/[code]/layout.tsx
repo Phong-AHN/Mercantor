@@ -41,7 +41,7 @@ export default async function ProjectLayout({
     throw error;
   }
 
-  const answers = answersForProject(project);
+  const answers = answersForProject(project, can(principal, 'invoice:read'));
   const openBlocker = project.blockers.find((blocker) => blocker.resolvedAt === null);
   const now = project.snapshot.time.now;
 

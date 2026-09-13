@@ -60,14 +60,21 @@ export interface AnswerInput {
   approvals: Partial<
     Record<'DESIGN' | 'QA' | 'MERCHANT_FINAL' | 'SHOPLINE_DEPLOYMENT', ApprovalStatus>
   >;
-  invoice: {
+  /**
+   * Omitted entirely - not just unused - for a caller who cannot see money
+   * (SHOPLINE, the merchant): the "Has AHN been paid?" tile is built only
+   * when this is present, so a role without `invoice:read` never has a
+   * figure to strip back out downstream. `null`/`undefined` both mean "do
+   * not build the tile."
+   */
+  invoice?: {
     status: InvoiceStatus;
     totalMinor: number;
     paidMinor: number;
     outstandingMinor: number;
     currency: string;
     nextDueDate: Date | null;
-  };
+  } | null;
   /** Slug or id used to build tab links. */
   projectHref?: string;
 }
@@ -101,6 +108,36 @@ export function buildAnswers(input: AnswerInput): Answer[] {
   const designApproval = input.approvals.DESIGN ?? 'NOT_REQUESTED';
 
   const readyDate = projectedShoplineReadyDate(input.stage, input.time.now);
+
+  const invoiceTile: Answer | null = input.invoice
+    ? {
+        id: 'ahn-paid',
+        question: 'Has AHN been paid?',
+        value:
+          input.invoice.status === 'PAID'
+            ? 'Paid in full'
+            : input.invoice.status === 'NOT_INVOICED'
+              ? 'Not invoiced'
+              : input.invoice.status === 'OVERDUE'
+                ? 'Overdue'
+                : `${Math.round((input.invoice.paidMinor / Math.max(1, input.invoice.totalMinor)) * 100)}% paid`,
+        detail:
+          input.invoice.outstandingMinor > 0
+            ? `${(input.invoice.outstandingMinor / 100).toLocaleString('en-US', { style: 'currency', currency: input.invoice.currency })} outstanding${
+                input.invoice.nextDueDate ? `, due ${formatDate(input.invoice.nextDueDate)}` : ''
+              }`
+            : 'Nothing outstanding.',
+        tone:
+          input.invoice.status === 'PAID'
+            ? 'success'
+            : input.invoice.status === 'OVERDUE'
+              ? 'danger'
+              : input.invoice.status === 'NOT_INVOICED'
+                ? 'muted'
+                : 'warning',
+        href: `${base}#invoices`,
+      }
+    : null;
 
   return [
     {
@@ -203,33 +240,7 @@ export function buildAnswers(input: AnswerInput): Answer[] {
             : 'warning',
       href: `${base}#approvals`,
     },
-    {
-      id: 'ahn-paid',
-      question: 'Has AHN been paid?',
-      value:
-        input.invoice.status === 'PAID'
-          ? 'Paid in full'
-          : input.invoice.status === 'NOT_INVOICED'
-            ? 'Not invoiced'
-            : input.invoice.status === 'OVERDUE'
-              ? 'Overdue'
-              : `${Math.round((input.invoice.paidMinor / Math.max(1, input.invoice.totalMinor)) * 100)}% paid`,
-      detail:
-        input.invoice.outstandingMinor > 0
-          ? `${(input.invoice.outstandingMinor / 100).toLocaleString('en-US', { style: 'currency', currency: input.invoice.currency })} outstanding${
-              input.invoice.nextDueDate ? `, due ${formatDate(input.invoice.nextDueDate)}` : ''
-            }`
-          : 'Nothing outstanding.',
-      tone:
-        input.invoice.status === 'PAID'
-          ? 'success'
-          : input.invoice.status === 'OVERDUE'
-            ? 'danger'
-            : input.invoice.status === 'NOT_INVOICED'
-              ? 'muted'
-              : 'warning',
-      href: `${base}#invoices`,
-    },
+    ...(invoiceTile ? [invoiceTile] : []),
     {
       id: 'shopline-ready',
       question: 'When will it be ready for SHOPLINE?',

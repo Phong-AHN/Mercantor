@@ -6,8 +6,17 @@ import type { ProjectDetail } from './queries';
  * Maps a loaded project onto the ten questions the brief says one screen must
  * answer. Doing it here rather than in the page keeps the questions in one
  * place, so the merchant portal and the internal view cannot drift apart.
+ *
+ * `canSeeInvoice` mirrors every other money gate in the app (`invoice:read`)
+ * - SHOPLINE lost the dedicated Invoices tab and the portfolio table's money
+ * column to that same check, but this "Has AHN been paid?" answer tile was
+ * built unconditionally and rendered on every project's overview regardless
+ * of role, which quietly kept showing it the outstanding balance anyway.
+ * Omitting `invoice` from the input entirely (rather than filtering the
+ * built tile back out afterwards) means a caller without the permission
+ * never has the figure in hand to begin with.
  */
-export function answersForProject(project: ProjectDetail): Answer[] {
+export function answersForProject(project: ProjectDetail, canSeeInvoice: boolean): Answer[] {
   const openBlocker = project.blockers.find((blocker) => blocker.resolvedAt === null) ?? null;
 
   const approvals: Partial<
@@ -46,14 +55,16 @@ export function answersForProject(project: ProjectDetail): Answer[] {
       title: issue.title,
     })),
     approvals,
-    invoice: {
-      status: project.snapshot.invoice.status,
-      totalMinor: project.snapshot.invoice.totalMinor,
-      paidMinor: project.snapshot.invoice.paidMinor,
-      outstandingMinor: project.snapshot.invoice.outstandingMinor,
-      currency: project.snapshot.invoice.currency,
-      nextDueDate: project.snapshot.invoice.nextDueDate,
-    },
+    invoice: canSeeInvoice
+      ? {
+          status: project.snapshot.invoice.status,
+          totalMinor: project.snapshot.invoice.totalMinor,
+          paidMinor: project.snapshot.invoice.paidMinor,
+          outstandingMinor: project.snapshot.invoice.outstandingMinor,
+          currency: project.snapshot.invoice.currency,
+          nextDueDate: project.snapshot.invoice.nextDueDate,
+        }
+      : null,
     projectHref: `/projects/${project.code}`,
   });
 }
