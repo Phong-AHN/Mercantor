@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 import { Save, UserPlus } from 'lucide-react';
-import { MIGRATION_TYPE_LABEL, MIGRATION_TYPES, type MigrationType } from '@relay/core';
+import {
+  MIGRATION_TYPE_LABEL,
+  MIGRATION_TYPES,
+  USER_ROLE_LABEL,
+  type MigrationType,
+  type UserRole,
+} from '@relay/core';
 import {
   Alert,
   Avatar,
@@ -27,7 +33,14 @@ import {
 interface Person {
   id: string;
   name: string;
+  role: UserRole;
   title?: string | null;
+}
+
+/** "Role - Name", so a picker with several people sharing a name still
+ * reads unambiguously. */
+function personOptionLabel(person: Person): string {
+  return `${USER_ROLE_LABEL[person.role].label} - ${person.name}`;
 }
 
 export function ProjectDetailsForm({
@@ -198,8 +211,7 @@ export function AssignmentForm({
         <option value="">Nobody assigned</option>
         {options.map((person) => (
           <option key={person.id} value={person.id}>
-            {person.name}
-            {person.title ? ` - ${person.title}` : ''}
+            {personOptionLabel(person)}
           </option>
         ))}
       </Select>

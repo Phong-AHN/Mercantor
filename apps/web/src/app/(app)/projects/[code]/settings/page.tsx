@@ -78,11 +78,13 @@ export default async function ProjectSettingsPage({
           ahn={people.ahn.map((person) => ({
             id: person.id,
             name: person.name,
+            role: person.role,
             title: person.title,
           }))}
           shopline={people.shopline.map((person) => ({
             id: person.id,
             name: person.name,
+            role: person.role,
             title: person.title,
           }))}
           current={{

@@ -8,8 +8,10 @@ import {
   MIGRATION_TYPES,
   PROJECT_STAGES,
   STAGES,
+  USER_ROLE_LABEL,
   type MigrationType,
   type ProjectStage,
+  type UserRole,
 } from '@relay/core';
 import {
   Alert,
@@ -31,7 +33,14 @@ import { createProjectAction } from '@/features/projects/create';
 interface Person {
   id: string;
   name: string;
+  role: UserRole;
   title?: string | null;
+}
+
+/** "Role - Name", so a picker with several people sharing a name (or a
+ * title nobody bothered to fill in) still reads unambiguously. */
+function personOptionLabel(person: Person): string {
+  return `${USER_ROLE_LABEL[person.role].label} - ${person.name}`;
 }
 
 export function NewProjectForm({
@@ -274,7 +283,7 @@ export function NewProjectForm({
                 <option value="">Not assigned yet</option>
                 {ahn.map((person) => (
                   <option key={person.id} value={person.id}>
-                    {person.name}
+                    {personOptionLabel(person)}
                   </option>
                 ))}
               </Select>
@@ -288,7 +297,7 @@ export function NewProjectForm({
                 <option value="">Not assigned yet</option>
                 {ahn.map((person) => (
                   <option key={person.id} value={person.id}>
-                    {person.name}
+                    {personOptionLabel(person)}
                   </option>
                 ))}
               </Select>
@@ -302,7 +311,7 @@ export function NewProjectForm({
                 <option value="">Not assigned yet</option>
                 {shopline.map((person) => (
                   <option key={person.id} value={person.id}>
-                    {person.name}
+                    {personOptionLabel(person)}
                   </option>
                 ))}
               </Select>
@@ -316,7 +325,7 @@ export function NewProjectForm({
                 <option value="">Not assigned yet</option>
                 {shopline.map((person) => (
                   <option key={person.id} value={person.id}>
-                    {person.name}
+                    {personOptionLabel(person)}
                   </option>
                 ))}
               </Select>

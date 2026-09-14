@@ -25,11 +25,13 @@ export default async function NewProjectPage() {
         ahn={people.ahn.map((person) => ({
           id: person.id,
           name: person.name,
+          role: person.role,
           title: person.title,
         }))}
         shopline={people.shopline.map((person) => ({
           id: person.id,
           name: person.name,
+          role: person.role,
           title: person.title,
         }))}
         canManageMoney={can(principal, 'invoice:manage')}
