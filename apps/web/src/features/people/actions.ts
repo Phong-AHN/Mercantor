@@ -214,6 +214,81 @@ export const inviteUserAction = defineAction({
 });
 
 /**
+ * The `/people` counterpart to `inviteUserAction`'s "create": edits an
+ * existing member's role and title, scoped to the caller's own
+ * organization - an `AHN_ADMIN`/`SHOPLINE_ADMIN` manages their own staff,
+ * never another organization's, the same boundary `inviteUserAction`
+ * already draws by inferring `organizationId` from the caller rather than
+ * taking it as input. `MERCHANT` is refused for the same reason as the
+ * platform version (project-scoped access, not a role to reassign), and so
+ * is editing your own row - simpler than reasoning about whether a
+ * self-demotion would leave the organization with no admin, since another
+ * admin doing it is always safe regardless of how many there are.
+ */
+export const updateOrgUserRoleAction = defineAction({
+  name: 'people.update_role',
+  permission: 'user:manage',
+  input: z.object({
+    userId: z.string().uuid(),
+    role: z.enum(INVITABLE_ROLES),
+    title: z.string().trim().max(200).optional(),
+  }),
+  async handler(input, ctx) {
+    if (!ctx.principal.organizationId) {
+      throw new ForbiddenError('Platform admins manage organizations, not their staff.');
+    }
+    if (input.userId === ctx.principal.id) {
+      throw new ForbiddenError('You cannot change your own role here.');
+    }
+
+    const target = await db.user.findUnique({
+      where: { id: input.userId },
+      select: { id: true, name: true, role: true, organizationId: true, deletedAt: true },
+    });
+    if (!target || target.deletedAt !== null) {
+      throw new ConflictError('That account no longer exists.');
+    }
+    if (target.role === 'MERCHANT') {
+      // Checked before the organization-match below: a merchant's own
+      // `organizationId` is always null (it belongs to a project via
+      // `ProjectMember`, never a tenant) - matching on organization first
+      // would reject every merchant with the generic "not part of your
+      // organization" message instead of this more specific, correct one.
+      throw new ValidationError('Merchant accounts are managed from their project, not here.');
+    }
+    if (target.organizationId !== ctx.principal.organizationId) {
+      // Same message for "doesn't exist" and "belongs to another organization" -
+      // confirming which one it is would leak that a given account exists
+      // somewhere else, the same tenant-isolation rule `resolveProject`
+      // enforces for projects.
+      throw new ConflictError('That account is not part of your organization.');
+    }
+
+    const team = USER_ROLE_TEAM[input.role];
+
+    await transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: input.userId },
+        data: { role: input.role, team, title: input.title ?? null },
+      });
+
+      await audit(tx, {
+        principal: ctx.principal,
+        action: 'people.update_role',
+        entityType: 'User',
+        entityId: updated.id,
+        before: { role: target.role },
+        after: { role: updated.role },
+        ip: ctx.ip,
+      });
+    });
+
+    revalidatePath('/people');
+    return actionOk(undefined, `Updated ${target.name}.`);
+  },
+});
+
+/**
  * The `/admin/platform` counterpart: PLATFORM_ADMIN has no organization of
  * its own, so `organizationId` is chosen explicitly here instead of
  * inferred from the caller, and the role list additionally offers

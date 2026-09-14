@@ -620,6 +620,18 @@ can undo:
 `orgScope` filter is a no-op and it already sees everyone), but this is the one with edit
 affordances wired to the platform-only actions above.
 
+**The organization-scoped counterpart** (`updateOrgUserRoleAction`, same file) gives
+`AHN_ADMIN`/`SHOPLINE_ADMIN` the edit half of what `inviteUserAction` already gave them for
+creating: a role/title edit on an existing member of their *own* organization, rendered as an
+"Edit" button on `/people` (`edit-role-button.tsx`) next to every row except a `MERCHANT` one and
+the viewer's own. `organizationId` is never taken as input here - the target's `organizationId`
+must already equal the caller's, checked *after* the `MERCHANT` check (a merchant's own
+`organizationId` is always null, so checking organization-match first would reject every merchant
+with the generic "not part of your organization" message instead of the correct, more specific
+one - caught by a test before shipping). No deactivate/resend-link/organization-move at this level
+- those stay `platform:manage`-only, since a wrong deactivate here has no `PLATFORM_ADMIN` fallback
+to undo it the way the platform screen's own self-action refusals assume one exists.
+
 ---
 
 ## Money visibility for SHOPLINE

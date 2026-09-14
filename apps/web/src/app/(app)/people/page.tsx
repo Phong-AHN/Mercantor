@@ -19,6 +19,7 @@ import {
 } from '@relay/ui';
 import { listPeople } from '@/features/workspace/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import { EditRoleButton } from './edit-role-button';
 import { InvitePersonButton } from './invite-person-button';
 
 export const metadata: Metadata = { title: 'People' };
@@ -32,6 +33,7 @@ export default async function PeoplePage() {
 
   const people = await listPeople(principal);
   const now = clock.now();
+  const canManage = can(principal, 'user:manage');
 
   return (
     <div className="space-y-5">
@@ -58,6 +60,7 @@ export default async function PeoplePage() {
                     <TH>Last seen</TH>
                     <TH>Status</TH>
                     <TH className="min-w-[16rem]">What they can do</TH>
+                    {canManage && <TH>Actions</TH>}
                   </tr>
                 </THead>
                 <TBody>
@@ -127,6 +130,18 @@ export default async function PeoplePage() {
                             )}
                           </div>
                         </TD>
+                        {canManage && (
+                          <TD>
+                            {person.team !== 'MERCHANT' && person.id !== principal.id && (
+                              <EditRoleButton
+                                userId={person.id}
+                                name={person.name}
+                                role={person.role}
+                                title={person.title}
+                              />
+                            )}
+                          </TD>
+                        )}
                       </TR>
                     );
                   })}

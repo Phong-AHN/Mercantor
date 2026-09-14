@@ -14,6 +14,7 @@ import {
   platformResendInviteAction,
   platformSetUserActiveAction,
   platformUpdateUserAction,
+  updateOrgUserRoleAction,
 } from './actions';
 
 /**
@@ -104,6 +105,86 @@ describe('inviteUserAction', () => {
     expect(second.ok).toBe(false);
     if (second.ok) throw new Error('unreachable');
     expect(second.fieldErrors?.email).toBeTruthy();
+  });
+});
+
+/**
+ * The `/people` counterpart to `inviteUserAction`'s "create" - editing a
+ * role, scoped to the caller's own organization. Never lets one
+ * organization's admin touch another organization's staff.
+ */
+describe('updateOrgUserRoleAction', () => {
+  let orgAAdmin: TestUser;
+  let orgAMember: TestUser;
+  let orgBMember: TestUser;
+  let merchant: TestUser;
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('is refused for a role without user:manage', async () => {
+    const developer = await createTestUser('AHN_DEVELOPER');
+    orgAMember = await createTestUser('AHN_DEVELOPER', { organizationId: developer.organizationId });
+    await signInAs(developer);
+
+    const result = await updateOrgUserRoleAction({
+      userId: orgAMember.id,
+      role: 'AHN_PROJECT_MANAGER',
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('FORBIDDEN');
+  });
+
+  it("refuses to change the caller's own role", async () => {
+    orgAAdmin = await createTestUser('AHN_ADMIN');
+    await signInAs(orgAAdmin);
+
+    const result = await updateOrgUserRoleAction({ userId: orgAAdmin.id, role: 'AHN_DEVELOPER' });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('FORBIDDEN');
+  });
+
+  it('refuses to edit a MERCHANT account', async () => {
+    merchant = await createTestUser('MERCHANT');
+    const result = await updateOrgUserRoleAction({ userId: merchant.id, role: 'AHN_DEVELOPER' });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('VALIDATION_FAILED');
+  });
+
+  it("refuses to touch another organization's staff", async () => {
+    const otherOrg = await createTestOrganization();
+    orgBMember = await createTestUser('AHN_DEVELOPER', { organizationId: otherOrg.id });
+
+    const result = await updateOrgUserRoleAction({ userId: orgBMember.id, role: 'AHN_PROJECT_MANAGER' });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('CONFLICT');
+
+    const unchanged = await db.user.findUniqueOrThrow({ where: { id: orgBMember.id } });
+    expect(unchanged.role).toBe('AHN_DEVELOPER');
+  });
+
+  it('updates a role and title within the same organization', async () => {
+    // orgAAdmin and orgAMember both landed in the shared default test
+    // organization (neither passed an explicit one), so this is a
+    // same-organization edit.
+    await signInAs(orgAAdmin);
+
+    const result = await updateOrgUserRoleAction({
+      userId: orgAMember.id,
+      role: 'AHN_PROJECT_MANAGER',
+      title: 'Delivery Lead',
+    });
+    expect(result.ok).toBe(true);
+
+    const updated = await db.user.findUniqueOrThrow({ where: { id: orgAMember.id } });
+    expect(updated.role).toBe('AHN_PROJECT_MANAGER');
+    expect(updated.team).toBe('AHN');
+    expect(updated.title).toBe('Delivery Lead');
   });
 });
 
