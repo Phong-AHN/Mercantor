@@ -1,15 +1,18 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import {
+  ConflictError,
   ForbiddenError,
   renderAccountInviteEmail,
+  renderPasswordResetEmail,
   USER_ROLE_TEAM,
   ValidationError,
   type UserRole,
 } from '@relay/core';
 import { randomToken } from '@relay/core/server';
-import { createPasswordToken, hashPassword } from '@relay/auth';
+import { createPasswordToken, hashPassword, revokeAllSessionsForUser } from '@relay/auth';
 import { env } from '@relay/config';
 import { db, transaction, type DbTransaction } from '@relay/db';
 import { integrationsFor } from '@relay/integrations';
@@ -19,6 +22,40 @@ import type { ActionResult } from '@/server/action';
 import { actionOk, defineAction } from '@/server/action';
 import { audit } from '@/server/record';
 import { INVITABLE_ROLES, PLATFORM_INVITABLE_ROLES } from './roles';
+
+/**
+ * The organization rule every platform-level write that sets a role has to
+ * enforce: `PLATFORM_ADMIN` has none, ever; every other role needs a real,
+ * still-existing one. Shared by `platformInviteUserAction` and
+ * `platformUpdateUserAction` so the two cannot drift apart on this.
+ */
+async function resolveOrganizationForRole(
+  role: UserRole,
+  organizationId: string | null,
+): Promise<string | null> {
+  if (role === 'PLATFORM_ADMIN') {
+    if (organizationId !== null) {
+      throw new ValidationError('PLATFORM_ADMIN has no organization.', {
+        organizationId: ['PLATFORM_ADMIN has no organization.'],
+      });
+    }
+    return null;
+  }
+
+  if (organizationId === null) {
+    throw new ValidationError('Choose an organization for this role.', {
+      organizationId: ['Choose an organization for this role.'],
+    });
+  }
+
+  const org = await db.organization.findUnique({ where: { id: organizationId }, select: { id: true } });
+  if (!org) {
+    throw new ValidationError('That organization no longer exists.', {
+      organizationId: ['That organization no longer exists.'],
+    });
+  }
+  return organizationId;
+}
 
 /**
  * Shared by `inviteUserAction` and `platformInviteUserAction`: create the
@@ -198,27 +235,7 @@ export const platformInviteUserAction = defineAction({
     organizationId: z.string().uuid().nullable(),
   }),
   async handler(input, ctx) {
-    if (input.role === 'PLATFORM_ADMIN') {
-      if (input.organizationId !== null) {
-        throw new ValidationError('PLATFORM_ADMIN has no organization.', {
-          organizationId: ['PLATFORM_ADMIN has no organization.'],
-        });
-      }
-    } else if (input.organizationId === null) {
-      throw new ValidationError('Choose an organization for this role.', {
-        organizationId: ['Choose an organization for this role.'],
-      });
-    } else {
-      const org = await db.organization.findUnique({
-        where: { id: input.organizationId },
-        select: { id: true },
-      });
-      if (!org) {
-        throw new ValidationError('That organization no longer exists.', {
-          organizationId: ['That organization no longer exists.'],
-        });
-      }
-    }
+    const organizationId = await resolveOrganizationForRole(input.role, input.organizationId);
 
     const user = await transaction((tx) =>
       createInvitedUser(tx, {
@@ -226,7 +243,7 @@ export const platformInviteUserAction = defineAction({
         name: input.name,
         role: input.role,
         title: input.title ?? null,
-        organizationId: input.organizationId,
+        organizationId,
         invitedBy: ctx.principal,
         ip: ctx.ip,
         auditAction: 'platform.invite_user',
@@ -234,5 +251,182 @@ export const platformInviteUserAction = defineAction({
     );
 
     return deliverInviteEmail(user, ctx.principal.name);
+  },
+});
+
+/**
+ * Edits an existing account's role, organization and title - the "manage"
+ * half of platform-wide account administration, `platformInviteUserAction`
+ * being the "create" half. `MERCHANT` accounts are excluded: a merchant's
+ * access comes from `ProjectMember` rows on specific projects, not a role
+ * change, and converting one to staff (or the reverse) is not a thing this
+ * form should paper over. Editing your own row is refused outright - simpler
+ * than reasoning about whether a self-demotion would leave zero
+ * `PLATFORM_ADMIN`s standing, since another admin doing it is always safe
+ * regardless of how many there are.
+ */
+export const platformUpdateUserAction = defineAction({
+  name: 'platform.update_user',
+  permission: 'platform:manage',
+  input: z.object({
+    userId: z.string().uuid(),
+    role: z.enum(PLATFORM_INVITABLE_ROLES),
+    organizationId: z.string().uuid().nullable(),
+    title: z.string().trim().max(200).optional(),
+  }),
+  async handler(input, ctx) {
+    if (input.userId === ctx.principal.id) {
+      throw new ForbiddenError('You cannot change your own role here.');
+    }
+
+    const target = await db.user.findUnique({
+      where: { id: input.userId },
+      select: { id: true, name: true, role: true, organizationId: true, deletedAt: true },
+    });
+    if (!target || target.deletedAt !== null) {
+      throw new ConflictError('That account no longer exists.');
+    }
+    if (target.role === 'MERCHANT') {
+      throw new ValidationError('Merchant accounts are managed from their project, not here.');
+    }
+
+    const organizationId = await resolveOrganizationForRole(input.role, input.organizationId);
+    const team = USER_ROLE_TEAM[input.role];
+
+    await transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: input.userId },
+        data: { role: input.role, team, organizationId, title: input.title ?? null },
+      });
+
+      await audit(tx, {
+        principal: ctx.principal,
+        action: 'platform.update_user',
+        entityType: 'User',
+        entityId: updated.id,
+        before: { role: target.role, organizationId: target.organizationId },
+        after: { role: updated.role, organizationId: updated.organizationId },
+        ip: ctx.ip,
+      });
+    });
+
+    revalidatePath('/admin/platform/people');
+    return actionOk(undefined, `Updated ${target.name}.`);
+  },
+});
+
+/**
+ * Suspends or restores sign-in, without touching the row otherwise -
+ * `resolveSession` already refuses an inactive account on every request, so
+ * this is immediate, not "at next sign-out." Deactivating also revokes every
+ * existing session (`revokeAllSessionsForUser`), the same as a password
+ * change - an account someone just locked should not keep working from a
+ * tab that was already open. Refused on your own account for the same
+ * reason `platformUpdateUserAction` refuses a self role change: another
+ * `PLATFORM_ADMIN` doing it is always safe, doing it to yourself risks
+ * locking yourself out with nobody at the keyboard to undo it.
+ */
+export const platformSetUserActiveAction = defineAction({
+  name: 'platform.set_user_active',
+  permission: 'platform:manage',
+  input: z.object({ userId: z.string().uuid(), isActive: z.boolean() }),
+  async handler(input, ctx) {
+    if (input.userId === ctx.principal.id) {
+      throw new ForbiddenError('You cannot deactivate your own account.');
+    }
+
+    const target = await db.user.findUnique({
+      where: { id: input.userId },
+      select: { id: true, name: true, isActive: true, deletedAt: true },
+    });
+    if (!target || target.deletedAt !== null) {
+      throw new ConflictError('That account no longer exists.');
+    }
+    if (target.isActive === input.isActive) {
+      return actionOk(undefined, `${target.name} is already ${input.isActive ? 'active' : 'deactivated'}.`);
+    }
+
+    await transaction(async (tx) => {
+      await tx.user.update({ where: { id: input.userId }, data: { isActive: input.isActive } });
+
+      await audit(tx, {
+        principal: ctx.principal,
+        action: 'platform.set_user_active',
+        entityType: 'User',
+        entityId: input.userId,
+        before: { isActive: target.isActive },
+        after: { isActive: input.isActive },
+        ip: ctx.ip,
+      });
+    });
+
+    if (!input.isActive) {
+      await revokeAllSessionsForUser(input.userId);
+    }
+
+    revalidatePath('/admin/platform/people');
+    return actionOk(undefined, `${target.name} ${input.isActive ? 'reactivated' : 'deactivated'}.`);
+  },
+});
+
+/**
+ * Mints a fresh link and re-sends it: `INVITE` for an account that has never
+ * signed in (the original link may be lost, expired, or never arrived),
+ * `RESET` for one that has - the same two purposes and templates
+ * `requestPasswordResetAction` uses for the self-service "forgot password"
+ * flow, just triggered by an admin instead of the account holder. Consuming
+ * either kind still only ever goes through the one `/set-password` page.
+ */
+export const platformResendInviteAction = defineAction({
+  name: 'platform.resend_invite',
+  permission: 'platform:manage',
+  input: z.object({ userId: z.string().uuid() }),
+  async handler(input, ctx) {
+    const user = await db.user.findUnique({
+      where: { id: input.userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        organizationId: true,
+        isActive: true,
+        deletedAt: true,
+        lastLoginAt: true,
+      },
+    });
+    if (!user || user.deletedAt !== null) {
+      throw new ConflictError('That account no longer exists.');
+    }
+    if (!user.isActive) {
+      throw new ConflictError('Reactivate the account before sending a link.');
+    }
+
+    const everSignedIn = user.lastLoginAt !== null;
+    const { token } = await createPasswordToken(user.id, everSignedIn ? 'RESET' : 'INVITE');
+    const rendered = everSignedIn
+      ? renderPasswordResetEmail({
+          recipientName: user.name,
+          resetUrl: `${env().APP_URL}/set-password?token=${token}`,
+        })
+      : renderAccountInviteEmail({
+          recipientName: user.name,
+          invitedBy: ctx.principal.name,
+          setPasswordUrl: `${env().APP_URL}/set-password?token=${token}`,
+        });
+
+    const registry = await integrationsFor(user.organizationId);
+    const result = await registry.email.send({
+      to: [{ name: user.name, email: user.email }],
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
+    });
+
+    if (!result.ok) {
+      logger.error({ userId: user.id, error: result.error }, 'resend link email failed to send');
+      return actionOk(undefined, `Link created, but the email could not be sent - check /integrations.`);
+    }
+
+    return actionOk(undefined, `Sent ${user.name} a new ${everSignedIn ? 'reset' : 'invite'} link.`);
   },
 });

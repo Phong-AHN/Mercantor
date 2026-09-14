@@ -1,5 +1,5 @@
 import 'server-only';
-import { USER_ROLES, type UserRole } from '@relay/core';
+import { USER_ROLES, type Team, type UserRole } from '@relay/core';
 import { db } from '@relay/db';
 import { effectivePermissions, PERMISSIONS, ROLE_PERMISSIONS, type Permission } from '@relay/rbac';
 
@@ -92,5 +92,57 @@ export async function listProjectsForMerchantInvite(): Promise<
   return projects.map((project) => ({
     code: project.code,
     label: `${project.merchant.name} (${project.code})`,
+  }));
+}
+
+export interface PlatformAccount {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  team: Team;
+  title: string | null;
+  isActive: boolean;
+  lastLoginAt: Date | null;
+  organizationId: string | null;
+  organizationName: string | null;
+}
+
+/**
+ * Every account on the portal, across every organization - `/people` scopes
+ * its own listing to the viewer's organization; this is the platform-wide
+ * equivalent that backs the manage table on `/admin/platform/people`.
+ * Soft-deleted accounts are left out, same as everywhere else a user list is
+ * built - a deleted row is not "managed," it is gone.
+ */
+export async function listAllAccountsForPlatform(): Promise<PlatformAccount[]> {
+  const users = await db.user.findMany({
+    where: { deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      team: true,
+      title: true,
+      isActive: true,
+      lastLoginAt: true,
+      organizationId: true,
+      organization: { select: { name: true } },
+    },
+    orderBy: [{ role: 'asc' }, { name: 'asc' }],
+  });
+
+  return users.map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    team: user.team,
+    title: user.title,
+    isActive: user.isActive,
+    lastLoginAt: user.lastLoginAt,
+    organizationId: user.organizationId,
+    organizationName: user.organization?.name ?? null,
   }));
 }

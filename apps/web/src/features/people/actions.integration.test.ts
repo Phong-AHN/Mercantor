@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
+import { clock } from '@relay/core';
 import { db } from '@relay/db';
 import {
   cleanupFixtures,
@@ -7,7 +8,13 @@ import {
   signInAs,
   type TestUser,
 } from '../../../test/fixtures';
-import { inviteUserAction, platformInviteUserAction } from './actions';
+import {
+  inviteUserAction,
+  platformInviteUserAction,
+  platformResendInviteAction,
+  platformSetUserActiveAction,
+  platformUpdateUserAction,
+} from './actions';
 
 /**
  * D-051: the first of the two gaps `FUTURE-WORK.md` §1 named - nothing
@@ -217,5 +224,192 @@ describe('platformInviteUserAction', () => {
     inviteeIds.push(user.id);
     expect(user.role).toBe('PLATFORM_ADMIN');
     expect(user.organizationId).toBeNull();
+  });
+});
+
+/**
+ * The "manage" half of platform-wide account administration -
+ * `platformInviteUserAction` above is the "create" half. Every action here
+ * is gated the same way (`platform:manage`) and refuses to touch the
+ * caller's own account, so a `PLATFORM_ADMIN` cannot lock themselves out.
+ */
+describe('platformUpdateUserAction', () => {
+  let platformAdmin: TestUser;
+  let target: TestUser;
+  let orgA: { id: string };
+  let orgB: { id: string };
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('is refused for a role without platform:manage', async () => {
+    const orgAdmin = await createTestUser('AHN_ADMIN');
+    await signInAs(orgAdmin);
+
+    const result = await platformUpdateUserAction({
+      userId: orgAdmin.id,
+      role: 'AHN_PROJECT_MANAGER',
+      organizationId: orgAdmin.organizationId,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('FORBIDDEN');
+  });
+
+  it('refuses to change the caller\'s own role', async () => {
+    platformAdmin = await createTestUser('PLATFORM_ADMIN');
+    await signInAs(platformAdmin);
+
+    const result = await platformUpdateUserAction({
+      userId: platformAdmin.id,
+      role: 'AHN_ADMIN',
+      organizationId: null,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('FORBIDDEN');
+  });
+
+  it('refuses to edit a MERCHANT account', async () => {
+    const merchant = await createTestUser('MERCHANT');
+    const result = await platformUpdateUserAction({
+      userId: merchant.id,
+      role: 'AHN_DEVELOPER',
+      organizationId: null,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('moves a staff account to a different organization and role', async () => {
+    orgA = await createTestOrganization();
+    orgB = await createTestOrganization();
+    target = await createTestUser('AHN_DEVELOPER', { organizationId: orgA.id });
+
+    const result = await platformUpdateUserAction({
+      userId: target.id,
+      role: 'SHOPLINE_ACCOUNT_MANAGER',
+      organizationId: orgB.id,
+      title: 'Senior AM',
+    });
+    expect(result.ok).toBe(true);
+
+    const updated = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(updated.role).toBe('SHOPLINE_ACCOUNT_MANAGER');
+    expect(updated.team).toBe('SHOPLINE');
+    expect(updated.organizationId).toBe(orgB.id);
+    expect(updated.title).toBe('Senior AM');
+  });
+
+  it('promotes a staff account to PLATFORM_ADMIN, clearing its organization', async () => {
+    const result = await platformUpdateUserAction({
+      userId: target.id,
+      role: 'PLATFORM_ADMIN',
+      organizationId: null,
+    });
+    expect(result.ok).toBe(true);
+
+    const updated = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(updated.role).toBe('PLATFORM_ADMIN');
+    expect(updated.organizationId).toBeNull();
+  });
+});
+
+describe('platformSetUserActiveAction', () => {
+  let platformAdmin: TestUser;
+  let target: TestUser;
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('is refused on the caller\'s own account', async () => {
+    platformAdmin = await createTestUser('PLATFORM_ADMIN');
+    await signInAs(platformAdmin);
+
+    const result = await platformSetUserActiveAction({ userId: platformAdmin.id, isActive: false });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('FORBIDDEN');
+  });
+
+  it('deactivates an account and revokes its live sessions', async () => {
+    target = await createTestUser('AHN_DEVELOPER');
+    await signInAs(target);
+    const activeSession = await db.session.findFirstOrThrow({
+      where: { userId: target.id, revokedAt: null },
+    });
+
+    await signInAs(platformAdmin);
+    const result = await platformSetUserActiveAction({ userId: target.id, isActive: false });
+    expect(result.ok).toBe(true);
+
+    const updated = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(updated.isActive).toBe(false);
+
+    const revoked = await db.session.findUniqueOrThrow({ where: { id: activeSession.id } });
+    expect(revoked.revokedAt).not.toBeNull();
+  });
+
+  it('is a no-op, not an error, when already in the requested state', async () => {
+    const result = await platformSetUserActiveAction({ userId: target.id, isActive: false });
+    expect(result.ok).toBe(true);
+  });
+
+  it('reactivates the account', async () => {
+    const result = await platformSetUserActiveAction({ userId: target.id, isActive: true });
+    expect(result.ok).toBe(true);
+
+    const updated = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(updated.isActive).toBe(true);
+  });
+});
+
+describe('platformResendInviteAction', () => {
+  let platformAdmin: TestUser;
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('refuses to send a link to a deactivated account', async () => {
+    platformAdmin = await createTestUser('PLATFORM_ADMIN');
+    await signInAs(platformAdmin);
+    const deactivated = await createTestUser('AHN_DEVELOPER');
+    await db.user.update({ where: { id: deactivated.id }, data: { isActive: false } });
+
+    const result = await platformResendInviteAction({ userId: deactivated.id });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('CONFLICT');
+  });
+
+  it('sends an INVITE-purpose link to an account that has never signed in', async () => {
+    const neverSignedIn = await createTestUser('AHN_DEVELOPER');
+
+    const result = await platformResendInviteAction({ userId: neverSignedIn.id });
+    expect(result.ok).toBe(true);
+
+    const token = await db.passwordToken.findFirstOrThrow({
+      where: { userId: neverSignedIn.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(token.purpose).toBe('INVITE');
+  });
+
+  it('sends a RESET-purpose link to an account that has already signed in', async () => {
+    const returning = await createTestUser('AHN_DEVELOPER');
+    await db.user.update({ where: { id: returning.id }, data: { lastLoginAt: clock.now() } });
+
+    const result = await platformResendInviteAction({ userId: returning.id });
+    expect(result.ok).toBe(true);
+
+    const token = await db.passwordToken.findFirstOrThrow({
+      where: { userId: returning.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(token.purpose).toBe('RESET');
   });
 });

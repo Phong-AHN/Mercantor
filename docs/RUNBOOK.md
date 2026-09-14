@@ -580,6 +580,31 @@ differed in how `organizationId` was decided and which permission/role list gate
   before mocking. Without this, inviting a `PLATFORM_ADMIN` account would create the user but could
   never actually deliver the set-password link.
 
+**Account management** (same screen, `platformUpdateUserAction` / `platformSetUserActiveAction` /
+`platformResendInviteAction` in `apps/web/src/features/people/actions.ts`) - "create" was only half
+the gap; nothing anywhere in the app could edit a role, deactivate an account, or re-send a link
+once created, for any role. All three are `platform:manage`-gated and refuse to act on the caller's
+own account, so a `PLATFORM_ADMIN` cannot demote or deactivate themselves into a state nobody else
+can undo:
+
+- **Edit role/organization/title** - same `PLATFORM_ADMIN`-has-none / everyone-else-needs-a-real-one
+  rule as inviting, shared via `resolveOrganizationForRole`. Refuses a `MERCHANT` target outright -
+  that access comes from `ProjectMember` rows on specific projects, not a role, and there is no
+  sane "convert this merchant to staff" operation to paper over here.
+- **Deactivate/reactivate** - `resolveSession` already refuses an inactive account on every request,
+  so this takes effect immediately, not at next sign-out; deactivating also calls
+  `revokeAllSessionsForUser` (previously only wired into the password-change flow), so a tab that
+  was already open stops working too, not just future sign-ins.
+- **Resend a link** - `INVITE` purpose if the account has never signed in (`lastLoginAt` is null -
+  the original link may be lost or expired), `RESET` if it has, mirroring the two purposes and
+  templates `requestPasswordResetAction`'s self-service "forgot password" flow already uses.
+
+`/admin/platform/people` renders every account across every organization
+(`listAllAccountsForPlatform` in `apps/web/src/features/platform/service.ts`) in one table -
+`/people`'s own listing is correct for `PLATFORM_ADMIN` too (it has no organization, so its own
+`orgScope` filter is a no-op and it already sees everyone), but this is the one with edit
+affordances wired to the platform-only actions above.
+
 ---
 
 ## Money visibility for SHOPLINE

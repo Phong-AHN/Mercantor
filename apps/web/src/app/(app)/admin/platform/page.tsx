@@ -77,11 +77,11 @@ export default async function PlatformAdminPage() {
         <CardHeader
           icon={<UserPlus className="size-4" />}
           title="Accounts"
-          description="Create a staff account in any organization, another PLATFORM_ADMIN, or a merchant on any project - the reach /people's own invite button does not have."
+          description="Create or edit any account, in any organization - staff, another PLATFORM_ADMIN, or a merchant - the reach /people does not have."
           actions={
             <Link href="/admin/platform/people" className={buttonStyles('secondary', 'sm')}>
               <UserPlus className="size-3.5" />
-              Create account
+              Manage accounts
             </Link>
           }
         />
