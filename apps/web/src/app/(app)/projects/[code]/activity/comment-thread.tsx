@@ -12,7 +12,7 @@ import {
 } from '@relay/core';
 import { Avatar, Badge, cn, Empty, StatusPill } from '@relay/ui';
 import { FileUploadButton } from '@/app/(app)/projects/[code]/access/access-controls';
-import { CommentComposer, ResolveButton } from './activity-controls';
+import { CommentComposer, EditCommentButton, ResolveButton } from './activity-controls';
 
 const SOURCE_LABEL: Record<string, string> = {
   PORTAL: 'in the portal',
@@ -30,6 +30,7 @@ export interface ThreadComment {
   source: string;
   sourceUrl: string | null;
   createdAt: Date;
+  updatedAt: Date;
   resolvedAt: Date | null;
   parentId: string | null;
   author: { id: string; name: string; role: string };
@@ -189,6 +190,9 @@ function CommentRow({
           >
             {formatRelative(comment.createdAt, now)}
             {comment.source !== 'PORTAL' && ` ${SOURCE_LABEL[comment.source]}`}
+            {comment.updatedAt.getTime() !== comment.createdAt.getTime() && (
+              <span title={`Edited ${formatDateTime(comment.updatedAt)}`}> (edited)</span>
+            )}
           </span>
         </div>
 
@@ -254,6 +258,9 @@ function CommentRow({
             </button>
           )}
           {canUploadFiles && <FileUploadButton code={code} commentId={comment.id} />}
+          {canManage && (
+            <EditCommentButton code={code} commentId={comment.id} body={comment.body} />
+          )}
           {canManage && comment.status !== 'NONE' && comment.status !== 'RESOLVED' && (
             <ResolveButton code={code} commentId={comment.id} />
           )}

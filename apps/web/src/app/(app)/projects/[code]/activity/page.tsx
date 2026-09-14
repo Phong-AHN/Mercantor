@@ -1,5 +1,10 @@
-import { COMMENT_CATEGORY_LABEL, COMMENT_VISIBILITY_LABEL, formatRelative } from '@relay/core';
-import { can, writableVisibilities } from '@relay/rbac';
+import {
+  COMMENT_CATEGORY_LABEL,
+  COMMENT_VISIBILITY_LABEL,
+  formatRelative,
+  type CommentVisibility,
+} from '@relay/core';
+import { can, principalTeam, writableVisibilities } from '@relay/rbac';
 import { Card, CardBody, CardHeader, Empty, StatusPill } from '@relay/ui';
 import { getProject, listAssignableUsers } from '@/features/projects/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
@@ -25,6 +30,12 @@ export default async function ProjectActivityPage({
   const canManage = can(principal, 'comment:manage');
   const canUploadFiles = can(principal, 'asset:upload');
   const visibilities = writableVisibilities(principal);
+  // AHN writes only ever land as INTERNAL_AHN now (`resolveWriteVisibility`
+  // in the action itself is the real enforcement); narrowing what the
+  // composer even offers just keeps the UI honest about that rather than
+  // showing a choice the server will silently override.
+  const composeVisibilities: CommentVisibility[] =
+    principalTeam(principal) === 'AHN' ? ['INTERNAL_AHN'] : visibilities;
   const openItems = project.comments.filter(
     (comment) => comment.status === 'OPEN' || comment.status === 'IN_PROGRESS',
   );
@@ -33,7 +44,11 @@ export default async function ProjectActivityPage({
     <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <div className="space-y-4">
         {canComment && (
-          <CommentComposer code={project.code} visibilities={visibilities} people={people.all} />
+          <CommentComposer
+            code={project.code}
+            visibilities={composeVisibilities}
+            people={people.all}
+          />
         )}
 
         <Card>
@@ -48,9 +63,9 @@ export default async function ProjectActivityPage({
             comments={project.comments}
             now={now}
             people={people.all}
-            visibilities={visibilities}
-            canReply={canComment}
+            visibilities={composeVisibilities}
             canManage={canManage}
+            canReply={canComment}
             canUploadFiles={canUploadFiles}
           />
         </Card>

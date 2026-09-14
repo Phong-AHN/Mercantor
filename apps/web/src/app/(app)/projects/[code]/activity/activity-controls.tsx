@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AtSign, CircleCheck, Hash, Send } from 'lucide-react';
+import { AtSign, CircleCheck, Hash, Pencil, Send } from 'lucide-react';
 import {
   COMMENT_CATEGORIES,
   COMMENT_CATEGORY_LABEL,
@@ -27,6 +27,7 @@ import {
   postCommentAction,
   recordSlackMessageAction,
   resolveCommentAction,
+  updateCommentAction,
 } from '@/features/activity/actions';
 
 interface Person {
@@ -333,5 +334,72 @@ export function ResolveButton({ code, commentId }: { code: string; commentId: st
       <CircleCheck className="size-3.5" />
       Mark resolved
     </Button>
+  );
+}
+
+/**
+ * Fixes a typo, nothing more - `updateCommentAction` is deliberately
+ * body-only, so there is no category/visibility control here to fill in.
+ */
+export function EditCommentButton({
+  code,
+  commentId,
+  body,
+}: {
+  code: string;
+  commentId: string;
+  body: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(body);
+  const action = useAction(updateCommentAction, { onSuccess: () => setOpen(false) });
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setText(body);
+          setOpen(true);
+        }}
+        className="text-muted hover:text-ink flex items-center gap-1 text-[11.5px] font-medium"
+      >
+        <Pencil className="size-3.5" />
+        Edit
+      </button>
+
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Edit"
+        size="sm"
+        busy={action.pending}
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={action.pending}
+              disabled={text.trim().length === 0}
+              onClick={() => action.run({ code, commentId, body: text })}
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {action.error && (
+            <Alert tone="danger" dense>
+              {action.error}
+            </Alert>
+          )}
+          <Textarea value={text} onChange={(event) => setText(event.target.value)} rows={4} autoFocus />
+        </div>
+      </Dialog>
+    </>
   );
 }

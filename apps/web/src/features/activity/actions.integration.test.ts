@@ -8,7 +8,7 @@ import {
   signInAs,
   type TestUser,
 } from '../../../test/fixtures';
-import { postCommentAction } from './actions';
+import { postCommentAction, updateCommentAction } from './actions';
 
 /**
  * "Internal AHN notes must remain private" (D-009) is implemented as a query
@@ -227,5 +227,180 @@ describe('threaded replies', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');
     expect(result.code).toBe('CONFLICT');
+  });
+});
+
+/**
+ * "These logs stay internal to the organization" - an AHN-team author's
+ * write is forced to INTERNAL_AHN regardless of what visibility was
+ * requested, so SHOPLINE and the merchant never see it, and never get a
+ * notification preview of it via a mention either. SHOPLINE's own writes
+ * are untouched - this only ever narrows what AHN itself can choose.
+ */
+describe('AHN writes are forced to INTERNAL_AHN', () => {
+  let pm: TestUser;
+  let am: TestUser;
+  let merchant: TestUser;
+  let projectCode: string;
+  let projectId: string;
+
+  beforeAll(async () => {
+    pm = await createTestUser('AHN_PROJECT_MANAGER');
+    am = await createTestUser('SHOPLINE_ACCOUNT_MANAGER');
+    merchant = await createTestUser('MERCHANT');
+    const project = await createTestProject({
+      as: pm,
+      ahnProjectManagerId: pm.id,
+      shoplineAmId: am.id,
+    });
+    projectCode = project.code;
+    projectId = project.id;
+    await db.projectMember.create({ data: { projectId, userId: merchant.id } });
+  });
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('overrides an AHN author asking for AHN_SHOPLINE or EVERYONE - both land as INTERNAL_AHN', async () => {
+    await signInAs(pm);
+
+    const askedShopline = await postCommentAction({
+      code: projectCode,
+      body: 'AHN asked for AHN_SHOPLINE, should land internal anyway.',
+      category: 'GENERAL_UPDATE',
+      visibility: 'AHN_SHOPLINE',
+      status: 'NONE',
+      mentions: [],
+      alsoSlack: false,
+    });
+    expect(askedShopline.ok).toBe(true);
+
+    const askedEveryone = await postCommentAction({
+      code: projectCode,
+      body: 'AHN asked for EVERYONE, should land internal anyway.',
+      category: 'GENERAL_UPDATE',
+      visibility: 'EVERYONE',
+      status: 'NONE',
+      mentions: [],
+      alsoSlack: false,
+    });
+    expect(askedEveryone.ok).toBe(true);
+
+    const rows = await db.comment.findMany({
+      where: { projectId, body: { contains: 'should land internal anyway' } },
+      select: { visibility: true },
+    });
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.visibility).toBe('INTERNAL_AHN');
+
+    await signInAs(am);
+    const asShopline = await getProject(am, projectCode);
+    expect(
+      asShopline.comments.some((c) => c.body.includes('should land internal anyway')),
+    ).toBe(false);
+  });
+
+  it("does not touch SHOPLINE's own choice of AHN_SHOPLINE", async () => {
+    await signInAs(am);
+    const result = await postCommentAction({
+      code: projectCode,
+      body: 'SHOPLINE writing AHN_SHOPLINE stays AHN_SHOPLINE.',
+      category: 'GENERAL_UPDATE',
+      visibility: 'AHN_SHOPLINE',
+      status: 'NONE',
+      mentions: [],
+      alsoSlack: false,
+    });
+    expect(result.ok).toBe(true);
+
+    const row = await db.comment.findFirstOrThrow({
+      where: { projectId, body: 'SHOPLINE writing AHN_SHOPLINE stays AHN_SHOPLINE.' },
+      select: { visibility: true },
+    });
+    expect(row.visibility).toBe('AHN_SHOPLINE');
+  });
+
+  it('never notifies a mentioned SHOPLINE/merchant user about a comment forced internal', async () => {
+    await signInAs(pm);
+    const result = await postCommentAction({
+      code: projectCode,
+      body: 'Mentioning people who should not be notified.',
+      category: 'GENERAL_UPDATE',
+      visibility: 'AHN_SHOPLINE',
+      status: 'NONE',
+      mentions: [am.id, merchant.id],
+      alsoSlack: false,
+    });
+    expect(result.ok).toBe(true);
+
+    const notifications = await db.notification.findMany({
+      where: { userId: { in: [am.id, merchant.id] }, type: 'MENTIONED', projectId },
+    });
+    expect(notifications).toHaveLength(0);
+  });
+});
+
+describe('updateCommentAction', () => {
+  let pm: TestUser;
+  let am: TestUser;
+  let projectCode: string;
+  let projectId: string;
+  let commentId: string;
+
+  beforeAll(async () => {
+    pm = await createTestUser('AHN_PROJECT_MANAGER');
+    am = await createTestUser('SHOPLINE_ACCOUNT_MANAGER');
+    const project = await createTestProject({
+      as: pm,
+      ahnProjectManagerId: pm.id,
+      shoplineAmId: am.id,
+    });
+    projectCode = project.code;
+    projectId = project.id;
+
+    await signInAs(am);
+    const created = await postCommentAction({
+      code: projectCode,
+      body: 'Original text.',
+      category: 'GENERAL_UPDATE',
+      visibility: 'AHN_SHOPLINE',
+      status: 'NONE',
+      mentions: [],
+      alsoSlack: false,
+    });
+    expect(created.ok).toBe(true);
+    const row = await db.comment.findFirstOrThrow({
+      where: { projectId, body: 'Original text.' },
+      select: { id: true },
+    });
+    commentId = row.id;
+  });
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('edits the body and leaves category/visibility untouched', async () => {
+    const result = await updateCommentAction({ code: projectCode, commentId, body: 'Fixed text.' });
+    expect(result.ok).toBe(true);
+
+    const updated = await db.comment.findUniqueOrThrow({ where: { id: commentId } });
+    expect(updated.body).toBe('Fixed text.');
+    expect(updated.visibility).toBe('AHN_SHOPLINE');
+    expect(updated.updatedAt.getTime()).toBeGreaterThan(updated.createdAt.getTime());
+  });
+
+  it('is refused for a role without comment:manage', async () => {
+    const merchant = await createTestUser('MERCHANT');
+    await signInAs(merchant);
+    const result = await updateCommentAction({
+      code: projectCode,
+      commentId,
+      body: 'A merchant should not manage to edit this.',
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('FORBIDDEN');
   });
 });

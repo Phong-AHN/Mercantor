@@ -423,6 +423,7 @@ export const getProject = cache(async (principal: Principal, code: string) => {
           source: true,
           sourceUrl: true,
           createdAt: true,
+          updatedAt: true,
           resolvedAt: true,
           parentId: true,
           author: { select: { id: true, name: true, role: true } },

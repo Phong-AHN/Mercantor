@@ -675,6 +675,38 @@ SHOPLINE-visible channels` suite is the regression test for this specific gap.
 
 ---
 
+## AHN's own project updates stay internal
+
+At the user's request: every comment/update an AHN-team principal posts in a project's Activity
+tab is forced to `INTERNAL_AHN`, whatever visibility was requested - SHOPLINE and the merchant
+never see it, full stop. This is an override, not a narrower default: `resolveWriteVisibility` in
+`apps/web/src/features/activity/actions.ts` substitutes `INTERNAL_AHN` for the requested value
+before `postCommentAction`/`recordSlackMessageAction` ever validate or write it, so every write
+path is covered, not just the composer UI (which also narrows its own visibility picker to a
+single, already-locked "AHN internal" option for an AHN principal, purely so the choice on screen
+matches what the server was always going to do). **SHOPLINE's own choice of `AHN_SHOPLINE` when
+they post is untouched** - `resolveWriteVisibility` only ever looks at the AHN team, so SHOPLINE
+keeps exactly the visibility options it always had.
+
+**A mention notification's body previews the comment text** - on a comment now-forced to
+`INTERNAL_AHN`, mentioning a SHOPLINE/merchant person would otherwise leak that preview to them
+even though the comment itself stays correctly hidden from the feed. `postCommentAction` filters
+`notify()`'s recipients to AHN-team mentions only when the resolved visibility is `INTERNAL_AHN` -
+caught before shipping, the same class of leak `invoice:manage`'s ActivityEvent gap above was.
+
+**Applied retroactively** (per explicit confirmation) to every comment and comment-mirroring
+`ActivityEvent` (`COMMENT_POSTED`/`SLACK_MESSAGE_RECORDED`) already authored by an AHN-team
+principal and not already `INTERNAL_AHN` - a one-off script, not a migration file, since it edits
+data rather than schema. Other `ActivityEvent` types (stage changes, asset status, etc. - system-
+generated, not a Comment) were deliberately left alone; only what "update log" actually meant
+(user-authored comments and their timeline mirror) was in scope.
+
+`updateCommentAction` (`comment:manage`, same gate `resolveCommentAction` already uses) is the new
+"Edit" button on a posted comment - body only, never category or visibility, specifically so
+editing can never become a back door around the override above.
+
+---
+
 ## Backups & data
 
 The project record is the product. Back up Postgres; everything else — Redis, the object store —

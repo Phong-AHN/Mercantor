@@ -8,10 +8,11 @@ import {
   COMMENT_VISIBILITIES,
   ConflictError,
   ForbiddenError,
+  USER_ROLE_TEAM,
   type CommentVisibility,
 } from '@relay/core';
 import { db, transaction } from '@relay/db';
-import { writableVisibilities } from '@relay/rbac';
+import { principalTeam, writableVisibilities } from '@relay/rbac';
 import { integrationsFor } from '@relay/integrations';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, notify, recordActivity } from '@/server/record';
@@ -26,7 +27,25 @@ import {
  * The activity feed. Visibility is the private-notes boundary: an AHN-internal
  * note is refused at write time for anyone who cannot hold that visibility, and
  * filtered out of the read query for anyone who cannot read it.
+ *
+ * **Anything an AHN-team principal posts is forced to `INTERNAL_AHN`**,
+ * whatever visibility the request asked for - SHOPLINE and the merchant
+ * never see it. This overrides, rather than merely restricts, the choice:
+ * `AHN_SHOPLINE` used to be the default an AHN author saw pre-selected in
+ * the composer, so an override (not just narrowing the composer's own
+ * option list) is what actually closes the door for every write path, not
+ * only the one UI that happens to enforce it client-side too. SHOPLINE and
+ * the merchant keep writing exactly the visibilities they always could -
+ * this only ever narrows what AHN itself can choose.
  */
+function resolveWriteVisibility(
+  principal: Parameters<typeof writableVisibilities>[0],
+  requested: CommentVisibility,
+): CommentVisibility {
+  if (principalTeam(principal) === 'AHN') return 'INTERNAL_AHN';
+  return requested;
+}
+
 export const postCommentAction = defineAction({
   name: 'comment.create',
   permission: 'comment:create',
@@ -45,8 +64,9 @@ export const postCommentAction = defineAction({
   async handler(input, ctx) {
     const project = await resolveProject(ctx.principal, input.code);
 
+    const visibility = resolveWriteVisibility(ctx.principal, input.visibility);
     const allowed = writableVisibilities(ctx.principal);
-    if (!allowed.includes(input.visibility as CommentVisibility)) {
+    if (!allowed.includes(visibility)) {
       throw new ForbiddenError('You cannot post a note at that visibility.', {
         visibility: input.visibility,
       });
@@ -68,7 +88,7 @@ export const postCommentAction = defineAction({
           parentId: input.parentId ?? null,
           body: input.body,
           category: input.category,
-          visibility: input.visibility,
+          visibility,
           status: input.status,
           assignedToId: input.assignedToId ?? null,
           createdAt: clock.now(),
@@ -85,7 +105,7 @@ export const postCommentAction = defineAction({
         actorId: ctx.principal.id,
         summary: `${ctx.principal.name} posted an update.`,
         detail: input.body.slice(0, 280),
-        visibility: input.visibility,
+        visibility,
         payload: { commentId: comment.id, category: input.category },
       });
 
@@ -95,12 +115,31 @@ export const postCommentAction = defineAction({
         action: 'comment.create',
         entityType: 'Comment',
         entityId: comment.id,
-        after: { category: input.category, visibility: input.visibility },
+        after: { category: input.category, visibility },
         ip: ctx.ip,
       });
 
+      // A mention notification's body previews the comment text - on an
+      // INTERNAL_AHN comment, mentioning someone who cannot read
+      // INTERNAL_AHN (SHOPLINE, the merchant) would otherwise leak that
+      // preview to them even though the comment itself stays hidden. Only
+      // mentions on the AHN team get notified - the role is authoritative
+      // over the denormalised `team` column, the same rule `principalTeam`
+      // applies everywhere else.
+      const notifiableMentions =
+        visibility === 'INTERNAL_AHN'
+          ? (
+              await tx.user.findMany({
+                where: { id: { in: input.mentions } },
+                select: { id: true, role: true },
+              })
+            )
+              .filter((user) => (USER_ROLE_TEAM[user.role] ?? 'OTHER') === 'AHN')
+              .map((user) => user.id)
+          : input.mentions;
+
       await notify(tx, {
-        userIds: input.mentions,
+        userIds: notifiableMentions,
         projectId: project.id,
         type: 'MENTIONED',
         title: `${ctx.principal.name} mentioned you on ${project.merchantName}`,
@@ -122,7 +161,7 @@ export const postCommentAction = defineAction({
       }
 
       // An internal AHN note must never leave AHN, whatever the box says.
-      if (input.alsoSlack && input.visibility !== 'INTERNAL_AHN') {
+      if (input.alsoSlack && visibility !== 'INTERNAL_AHN') {
         return fanOut(tx, {
           projectId: project.id,
           projectCode: project.code,
@@ -187,6 +226,58 @@ export const resolveCommentAction = defineAction({
 });
 
 /**
+ * Fixes a typo, corrects a fact, nothing more - the "Edit" button on a
+ * posted update. Same gate `resolveCommentAction` already uses
+ * (`comment:manage`, not restricted to the original author) and the same
+ * visibility check (you can only edit what you could have written).
+ * Deliberately body-only: category and visibility stay as posted, so
+ * editing can never turn into a back door for moving something an
+ * AHN-team author's post was already forced into `INTERNAL_AHN` for
+ * (`resolveWriteVisibility`) back out to somewhere SHOPLINE or the
+ * merchant could see it. `updatedAt` (already `@updatedAt` on the model)
+ * is what the thread renders as "(edited)" - no separate flag needed.
+ */
+export const updateCommentAction = defineAction({
+  name: 'comment.update',
+  permission: 'comment:manage',
+  input: z.object({
+    code: z.string().min(1),
+    commentId: z.string().uuid(),
+    body: z.string().trim().min(1, 'Write something first.').max(8000),
+  }),
+  async handler(input, ctx) {
+    const project = await resolveProject(ctx.principal, input.code);
+
+    await transaction(async (tx) => {
+      const comment = await tx.comment.findFirst({
+        where: { id: input.commentId, projectId: project.id, deletedAt: null },
+        select: { id: true, body: true, visibility: true },
+      });
+      if (!comment) throw new ConflictError('That item is not on this project.');
+      if (!writableVisibilities(ctx.principal).includes(comment.visibility)) {
+        throw new ForbiddenError('You cannot edit that item.');
+      }
+
+      await tx.comment.update({ where: { id: comment.id }, data: { body: input.body } });
+
+      await audit(tx, {
+        principal: ctx.principal,
+        projectId: project.id,
+        action: 'comment.update',
+        entityType: 'Comment',
+        entityId: comment.id,
+        before: { body: comment.body },
+        after: { body: input.body },
+        ip: ctx.ip,
+      });
+    });
+
+    revalidateProject(input.code);
+    return actionOk(undefined, 'Updated.');
+  },
+});
+
+/**
  * Pulls a Slack message into the project history. The requirement is explicit
  * that important Slack messages should be recordable back into the record -
  * this is the one direction Slack is allowed to write.
@@ -203,7 +294,8 @@ export const recordSlackMessageAction = defineAction({
   async handler(input, ctx) {
     const project = await resolveProject(ctx.principal, input.code);
 
-    if (!writableVisibilities(ctx.principal).includes(input.visibility)) {
+    const visibility = resolveWriteVisibility(ctx.principal, input.visibility);
+    if (!writableVisibilities(ctx.principal).includes(visibility)) {
       throw new ForbiddenError('You cannot record a message at that visibility.');
     }
 
@@ -221,7 +313,7 @@ export const recordSlackMessageAction = defineAction({
           authorId: ctx.principal.id,
           body: input.note ? `${input.note}\n\n---\n${message.text}` : message.text,
           category: 'GENERAL_UPDATE',
-          visibility: input.visibility,
+          visibility,
           source: 'SLACK',
           sourceUrl: message.permalink,
           sourceRef: message.messageTs,
@@ -236,7 +328,7 @@ export const recordSlackMessageAction = defineAction({
         actorId: ctx.principal.id,
         summary: `Slack message from ${message.authorName} recorded in the project history.`,
         detail: message.text.slice(0, 280),
-        visibility: input.visibility,
+        visibility,
         payload: { commentId: comment.id, permalink: message.permalink },
       });
 
