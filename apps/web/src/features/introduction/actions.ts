@@ -23,6 +23,16 @@ import {
 } from '@/features/projects/mutations';
 
 /**
+ * TEMPORARILY DISABLED (2026-09-14, at the user's request) - the merchant
+ * introduction email (to the merchant's own contacts, cc'd to the AHN PM and
+ * SHOPLINE AM) is switched off while project-creation is being exercised/
+ * tested, so a test run cannot email a real person. Flip back to `true` to
+ * restore it; nothing else about the feature changed - `previewIntroductionAction`
+ * still renders the draft for review, only the actual send is refused.
+ */
+const INTRODUCTION_EMAIL_ENABLED = false;
+
+/**
  * The automated merchant introduction. SHOPLINE picks the contact and presses
  * one button; the body is generated from the project record so two account
  * managers cannot introduce the same product two different ways.
@@ -127,6 +137,12 @@ export const sendIntroductionAction = defineAction({
     note: z.string().trim().max(2000).optional(),
   }),
   async handler(input, ctx) {
+    if (!INTRODUCTION_EMAIL_ENABLED) {
+      throw new ConflictError(
+        'Sending the merchant introduction is temporarily turned off. Ask an admin to re-enable it.',
+      );
+    }
+
     const project = await resolveProject(ctx.principal, input.code);
     const draft = await buildIntroduction(project.id);
 
