@@ -215,9 +215,18 @@ export function navigationFor(principal: Principal): NavGroup[] {
     .filter((group) => group.items.length > 0);
 }
 
-/** Where signing in should land this principal. */
+/**
+ * Where signing in should land this principal. `PLATFORM_ADMIN` holds
+ * neither `portfolio:read` nor `project:read` (it has no project visibility
+ * at all - see `ROLE_PERMISSIONS`'s own comment) so it needs its own
+ * fallback rather than reaching the final `/projects` default, which would
+ * otherwise land it straight on a permission-denied page after every
+ * sign-in.
+ */
 export function landingPathFor(principal: Principal): string {
   if (isConfinedToOwnProjects(principal)) return '/portal';
   if (can(principal, 'portfolio:read')) return '/dashboard';
+  if (can(principal, 'project:read')) return '/projects';
+  if (can(principal, 'platform:manage')) return '/admin/platform';
   return '/projects';
 }

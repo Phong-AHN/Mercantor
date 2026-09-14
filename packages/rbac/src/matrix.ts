@@ -63,8 +63,19 @@ const SHOPLINE_BASE: Permission[] = [
 ];
 
 export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
-  // Operates the portal itself. Full reach, and every action is audited.
-  PLATFORM_ADMIN: [...PERMISSIONS],
+  // Operates the *platform*, not any one merchant's migration - deliberately
+  // narrow, not "full reach." No project, invoice, or delivery visibility at
+  // all: PLATFORM_ADMIN cannot open a project, see a blocker, an approval, an
+  // invoice, or a Slack/ClickUp message. `merchant:manage` is the one
+  // exception, and only for the single action it gates
+  // (`inviteMerchantAction`) - creating a merchant's login is account
+  // administration, the same job as everything else this role does, not a
+  // window into that merchant's project. `projectScopeWhere` still lets this
+  // role's *role* reach every organization's projects unfiltered (needed for
+  // that one action, and for `platform:manage` screens that list across
+  // tenants), but with no `project:read`/`portfolio:read` there is no page
+  // left that would actually render one.
+  PLATFORM_ADMIN: ['platform:manage', 'merchant:manage'],
 
   AHN_ADMIN: [
     ...AHN_DELIVERY,

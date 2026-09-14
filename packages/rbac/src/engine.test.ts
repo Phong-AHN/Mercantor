@@ -10,7 +10,7 @@ import {
   type Principal,
 } from './engine';
 import { ROLE_PERMISSIONS } from './matrix';
-import { navigationFor } from './navigation';
+import { landingPathFor, navigationFor } from './navigation';
 
 const principal = (role: UserRole, overrides: Partial<Principal> = {}): Principal => ({
   id: 'user-1',
@@ -49,6 +49,31 @@ describe('can', () => {
   it('never grants SHOPLINE the internal AHN note', () => {
     for (const role of USER_ROLES.filter((r) => r.startsWith('SHOPLINE'))) {
       expect(can(principal(role, { team: 'SHOPLINE' }), 'comment:internal')).toBe(false);
+    }
+  });
+
+  it('confines PLATFORM_ADMIN to the platform itself - no project, invoice or delivery visibility', () => {
+    const admin = principal('PLATFORM_ADMIN', { organizationId: null });
+    expect(can(admin, 'platform:manage')).toBe(true);
+    expect(can(admin, 'merchant:manage')).toBe(true);
+
+    for (const permission of [
+      'portfolio:read',
+      'project:read',
+      'project:create',
+      'invoice:read',
+      'invoice:manage',
+      'blocker:read',
+      'issue:read',
+      'approval:read',
+      'handoff:decide',
+      'comment:read',
+      'integration:read',
+      'settings:manage',
+      'audit:read',
+      'user:read',
+    ] as const) {
+      expect(can(admin, permission)).toBe(false);
     }
   });
 
@@ -150,9 +175,33 @@ describe('navigationFor', () => {
     expect(hrefs).not.toContain('/settings');
   });
 
+  it('gives PLATFORM_ADMIN exactly one destination: the platform screen itself', () => {
+    const groups = navigationFor(principal('PLATFORM_ADMIN', { organizationId: null }));
+    const hrefs = groups.flatMap((group) => group.items.map((item) => item.href));
+    expect(hrefs).toEqual(['/admin/platform']);
+  });
+
   it('puts a merchant on the merchant surface only', () => {
     const groups = navigationFor(principal('MERCHANT', { team: 'MERCHANT' }));
     const hrefs = groups.flatMap((group) => group.items.map((item) => item.href));
     expect(hrefs.every((href) => href.startsWith('/portal'))).toBe(true);
+  });
+});
+
+describe('landingPathFor', () => {
+  it('sends a merchant to the portal and a portfolio-reading role to the dashboard', () => {
+    expect(landingPathFor(principal('MERCHANT', { team: 'MERCHANT' }))).toBe('/portal');
+    expect(landingPathFor(principal('AHN_PROJECT_MANAGER'))).toBe('/dashboard');
+  });
+
+  it('falls back to the project list for project:read without portfolio:read', () => {
+    const projectOnly = principal('AHN_DEVELOPER', { permissions: ['project:read'] });
+    expect(landingPathFor(projectOnly)).toBe('/projects');
+  });
+
+  it('sends PLATFORM_ADMIN to the platform screen, not the project list it cannot open', () => {
+    expect(landingPathFor(principal('PLATFORM_ADMIN', { organizationId: null }))).toBe(
+      '/admin/platform',
+    );
   });
 });

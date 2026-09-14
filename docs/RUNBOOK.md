@@ -517,6 +517,21 @@ dedicated `platform:manage` permission that only `PLATFORM_ADMIN` ever holds (ke
 aging thresholds - this one reaches across every tenant). Two unrelated things live there because
 they were the two pieces of "portal-wide config" nothing but a redeploy could previously change:
 
+**`PLATFORM_ADMIN`'s own permissions are deliberately narrow** (`ROLE_PERMISSIONS.PLATFORM_ADMIN`
+in `packages/rbac/src/matrix.ts`) - `['platform:manage', 'merchant:manage']`, not "every permission"
+the way it started (`[...PERMISSIONS]`). This role operates the *platform*, not any one merchant's
+migration: no `project:read`, no `portfolio:read`, no `invoice:read`, nothing from the delivery
+surface (blockers, issues, approvals, handoffs, comments) - it cannot open a project, see a
+blocker, or read an invoice, full stop. `merchant:manage` is the one deliberate exception, and only
+because it is the single permission `inviteMerchantAction` checks - needed for the merchant path on
+`/admin/platform/people`, and narrow enough that it grants nothing else (`merchant:manage` gates
+exactly that one action, nowhere else in the app). `projectScopeWhere` still special-cases the
+*role* to see every organization's projects unfiltered regardless of permissions - that stays true
+(`inviteMerchantAction`'s `resolveProject` depends on it), but with no `project:read`/
+`portfolio:read` there is no longer any page left that would render one. `landingPathFor`
+(`packages/rbac/src/navigation.ts`) has its own fallback to `/admin/platform` for exactly this
+role, so signing in does not land it on a `/projects` permission-denied page.
+
 **Shared fallback integration credentials** (`PlatformIntegration` in the schema,
 `setPlatformIntegration`/`platformIntegrationStatus`/`loadPlatformConfig` in
 `packages/integrations/src/registry.ts`). `integrationsFor` now falls back three deep: an
