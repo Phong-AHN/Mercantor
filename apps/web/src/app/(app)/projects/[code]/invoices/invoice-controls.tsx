@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { BellRing, Banknote, Pencil, Plus } from 'lucide-react';
-import { formatMoney, INVOICE_STATUS_LABEL, INVOICE_STATUSES, type InvoiceStatus } from '@relay/core';
-import { Alert, Button, Dialog, Field, Input, Select, Textarea } from '@relay/ui';
+import { formatMoney, type InvoiceStatus } from '@relay/core';
+import { Alert, Button, Dialog, Field, Input, Textarea } from '@relay/ui';
 import { useAction } from '@/components/use-action';
 import {
   chaseInvoiceAction,
@@ -84,7 +84,6 @@ function InvoiceDialog({
     milestone: invoice?.milestone ?? '',
     number: invoice?.number ?? nextNumber,
     amount: invoice?.amount?.toString() ?? '',
-    status: invoice?.status ?? ('NOT_INVOICED' as InvoiceStatus),
     invoiceDate: invoice?.invoiceDate?.slice(0, 10) ?? '',
     dueDate: invoice?.dueDate?.slice(0, 10) ?? '',
     notes: invoice?.notes ?? '',
@@ -97,7 +96,7 @@ function InvoiceDialog({
       open={open}
       onClose={onClose}
       title={invoice ? `Edit ${invoice.milestone}` : 'Add a milestone'}
-      description="Amounts are stored to the cent. A sent invoice needs a number and a date."
+      description="Status is calculated from what's been paid, never set by hand - record a payment to move it along."
       size="sm"
       busy={action.pending}
       footer={
@@ -116,7 +115,6 @@ function InvoiceDialog({
                 milestone: form.milestone,
                 number: form.number || undefined,
                 amount: Number(form.amount || 0),
-                status: form.status,
                 invoiceDate: form.invoiceDate || undefined,
                 dueDate: form.dueDate || undefined,
                 notes: form.notes || undefined,
@@ -149,50 +147,33 @@ function InvoiceDialog({
           />
         </Field>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field
-            label="Amount"
-            htmlFor="amount"
-            required
-            error={action.fieldErrors.amount ?? null}
-            hint={shareHint ?? undefined}
-          >
-            <Input
-              id="amount"
-              type="number"
-              min={0}
-              step="0.01"
-              value={form.amount}
-              onChange={(event) => {
-                const amount = event.target.value;
-                const pct = contractSharePct(amount, contractValue);
-                setForm((f) => ({
-                  ...f,
-                  amount,
-                  milestone:
-                    pct !== null && (f.milestone.trim() === '' || AUTO_MILESTONE_PATTERN.test(f.milestone))
-                      ? autoMilestoneName(pct)
-                      : f.milestone,
-                }));
-              }}
-            />
-          </Field>
-          <Field label="Status" htmlFor="status">
-            <Select
-              id="status"
-              value={form.status}
-              onChange={(event) =>
-                setForm({ ...form, status: event.target.value as InvoiceStatus })
-              }
-            >
-              {INVOICE_STATUSES.map((value) => (
-                <option key={value} value={value}>
-                  {INVOICE_STATUS_LABEL[value].label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
+        <Field
+          label="Amount"
+          htmlFor="amount"
+          required
+          error={action.fieldErrors.amount ?? null}
+          hint={shareHint ?? undefined}
+        >
+          <Input
+            id="amount"
+            type="number"
+            min={0}
+            step="0.01"
+            value={form.amount}
+            onChange={(event) => {
+              const amount = event.target.value;
+              const pct = contractSharePct(amount, contractValue);
+              setForm((f) => ({
+                ...f,
+                amount,
+                milestone:
+                  pct !== null && (f.milestone.trim() === '' || AUTO_MILESTONE_PATTERN.test(f.milestone))
+                    ? autoMilestoneName(pct)
+                    : f.milestone,
+              }));
+            }}
+          />
+        </Field>
 
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Number" htmlFor="number" error={action.fieldErrors.number ?? null}>

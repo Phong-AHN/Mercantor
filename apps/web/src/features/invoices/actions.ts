@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { clock, ConflictError, formatMoney, INVOICE_STATUSES, ValidationError } from '@relay/core';
+import { clock, ConflictError, formatMoney, type InvoiceStatus, ValidationError } from '@relay/core';
 import { transaction } from '@relay/db';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, notify, recordActivity } from '@/server/record';
@@ -11,6 +11,31 @@ import {
   resolveProject,
   revalidateProject,
 } from '@/features/projects/mutations';
+
+/**
+ * Status was a manual dropdown, independent of the actual paid figure -
+ * which let "Partially paid" get selected on an invoice nothing had ever
+ * been paid against, direct from the milestone edit dialog with no
+ * connection to reality. Derived instead, from the two facts that
+ * actually determine it: how much has been paid (only `recordPaymentAction`
+ * ever changes that - `upsertInvoiceAction` edits everything else about an
+ * invoice without touching it), and whether it has been formally sent
+ * (has both a number and an invoice date). `OVERDUE` is not produced here -
+ * it stays what it already was, a display-layer computation over `PAID`/
+ * `PARTIALLY_PAID` plus `dueDate` (`apps/web/src/app/(app)/projects/[code]/invoices/page.tsx`),
+ * never a value actually stored.
+ */
+function deriveInvoiceStatus(input: {
+  amountMinor: number;
+  paidMinor: number;
+  hasNumber: boolean;
+  hasInvoiceDate: boolean;
+}): InvoiceStatus {
+  if (input.paidMinor > 0) {
+    return input.paidMinor >= input.amountMinor ? 'PAID' : 'PARTIALLY_PAID';
+  }
+  return input.hasNumber && input.hasInvoiceDate ? 'INVOICE_SENT' : 'NOT_INVOICED';
+}
 
 /**
  * Milestone billing. Amounts are integer minor units end to end - a float would
@@ -26,7 +51,6 @@ export const upsertInvoiceAction = defineAction({
     number: z.string().trim().max(60).optional(),
     /** Major units from the form; converted once, here. */
     amount: z.coerce.number().min(0).max(100_000_000),
-    status: z.enum(INVOICE_STATUSES),
     invoiceDate: z.string().optional(),
     dueDate: z.string().optional(),
     notes: z.string().trim().max(1000).optional(),
@@ -34,13 +58,6 @@ export const upsertInvoiceAction = defineAction({
   async handler(input, ctx) {
     const project = await resolveProject(ctx.principal, input.code);
     const amountMinor = Math.round(input.amount * 100);
-
-    if (input.status !== 'NOT_INVOICED' && (!input.number || !input.invoiceDate)) {
-      throw new ValidationError('A sent invoice needs a number and a date.', {
-        number: input.number ? [] : ['Enter the invoice number.'],
-        invoiceDate: input.invoiceDate ? [] : ['Enter the invoice date.'],
-      });
-    }
 
     await transaction(async (tx) => {
       const existing = input.invoiceId
@@ -57,23 +74,22 @@ export const upsertInvoiceAction = defineAction({
       }
 
       const invoiceDate = parseDate(input.invoiceDate, 'invoiceDate');
-
-      // Setting status to PAID here - rather than through
-      // `recordPaymentAction` - means "this was already paid in full"
-      // (typically historical data entered after the fact). The database's
-      // own `Invoice_paid_requires_full_amount` constraint requires
-      // `paidMinor = amountMinor` and a non-null `paidDate` whenever status
-      // is PAID; without setting both here, that constraint rejected the
-      // write with a raw, unhandled Postgres error - "Something went wrong
-      // on our side" for what was actually a straightforward, fixable
-      // validation gap. Any other status leaves the paid figure exactly as
-      // it already was, so fixing a milestone's name or number never
-      // silently erases real payment history.
-      const paidMinor = input.status === 'PAID' ? amountMinor : (existing?.paidMinor ?? 0);
-      const paidDate =
-        input.status === 'PAID'
-          ? (existing?.paidDate ?? invoiceDate ?? clock.now())
-          : (existing?.paidDate ?? null);
+      // Untouched here - only recordPaymentAction ever changes it. Editing a
+      // milestone's name, amount, number or dates can shift the *derived*
+      // status (e.g. lowering the amount down to what was already paid
+      // resolves it to PAID), but never the paid figure itself.
+      const paidMinor = existing?.paidMinor ?? 0;
+      const status = deriveInvoiceStatus({
+        amountMinor,
+        paidMinor,
+        hasNumber: Boolean(input.number),
+        hasInvoiceDate: invoiceDate !== null,
+      });
+      // The database's own `Invoice_paid_requires_full_amount` constraint
+      // requires a non-null `paidDate` whenever status is PAID - reachable
+      // here only by editing the amount down to meet an existing paid
+      // figure, but still needs a real date if the invoice never had one.
+      const paidDate = status === 'PAID' ? (existing?.paidDate ?? invoiceDate ?? clock.now()) : (existing?.paidDate ?? null);
 
       const data = {
         milestone: input.milestone,
@@ -81,7 +97,7 @@ export const upsertInvoiceAction = defineAction({
         amountMinor,
         paidMinor,
         paidDate,
-        status: input.status,
+        status,
         invoiceDate,
         dueDate: parseDate(input.dueDate, 'dueDate'),
         notes: input.notes ?? null,
@@ -111,7 +127,7 @@ export const upsertInvoiceAction = defineAction({
           action: 'invoice.create',
           entityType: 'Invoice',
           entityId: created.id,
-          after: { milestone: input.milestone, amountMinor, status: input.status },
+          after: { milestone: input.milestone, amountMinor, status },
           ip: ctx.ip,
         });
       }
@@ -151,7 +167,15 @@ export const recordPaymentAction = defineAction({
     await transaction(async (tx) => {
       const invoice = await tx.invoice.findFirst({
         where: { id: input.invoiceId, projectId: project.id },
-        select: { id: true, milestone: true, amountMinor: true, paidMinor: true, currency: true },
+        select: {
+          id: true,
+          milestone: true,
+          amountMinor: true,
+          paidMinor: true,
+          currency: true,
+          number: true,
+          invoiceDate: true,
+        },
       });
       if (!invoice) throw new ConflictError('That invoice is not on this project.');
 
@@ -163,13 +187,19 @@ export const recordPaymentAction = defineAction({
           ],
         });
       }
+      const status = deriveInvoiceStatus({
+        amountMinor: invoice.amountMinor,
+        paidMinor,
+        hasNumber: invoice.number !== null,
+        hasInvoiceDate: invoice.invoiceDate !== null,
+      });
 
       await tx.invoice.update({
         where: { id: invoice.id },
         data: {
           paidMinor,
-          paidDate: paidMinor >= invoice.amountMinor ? paidDate : null,
-          status: paidMinor >= invoice.amountMinor ? 'PAID' : 'PARTIALLY_PAID',
+          paidDate: status === 'PAID' ? paidDate : null,
+          status,
         },
       });
 

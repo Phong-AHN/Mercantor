@@ -755,6 +755,48 @@ never renumbers it.
 
 ---
 
+## Invoice status was a manual dropdown, disconnected from the actual paid figure
+
+Live bug, caught from a real "Milestone billing" screenshot: an invoice showing **Partially paid**,
+**$0.00** paid, **$2,450.00** outstanding. The milestone dialog's Status field (`InvoiceDialog` in
+`invoice-controls.tsx`) let status be picked by hand, completely independent of `paidMinor` - nothing
+stopped "Partially paid" from being selected on an invoice nothing had ever actually been paid
+against. This is the same root cause as the PAID-crash fix above (status settable by hand instead of
+reflecting reality), just a second symptom of it that constraint enforcement alone didn't catch,
+since `PARTIALLY_PAID` with `paidMinor: 0` violates no check constraint - only `PAID` does.
+
+Surfaced together with a Slack thread (Bryan Pham) asking to simplify the model down to what a
+person actually knows: "contract value - paid = outstanding balance... i feel like right now
+there's too much input... when we only need to ask for 1-2 things."
+
+**Fixed by removing status as an input entirely.** `deriveInvoiceStatus()`
+(`apps/web/src/features/invoices/actions.ts`) computes it instead, from the only two facts that
+actually determine it:
+- **How much has been paid** - `paidMinor > 0` and `paidMinor >= amountMinor` distinguish
+  `PARTIALLY_PAID` from `PAID`. Only `recordPaymentAction` ever changes `paidMinor`;
+  `upsertInvoiceAction` (editing a milestone's name, amount, number, dates) never touches it, so
+  status can only otherwise shift there in one specific way - lowering the amount down to meet an
+  already-paid figure resolves it to `PAID`.
+- **Whether it's been formally sent** - a number and an invoice date, otherwise `NOT_INVOICED` vs.
+  `INVOICE_SENT`.
+
+`OVERDUE` is unaffected - it was already a display-only computation over `PAID`/`PARTIALLY_PAID` plus
+`dueDate` (`.../invoices/page.tsx`), never a stored value.
+
+The milestone dialog's Status `<Select>` is gone from `invoice-controls.tsx`; the dialog's
+description now reads "Status is calculated from what's been paid, never set by hand - record a
+payment to move it along," and the Amount field takes the full row that used to be split with
+Status. Recording a payment (the pre-existing `recordPaymentAction` flow, unchanged in shape) is now
+the only way to move status forward - matching Bryan's own stated formula exactly.
+
+**Live data**: the invoice from the screenshot (`PRJ-0003`, `AHN-0002`, "70% of payment completed")
+was checked directly against the database - it is already `PAID` with `paidMinor` equal to
+`amountMinor` ($2,450.00 of $2,450.00, against a $3,500.00 contract, matching Bryan's own
+"1050 left" figure). No manual correction was needed; it had already been re-saved through the
+dialog before this fix landed.
+
+---
+
 ## "No more than 12 Serverless Functions" on every Vercel deploy
 
 Reported as a recurring problem forcing a manual redeploy every time. Next.js on Vercel normally

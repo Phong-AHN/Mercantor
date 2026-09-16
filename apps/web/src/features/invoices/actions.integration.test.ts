@@ -33,7 +33,6 @@ describe('invoice payment arithmetic', () => {
       milestone: 'Deposit',
       number: 'INV-1001',
       amount: 1000,
-      status: 'INVOICE_SENT',
       invoiceDate: '2026-01-01',
     });
     expect(created.ok).toBe(true);
@@ -101,7 +100,6 @@ describe('invoice payment arithmetic', () => {
       milestone: 'Final',
       number: 'INV-1002',
       amount: 500,
-      status: 'INVOICE_SENT',
       invoiceDate: '2026-01-01',
     });
     expect(created.ok).toBe(true);
@@ -157,7 +155,6 @@ describe('money stays out of SHOPLINE-visible channels', () => {
       milestone: 'Deposit',
       number: 'INV-2001',
       amount: 2500,
-      status: 'INVOICE_SENT',
       invoiceDate: '2026-01-01',
     });
     expect(created.ok).toBe(true);
@@ -202,18 +199,18 @@ describe('money stays out of SHOPLINE-visible channels', () => {
 });
 
 /**
- * Regression coverage for a real production crash: the database's own
- * `Invoice_paid_requires_full_amount` check constraint requires
- * `paidMinor = amountMinor` and a non-null `paidDate` whenever `status` is
- * `PAID` - `upsertInvoiceAction` used to hand the constraint whatever the
- * form sent (usually `paidMinor: 0`, since the milestone form has no paid-
- * amount field at all), and Postgres rejected the write with a raw,
- * unhandled error surfaced to the user as "Something went wrong on our
- * side." Setting status to PAID directly (rather than through
- * `recordPaymentAction`) means "this was already paid in full," so the
- * action now fills in both fields itself.
+ * Regression coverage for a real production bug: status used to be a
+ * manual dropdown on the milestone form, independent of the actual paid
+ * figure - which is how "Partially paid" ended up selected on an invoice
+ * nothing had ever been paid against (`paidMinor: 0`), and how, earlier
+ * still, "PAID" got set with no paid figure at all and crashed the write
+ * against the database's own `Invoice_paid_requires_full_amount` check
+ * constraint. `upsertInvoiceAction` no longer accepts a `status` input at
+ * all - it is derived from the real paid figure (untouched by this action;
+ * only `recordPaymentAction` moves it) and whether the invoice has been
+ * formally sent (a number and an invoice date).
  */
-describe('upsertInvoiceAction sets status to PAID without crashing', () => {
+describe('upsertInvoiceAction derives status instead of accepting it', () => {
   let pm: TestUser;
   let projectCode: string;
   let projectId: string;
@@ -230,13 +227,27 @@ describe('upsertInvoiceAction sets status to PAID without crashing', () => {
     await cleanupFixtures();
   });
 
-  it('creating an invoice directly as PAID fills in paidMinor and paidDate', async () => {
+  it('a new invoice with no number or date is NOT_INVOICED', async () => {
+    const result = await upsertInvoiceAction({
+      code: projectCode,
+      milestone: 'Kickoff deposit',
+      amount: 1000,
+    });
+    expect(result.ok).toBe(true);
+
+    const invoice = await db.invoice.findFirstOrThrow({
+      where: { projectId, milestone: 'Kickoff deposit' },
+    });
+    expect(invoice.status).toBe('NOT_INVOICED');
+    expect(invoice.paidMinor).toBe(0);
+  });
+
+  it('a new invoice with a number and an invoice date is INVOICE_SENT', async () => {
     const result = await upsertInvoiceAction({
       code: projectCode,
       milestone: 'Deposit, already received',
       number: 'AHN-9001',
       amount: 1000,
-      status: 'PAID',
       invoiceDate: '2026-01-01',
     });
     expect(result.ok).toBe(true);
@@ -244,32 +255,39 @@ describe('upsertInvoiceAction sets status to PAID without crashing', () => {
     const invoice = await db.invoice.findFirstOrThrow({
       where: { projectId, milestone: 'Deposit, already received' },
     });
-    expect(invoice.amountMinor).toBe(100_000);
-    expect(invoice.paidMinor).toBe(100_000);
-    expect(invoice.paidDate).not.toBeNull();
+    expect(invoice.status).toBe('INVOICE_SENT');
+    expect(invoice.paidMinor).toBe(0);
+    expect(invoice.paidDate).toBeNull();
   });
 
-  it('editing an existing invoice to PAID fills in paidMinor and paidDate', async () => {
+  it('lowering the amount to meet what is already paid derives PAID and fills a paid date', async () => {
     const created = await upsertInvoiceAction({
       code: projectCode,
       milestone: '70% of payment completed',
       number: 'AHN-9002',
       amount: 2450,
-      status: 'NOT_INVOICED',
+      invoiceDate: '2026-08-04',
     });
     expect(created.ok).toBe(true);
     const invoice = await db.invoice.findFirstOrThrow({
       where: { projectId, milestone: '70% of payment completed' },
     });
-    expect(invoice.paidMinor).toBe(0);
+
+    const paid = await recordPaymentAction({
+      code: projectCode,
+      invoiceId: invoice.id,
+      amount: 1000,
+    });
+    expect(paid.ok).toBe(true);
+    const partial = await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(partial.status).toBe('PARTIALLY_PAID');
 
     const edited = await upsertInvoiceAction({
       code: projectCode,
       invoiceId: invoice.id,
       milestone: '70% of payment completed',
       number: 'AHN-9002',
-      amount: 2450,
-      status: 'PAID',
+      amount: 1000,
       invoiceDate: '2026-08-04',
       dueDate: '2026-09-30',
     });
@@ -277,24 +295,29 @@ describe('upsertInvoiceAction sets status to PAID without crashing', () => {
 
     const updated = await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
     expect(updated.status).toBe('PAID');
-    expect(updated.paidMinor).toBe(245_000);
+    expect(updated.amountMinor).toBe(100_000);
+    expect(updated.paidMinor).toBe(100_000);
     expect(updated.paidDate).not.toBeNull();
   });
 
-  it('editing a non-PAID field never touches an existing paid figure', async () => {
+  it('editing a paid invoice cannot lower the amount below what was paid, and touches nothing', async () => {
     const created = await upsertInvoiceAction({
       code: projectCode,
       milestone: 'Final milestone',
       number: 'AHN-9003',
       amount: 500,
-      status: 'PAID',
       invoiceDate: '2026-02-01',
     });
     expect(created.ok).toBe(true);
     const invoice = await db.invoice.findFirstOrThrow({
       where: { projectId, milestone: 'Final milestone' },
     });
-    expect(invoice.paidMinor).toBe(50_000);
+
+    const paid = await recordPaymentAction({ code: projectCode, invoiceId: invoice.id, amount: 500 });
+    expect(paid.ok).toBe(true);
+    const afterPayment = await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(afterPayment.status).toBe('PAID');
+    expect(afterPayment.paidMinor).toBe(50_000);
 
     const renamed = await upsertInvoiceAction({
       code: projectCode,
@@ -302,7 +325,6 @@ describe('upsertInvoiceAction sets status to PAID without crashing', () => {
       milestone: 'Final milestone (renamed)',
       number: 'AHN-9003',
       amount: 500,
-      status: 'PAID',
       invoiceDate: '2026-02-01',
       notes: 'Just fixing the name.',
     });
@@ -310,7 +332,8 @@ describe('upsertInvoiceAction sets status to PAID without crashing', () => {
 
     const updated = await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
     expect(updated.milestone).toBe('Final milestone (renamed)');
+    expect(updated.status).toBe('PAID');
     expect(updated.paidMinor).toBe(50_000);
-    expect(updated.paidDate?.getTime()).toBe(invoice.paidDate?.getTime());
+    expect(updated.paidDate?.getTime()).toBe(afterPayment.paidDate?.getTime());
   });
 });
