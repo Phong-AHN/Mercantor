@@ -738,6 +738,21 @@ contract value`), and a hint under "Amount received" in the payment dialog showi
 `contractTotalMinor` (falling back to the invoice rollup's `totalMinor`, the same fallback the page's
 own "Contract value" stat already uses) - no new field, no new query.
 
+**Follow-up: the computed percentage now writes into the form, not just next to it.** The Milestone
+field auto-fills to `"70% of payment completed"` as the Amount changes - but only while Milestone
+still holds either nothing or a name this exact auto-fill produced (`AUTO_MILESTONE_PATTERN`,
+matched rather than tracked with a separate "has the user touched this" flag, so it also resumes if
+someone clears the field back out). The moment someone types a real name - "Kickoff deposit", "Design
+sign-off" - the auto-fill stops touching it; editing the Amount afterward never clobbers a
+deliberately-chosen name. **The invoice Number field auto-fills too**, sequential per project:
+`${project.code}-0001`, `-0002`, ... (`page.tsx`'s `nextInvoiceNumber`, based on how many invoice
+rows the project already has, not on parsing prior numbers - a legacy or manually-typed number like
+the pre-existing "AHN-0002" style never confuses the count, it just counts as one more row). Both
+stay plain, editable text inputs pre-filled with the computed value, not locked fields - the same
+"compute a good default, never take away the escape hatch" pattern the rest of this app's forms use.
+Only the "Add milestone" dialog gets a fresh number; editing an existing invoice keeps its own,
+never renumbers it.
+
 ---
 
 ## "No more than 12 Serverless Functions" on every Vercel deploy

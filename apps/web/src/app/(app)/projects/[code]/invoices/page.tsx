@@ -49,6 +49,12 @@ export default async function ProjectInvoicesPage({
   const now = project.snapshot.time.now;
   const currency = rollup.currency;
   const contractValue = (project.contractTotalMinor || rollup.totalMinor) / 100;
+  // Sequential per project, not global - a second project's first milestone
+  // is still `-0001`. Based on how many invoice rows this project already
+  // has, not on parsing prior numbers, so a legacy or manually-typed number
+  // (an old "AHN-0002" style, from before this existed) never confuses the
+  // count - it still just counts as "one more row."
+  const nextInvoiceNumber = `${project.code}-${String(project.invoices.length + 1).padStart(4, '0')}`;
 
   const paidPct = rollup.invoicedMinor > 0 ? (rollup.paidMinor / rollup.invoicedMinor) * 100 : 0;
 
@@ -106,6 +112,7 @@ export default async function ProjectInvoicesPage({
                   code={project.code}
                   currency={currency}
                   contractValue={contractValue}
+                  nextNumber={nextInvoiceNumber}
                 />
               )}
             </div>

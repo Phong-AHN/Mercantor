@@ -47,11 +47,26 @@ function contractShareHint(amount: string, contractValue: number, currency: stri
   return `≈ ${formatPct(pct)} of the ${formatMoney(contractValue * 100, currency)} contract value`;
 }
 
+/**
+ * The auto-filled milestone name ("70% of payment completed") tracks the
+ * Amount field live - but only while the Milestone field still holds either
+ * nothing or a name this same auto-fill produced. The moment someone types
+ * their own name ("Kickoff deposit", "Design sign-off"), that stops:
+ * detected by pattern match rather than a separate "touched" flag, so it
+ * still resumes auto-naming if they clear the field back out.
+ */
+const AUTO_MILESTONE_PATTERN = /^\d+(?:\.\d+)?% of payment completed$/;
+
+function autoMilestoneName(pct: number): string {
+  return `${formatPct(pct)} of payment completed`;
+}
+
 function InvoiceDialog({
   code,
   invoice,
   contractValue,
   currency,
+  nextNumber,
   open,
   onClose,
 }: {
@@ -59,12 +74,15 @@ function InvoiceDialog({
   invoice?: InvoiceForm;
   contractValue: number;
   currency: string;
+  /** Only used for a brand-new invoice - editing an existing one keeps its
+   * own number, never renumbers it. */
+  nextNumber: string;
   open: boolean;
   onClose: () => void;
 }) {
   const [form, setForm] = useState({
     milestone: invoice?.milestone ?? '',
-    number: invoice?.number ?? '',
+    number: invoice?.number ?? nextNumber,
     amount: invoice?.amount?.toString() ?? '',
     status: invoice?.status ?? ('NOT_INVOICED' as InvoiceStatus),
     invoiceDate: invoice?.invoiceDate?.slice(0, 10) ?? '',
@@ -145,7 +163,18 @@ function InvoiceDialog({
               min={0}
               step="0.01"
               value={form.amount}
-              onChange={(event) => setForm({ ...form, amount: event.target.value })}
+              onChange={(event) => {
+                const amount = event.target.value;
+                const pct = contractSharePct(amount, contractValue);
+                setForm((f) => ({
+                  ...f,
+                  amount,
+                  milestone:
+                    pct !== null && (f.milestone.trim() === '' || AUTO_MILESTONE_PATTERN.test(f.milestone))
+                      ? autoMilestoneName(pct)
+                      : f.milestone,
+                }));
+              }}
             />
           </Field>
           <Field label="Status" htmlFor="status">
@@ -171,7 +200,6 @@ function InvoiceDialog({
               id="number"
               value={form.number}
               onChange={(event) => setForm({ ...form, number: event.target.value })}
-              placeholder="AHN-0000"
             />
           </Field>
           <Field
@@ -213,10 +241,12 @@ export function NewInvoiceButton({
   code,
   currency,
   contractValue,
+  nextNumber,
 }: {
   code: string;
   currency: string;
   contractValue: number;
+  nextNumber: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -229,6 +259,7 @@ export function NewInvoiceButton({
         code={code}
         currency={currency}
         contractValue={contractValue}
+        nextNumber={nextNumber}
         open={open}
         onClose={() => setOpen(false)}
       />
@@ -294,6 +325,7 @@ export function InvoiceControls({
           invoice={invoice}
           currency={invoice.currency}
           contractValue={contractValue}
+          nextNumber={invoice.number ?? ''}
           open
           onClose={() => setDialog(null)}
         />
