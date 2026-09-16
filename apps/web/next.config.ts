@@ -25,11 +25,32 @@ const config: NextConfig = {
   // Prisma's own documented fix for the failure (https://pris.ly/d/engine-not-found-nextjs):
   // force-include the engine binaries for every route regardless of what
   // tracing infers.
+  // Belt-and-suspenders alongside schema.prisma's `binaryTargets`: Next's
+  // output file tracing decides what actually ships in the deployed
+  // serverless function, and it resolves Prisma's query engine through a
+  // dynamic `require` its static analysis can't follow - especially one more
+  // level deep under pnpm's hashed `.pnpm/<pkg>@<version>_<hash>/`
+  // directories. `binaryTargets` alone got this generating the right engine
+  // locally and even shipping correctly on some builds, but not
+  // deterministically - production still 500'd on a later deploy with
+  // "Prisma Client could not locate the Query Engine for runtime
+  // rhel-openssl-3.0.x" despite nothing about the schema changing. This is
+  // Prisma's own documented fix for the failure (https://pris.ly/d/engine-not-found-nextjs):
+  // force-include the engine binaries for every route regardless of what
+  // tracing infers. Confirmed still required - a local build with this
+  // removed traces zero `.node` engine binaries into any route.
+  //
+  // The key is `/*`, the syntax Next's own docs use for "every route"
+  // (https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats)
+  // - not `/**/*`, which those same docs warn against ("avoid `**/*` at the
+  // repo root") for producing oversized per-route traces. Only the
+  // `.pnpm`-hashed path is kept; the second, unhashed `.prisma/client`
+  // pattern this project's install layout never actually has (`.prisma`
+  // only exists nested under `.pnpm/@prisma+client@*/node_modules/`) was
+  // dead weight matching nothing, kept previously only because it was
+  // harmless - dropped now that this is being tightened anyway.
   outputFileTracingIncludes: {
-    '/**/*': [
-      '../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**/*',
-      '../../node_modules/.prisma/client/**/*',
-    ],
+    '/*': ['../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**/*'],
   },
   // Workspace packages ship TypeScript source, not a build artefact.
   transpilePackages: [

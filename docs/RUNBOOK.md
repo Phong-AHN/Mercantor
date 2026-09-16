@@ -740,6 +740,52 @@ own "Contract value" stat already uses) - no new field, no new query.
 
 ---
 
+## "No more than 12 Serverless Functions" on every Vercel deploy
+
+Reported as a recurring problem forcing a manual redeploy every time. Next.js on Vercel normally
+bundles all dynamic routes into as few Serverless Functions as possible specifically to avoid ever
+approaching the Hobby plan's 12-function cap - hitting it with a single Next.js app, as opposed to a
+directory of unrelated API handlers, is unusual enough that something in this project's own
+configuration is almost certainly interfering with that automatic bundling, not routes:functions
+being naively 1:1.
+
+**Found and fixed one real, verified bug** in `apps/web/next.config.ts`'s `outputFileTracingIncludes`
+(added earlier to force-include Prisma's query engine binary into every route's trace - see that
+option's own comment for why it is still required; a local build with it removed traces zero `.node`
+engine binaries into any route, reproducing the original "Query Engine not found" 500):
+
+- The key was `'/**/*'`. Next's own docs for this option explicitly document `'/*'` as the syntax for
+  "every route" and warn against `'**/*'` at the repo root for producing oversized per-route traces -
+  this project had exactly the pattern the docs warn against.
+- The include list had two glob patterns, one of which (`../../node_modules/.prisma/client/**/*`,
+  the *unhashed* path) matches nothing at all in this pnpm layout - confirmed by listing
+  `node_modules/.prisma` directly, which does not exist; only the `.pnpm`-hashed
+  `@prisma+client@*/node_modules/.prisma/client/**/*` path is real. Pure dead weight in every trace.
+
+Fixing both took each route's trace from ~298 files back down to ~268 (verified via each route's own
+`.next/server/**/*.nft.json`, the same method the original Prisma fix was verified with), engine
+binary still present. A real improvement, and worth having regardless - but it is a reduction in
+trace bloat, not a confirmed fix for the function-count cap itself; nothing here could be verified
+against Vercel's actual per-deployment function count without a live, authenticated Vercel session,
+which this environment did not have.
+
+**If the count is still over 12 after this**, check, in order:
+1. **Project Settings → General → Framework Preset is exactly "Next.js"** in the Vercel dashboard.
+   If it was ever set to something generic (`Other`, a stale import from before this was recognized
+   as a Next.js monorepo app), Vercel skips the Next.js-aware bundling entirely and comes close to
+   treating every route as its own function - this is the single most likely explanation for a
+   Next.js app hitting a limit its own framework integration is specifically designed to avoid, and
+   the region-setting mistake earlier in this RUNBOOK (`vercel.json` looking authoritative, the
+   dashboard actually being the source of truth) is the same shape of mistake.
+2. **Deployment → (latest deployment) → Functions tab** lists every function actually created for
+   that deployment by name - the ground truth for which routes did *not* get merged, letting any
+   further fix be targeted rather than guessed at.
+3. Upgrading to Vercel Pro removes the cap outright and is the durable fix if the app has
+   legitimately outgrown Hobby's limits rather than being tripped up by a fixable config issue -
+   reasonable for a tool now handling real production data and invoices.
+
+---
+
 ## Backups & data
 
 The project record is the product. Back up Postgres; everything else — Redis, the object store —
