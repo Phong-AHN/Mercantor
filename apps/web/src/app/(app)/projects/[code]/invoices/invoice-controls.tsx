@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { BellRing, Banknote, Pencil, Plus } from 'lucide-react';
-import { INVOICE_STATUS_LABEL, INVOICE_STATUSES, type InvoiceStatus } from '@relay/core';
+import { formatMoney, INVOICE_STATUS_LABEL, INVOICE_STATUSES, type InvoiceStatus } from '@relay/core';
 import { Alert, Button, Dialog, Field, Input, Select, Textarea } from '@relay/ui';
 import { useAction } from '@/components/use-action';
 import {
@@ -24,14 +24,41 @@ interface InvoiceForm {
   currency: string;
 }
 
+/**
+ * "Put in the contract size, then the amount, and it does the math" - the
+ * project's contract value is fixed and already known, so the one number
+ * actually worth computing live is what an amount represents as a share of
+ * it. `null` for a missing/zero contract value or a not-yet-a-number
+ * amount - nothing to say yet, not an error.
+ */
+function contractSharePct(amount: string, contractValue: number): number | null {
+  const parsed = Number(amount);
+  if (contractValue <= 0 || !Number.isFinite(parsed) || parsed <= 0) return null;
+  return (parsed / contractValue) * 100;
+}
+
+function formatPct(pct: number): string {
+  return `${pct.toFixed(pct < 10 ? 1 : 0)}%`;
+}
+
+function contractShareHint(amount: string, contractValue: number, currency: string): string | null {
+  const pct = contractSharePct(amount, contractValue);
+  if (pct === null) return null;
+  return `≈ ${formatPct(pct)} of the ${formatMoney(contractValue * 100, currency)} contract value`;
+}
+
 function InvoiceDialog({
   code,
   invoice,
+  contractValue,
+  currency,
   open,
   onClose,
 }: {
   code: string;
   invoice?: InvoiceForm;
+  contractValue: number;
+  currency: string;
   open: boolean;
   onClose: () => void;
 }) {
@@ -45,6 +72,7 @@ function InvoiceDialog({
     notes: invoice?.notes ?? '',
   });
   const action = useAction(upsertInvoiceAction, { onSuccess: onClose });
+  const shareHint = contractShareHint(form.amount, contractValue, currency);
 
   return (
     <Dialog
@@ -104,7 +132,13 @@ function InvoiceDialog({
         </Field>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Amount" htmlFor="amount" required error={action.fieldErrors.amount ?? null}>
+          <Field
+            label="Amount"
+            htmlFor="amount"
+            required
+            error={action.fieldErrors.amount ?? null}
+            hint={shareHint ?? undefined}
+          >
             <Input
               id="amount"
               type="number"
@@ -175,7 +209,15 @@ function InvoiceDialog({
   );
 }
 
-export function NewInvoiceButton({ code }: { code: string; currency: string }) {
+export function NewInvoiceButton({
+  code,
+  currency,
+  contractValue,
+}: {
+  code: string;
+  currency: string;
+  contractValue: number;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -183,12 +225,26 @@ export function NewInvoiceButton({ code }: { code: string; currency: string }) {
         <Plus className="size-3.5" />
         Add milestone
       </Button>
-      <InvoiceDialog code={code} open={open} onClose={() => setOpen(false)} />
+      <InvoiceDialog
+        code={code}
+        currency={currency}
+        contractValue={contractValue}
+        open={open}
+        onClose={() => setOpen(false)}
+      />
     </>
   );
 }
 
-export function InvoiceControls({ code, invoice }: { code: string; invoice: InvoiceForm }) {
+export function InvoiceControls({
+  code,
+  invoice,
+  contractValue,
+}: {
+  code: string;
+  invoice: InvoiceForm;
+  contractValue: number;
+}) {
   const [dialog, setDialog] = useState<'edit' | 'payment' | null>(null);
   const [amount, setAmount] = useState('');
   const [paidDate, setPaidDate] = useState('');
@@ -197,6 +253,9 @@ export function InvoiceControls({ code, invoice }: { code: string; invoice: Invo
   const chase = useAction(chaseInvoiceAction);
 
   const outstanding = invoice.amount - invoice.paid;
+  const paidAfterPct = contractSharePct((invoice.paid + Number(amount || 0)).toString(), contractValue);
+  const paidAfterHint =
+    paidAfterPct === null ? undefined : `Brings the project to ${formatPct(paidAfterPct)} paid`;
 
   return (
     <div className="flex items-center gap-1">
@@ -230,7 +289,14 @@ export function InvoiceControls({ code, invoice }: { code: string; invoice: Invo
       )}
 
       {dialog === 'edit' && (
-        <InvoiceDialog code={code} invoice={invoice} open onClose={() => setDialog(null)} />
+        <InvoiceDialog
+          code={code}
+          invoice={invoice}
+          currency={invoice.currency}
+          contractValue={contractValue}
+          open
+          onClose={() => setDialog(null)}
+        />
       )}
 
       <Dialog
@@ -274,6 +340,7 @@ export function InvoiceControls({ code, invoice }: { code: string; invoice: Invo
             htmlFor="paymentAmount"
             required
             error={payment.fieldErrors.amount ?? null}
+            hint={paidAfterHint}
           >
             <Input
               id="paymentAmount"

@@ -707,6 +707,39 @@ editing can never become a back door around the override above.
 
 ---
 
+## Marking an invoice PAID without a paid figure crashed
+
+Live bug, caught from a real "Something went wrong on our side" screenshot: editing a milestone's
+Status straight to `PAID` from the milestone dialog (`InvoiceDialog` in
+`apps/web/src/app/(app)/projects/[code]/invoices/invoice-controls.tsx`) threw an unhandled Postgres
+error every time, because that dialog has no paid-amount field at all - it always sent whatever
+`paidMinor` the invoice already had (usually `0`), and the database's own check constraint,
+`Invoice_paid_requires_full_amount` (`packages/db/prisma/migrations/20260819080000_constraints/`),
+requires `paidMinor = amountMinor` **and** a non-null `paidDate` whenever `status` is `PAID`. The
+app never validated that before handing Postgres the write, so the raw constraint violation surfaced
+as `toAppError`'s generic 500 fallback - correct behavior for a truly unexpected error, but this one
+was entirely preventable.
+
+**Fixed by treating "set to PAID" as "already paid in full"** rather than rejecting it:
+`upsertInvoiceAction` now fills in `paidMinor: amountMinor` and `paidDate` (the invoice's own, if it
+already had one from a real `recordPaymentAction`; otherwise the milestone's `invoiceDate`, or now)
+itself whenever `input.status === 'PAID'`. This is deliberately for the "entering a milestone that
+was already paid outside the tool" case - editing anything else about an invoice (its name, its
+number, a typo) leaves an existing paid figure exactly as it was, so a routine edit can never
+silently erase real payment history recorded through the normal `recordPaymentAction` flow.
+
+**The auto-calculate request that surfaced this**: users asked for the milestone amount (and a
+payment amount) to show what percentage of the project's contract value it represents, rather than
+mentally dividing it themselves before typing a milestone name like "70% of payment completed."
+`contractSharePct`/`formatPct`/`contractShareHint` in `invoice-controls.tsx` compute this live, no
+server round-trip - a hint under the Amount field in the milestone dialog (`≈ 70% of the $3,500.00
+contract value`), and a hint under "Amount received" in the payment dialog showing what the
+*cumulative* paid figure becomes after this payment. Both read the project's own
+`contractTotalMinor` (falling back to the invoice rollup's `totalMinor`, the same fallback the page's
+own "Contract value" stat already uses) - no new field, no new query.
+
+---
+
 ## Backups & data
 
 The project record is the product. Back up Postgres; everything else — Redis, the object store —

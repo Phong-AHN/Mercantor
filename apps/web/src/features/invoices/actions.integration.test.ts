@@ -200,3 +200,117 @@ describe('money stays out of SHOPLINE-visible channels', () => {
     expect(notifications).toHaveLength(0);
   });
 });
+
+/**
+ * Regression coverage for a real production crash: the database's own
+ * `Invoice_paid_requires_full_amount` check constraint requires
+ * `paidMinor = amountMinor` and a non-null `paidDate` whenever `status` is
+ * `PAID` - `upsertInvoiceAction` used to hand the constraint whatever the
+ * form sent (usually `paidMinor: 0`, since the milestone form has no paid-
+ * amount field at all), and Postgres rejected the write with a raw,
+ * unhandled error surfaced to the user as "Something went wrong on our
+ * side." Setting status to PAID directly (rather than through
+ * `recordPaymentAction`) means "this was already paid in full," so the
+ * action now fills in both fields itself.
+ */
+describe('upsertInvoiceAction sets status to PAID without crashing', () => {
+  let pm: TestUser;
+  let projectCode: string;
+  let projectId: string;
+
+  beforeAll(async () => {
+    pm = await createTestUser('AHN_PROJECT_MANAGER');
+    const project = await createTestProject({ as: pm, ahnProjectManagerId: pm.id });
+    projectCode = project.code;
+    projectId = project.id;
+    await signInAs(pm);
+  });
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('creating an invoice directly as PAID fills in paidMinor and paidDate', async () => {
+    const result = await upsertInvoiceAction({
+      code: projectCode,
+      milestone: 'Deposit, already received',
+      number: 'AHN-9001',
+      amount: 1000,
+      status: 'PAID',
+      invoiceDate: '2026-01-01',
+    });
+    expect(result.ok).toBe(true);
+
+    const invoice = await db.invoice.findFirstOrThrow({
+      where: { projectId, milestone: 'Deposit, already received' },
+    });
+    expect(invoice.amountMinor).toBe(100_000);
+    expect(invoice.paidMinor).toBe(100_000);
+    expect(invoice.paidDate).not.toBeNull();
+  });
+
+  it('editing an existing invoice to PAID fills in paidMinor and paidDate', async () => {
+    const created = await upsertInvoiceAction({
+      code: projectCode,
+      milestone: '70% of payment completed',
+      number: 'AHN-9002',
+      amount: 2450,
+      status: 'NOT_INVOICED',
+    });
+    expect(created.ok).toBe(true);
+    const invoice = await db.invoice.findFirstOrThrow({
+      where: { projectId, milestone: '70% of payment completed' },
+    });
+    expect(invoice.paidMinor).toBe(0);
+
+    const edited = await upsertInvoiceAction({
+      code: projectCode,
+      invoiceId: invoice.id,
+      milestone: '70% of payment completed',
+      number: 'AHN-9002',
+      amount: 2450,
+      status: 'PAID',
+      invoiceDate: '2026-08-04',
+      dueDate: '2026-09-30',
+    });
+    expect(edited.ok).toBe(true);
+
+    const updated = await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(updated.status).toBe('PAID');
+    expect(updated.paidMinor).toBe(245_000);
+    expect(updated.paidDate).not.toBeNull();
+  });
+
+  it('editing a non-PAID field never touches an existing paid figure', async () => {
+    const created = await upsertInvoiceAction({
+      code: projectCode,
+      milestone: 'Final milestone',
+      number: 'AHN-9003',
+      amount: 500,
+      status: 'PAID',
+      invoiceDate: '2026-02-01',
+    });
+    expect(created.ok).toBe(true);
+    const invoice = await db.invoice.findFirstOrThrow({
+      where: { projectId, milestone: 'Final milestone' },
+    });
+    expect(invoice.paidMinor).toBe(50_000);
+
+    const renamed = await upsertInvoiceAction({
+      code: projectCode,
+      invoiceId: invoice.id,
+      milestone: 'Final milestone (renamed)',
+      number: 'AHN-9003',
+      amount: 500,
+      status: 'PAID',
+      invoiceDate: '2026-02-01',
+      notes: 'Just fixing the name.',
+    });
+    expect(renamed.ok).toBe(true);
+
+    const updated = await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(updated.milestone).toBe('Final milestone (renamed)');
+    expect(updated.paidMinor).toBe(50_000);
+    expect(updated.paidDate?.getTime()).toBe(invoice.paidDate?.getTime());
+  });
+});

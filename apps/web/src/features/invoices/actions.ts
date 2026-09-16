@@ -43,27 +43,51 @@ export const upsertInvoiceAction = defineAction({
     }
 
     await transaction(async (tx) => {
+      const existing = input.invoiceId
+        ? await tx.invoice.findFirst({
+            where: { id: input.invoiceId, projectId: project.id },
+            select: { id: true, amountMinor: true, paidMinor: true, paidDate: true, status: true },
+          })
+        : null;
+      if (input.invoiceId && !existing) throw new ConflictError('That invoice is not on this project.');
+      if (existing && amountMinor < existing.paidMinor) {
+        throw new ValidationError('The amount cannot be less than what has been paid.', {
+          amount: [`Already paid: ${formatMoney(existing.paidMinor)}.`],
+        });
+      }
+
+      const invoiceDate = parseDate(input.invoiceDate, 'invoiceDate');
+
+      // Setting status to PAID here - rather than through
+      // `recordPaymentAction` - means "this was already paid in full"
+      // (typically historical data entered after the fact). The database's
+      // own `Invoice_paid_requires_full_amount` constraint requires
+      // `paidMinor = amountMinor` and a non-null `paidDate` whenever status
+      // is PAID; without setting both here, that constraint rejected the
+      // write with a raw, unhandled Postgres error - "Something went wrong
+      // on our side" for what was actually a straightforward, fixable
+      // validation gap. Any other status leaves the paid figure exactly as
+      // it already was, so fixing a milestone's name or number never
+      // silently erases real payment history.
+      const paidMinor = input.status === 'PAID' ? amountMinor : (existing?.paidMinor ?? 0);
+      const paidDate =
+        input.status === 'PAID'
+          ? (existing?.paidDate ?? invoiceDate ?? clock.now())
+          : (existing?.paidDate ?? null);
+
       const data = {
         milestone: input.milestone,
         number: input.number ?? null,
         amountMinor,
+        paidMinor,
+        paidDate,
         status: input.status,
-        invoiceDate: parseDate(input.invoiceDate, 'invoiceDate'),
+        invoiceDate,
         dueDate: parseDate(input.dueDate, 'dueDate'),
         notes: input.notes ?? null,
       };
 
-      if (input.invoiceId) {
-        const existing = await tx.invoice.findFirst({
-          where: { id: input.invoiceId, projectId: project.id },
-          select: { id: true, amountMinor: true, paidMinor: true, status: true },
-        });
-        if (!existing) throw new ConflictError('That invoice is not on this project.');
-        if (amountMinor < existing.paidMinor) {
-          throw new ValidationError('The amount cannot be less than what has been paid.', {
-            amount: [`Already paid: ${formatMoney(existing.paidMinor)}.`],
-          });
-        }
+      if (existing) {
         await tx.invoice.update({ where: { id: existing.id }, data });
         await audit(tx, {
           principal: ctx.principal,

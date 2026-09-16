@@ -48,6 +48,7 @@ export default async function ProjectInvoicesPage({
   const rollup = project.snapshot.invoice;
   const now = project.snapshot.time.now;
   const currency = rollup.currency;
+  const contractValue = (project.contractTotalMinor || rollup.totalMinor) / 100;
 
   const paidPct = rollup.invoicedMinor > 0 ? (rollup.paidMinor / rollup.invoicedMinor) * 100 : 0;
 
@@ -100,7 +101,13 @@ export default async function ProjectInvoicesPage({
                   label="Paid against invoiced"
                 />
               </div>
-              {manage && <NewInvoiceButton code={project.code} currency={currency} />}
+              {manage && (
+                <NewInvoiceButton
+                  code={project.code}
+                  currency={currency}
+                  contractValue={contractValue}
+                />
+              )}
             </div>
           }
         />
@@ -192,6 +199,7 @@ export default async function ProjectInvoicesPage({
                         <TD>
                           <InvoiceControls
                             code={project.code}
+                            contractValue={contractValue}
                             invoice={{
                               id: invoice.id,
                               milestone: invoice.milestone,
