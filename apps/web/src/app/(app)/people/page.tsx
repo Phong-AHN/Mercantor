@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { clock, formatRelative, TEAM_LABEL, USER_ROLE_LABEL, type Team } from '@relay/core';
+import { clock, formatRelative, TEAM_LABEL, USER_ROLE_LABEL, type Descriptor, type Team } from '@relay/core';
 import { can, permissionsForRole } from '@relay/rbac';
 import {
   Badge,
@@ -25,7 +25,23 @@ import { InvitePersonButton } from './invite-person-button';
 export const metadata: Metadata = { title: 'People' };
 export const dynamic = 'force-dynamic';
 
-const TEAM_ORDER: Team[] = ['AHN', 'SHOPLINE', 'MERCHANT', 'OTHER'];
+/**
+ * A People-page-only grouping, one step finer than `Team`: AHN Designers get
+ * their own card instead of folding into the general AHN one, without
+ * `Team` itself gaining a `DESIGN` value - that type also drives blocker
+ * routing and comment visibility, where "Design" isn't a real destination.
+ * `AHN_DESIGNER`'s stored `team` column is still plain `'AHN'` (matching its
+ * RBAC), so this pulls it out by role instead of filtering on `person.team`.
+ */
+const DESIGN_GROUP = 'DESIGN' as const;
+const DESIGN_LABEL: Descriptor = { label: 'Design', tone: 'accent' };
+const GROUP_ORDER: (Team | typeof DESIGN_GROUP)[] = [
+  'AHN',
+  DESIGN_GROUP,
+  'SHOPLINE',
+  'MERCHANT',
+  'OTHER',
+];
 
 export default async function PeoplePage() {
   const principal = await requirePrincipalOrRedirect('/people');
@@ -43,13 +59,18 @@ export default async function PeoplePage() {
         actions={can(principal, 'user:manage') ? <InvitePersonButton /> : undefined}
       />
 
-      {TEAM_ORDER.map((team) => {
-        const members = people.filter((person) => person.team === team);
+      {GROUP_ORDER.map((group) => {
+        const members = people.filter((person) =>
+          group === DESIGN_GROUP
+            ? person.role === 'AHN_DESIGNER'
+            : person.team === group && person.role !== 'AHN_DESIGNER',
+        );
         if (members.length === 0) return null;
+        const label = group === DESIGN_GROUP ? DESIGN_LABEL.label : TEAM_LABEL[group].label;
 
         return (
-          <Card key={team}>
-            <CardHeader title={TEAM_LABEL[team].label} count={members.length} />
+          <Card key={group}>
+            <CardHeader title={label} count={members.length} />
             <TableScroller className="rounded-none border-0 shadow-none">
               <Table>
                 <THead>

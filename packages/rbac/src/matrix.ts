@@ -116,6 +116,25 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   // roles to project, development, QA, issues and merchant communication.
   AHN_DEVELOPER: [...AHN_DELIVERY, 'approval:decide_internal'],
 
+  // Same grant as AHN_PROJECT_MANAGER, by explicit request - the split from
+  // that role is for the People page's own grouping (a design lead is easier
+  // to find in its own card than folded into every other AHN role), not a
+  // narrower permission set.
+  AHN_DESIGNER: [
+    ...AHN_DELIVERY,
+    'project:create',
+    'project:assign',
+    'merchant:manage',
+    'invoice:read',
+    'invoice:manage',
+    'approval:decide_internal',
+    'approval:decide_merchant',
+    'handoff:submit',
+    'introduction:send',
+    'integration:manage',
+    'audit:read',
+  ],
+
   SHOPLINE_ADMIN: [
     ...SHOPLINE_BASE,
     'project:update',

@@ -94,6 +94,26 @@ describe('inviteUserAction', () => {
     expect(token.expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
+  it('invites an AHN_DESIGNER with full AHN-team access, same as AHN_PROJECT_MANAGER', async () => {
+    const email = `invitee-${Date.now()}@relay.test`;
+    const result = await inviteUserAction({
+      email,
+      name: 'Dana Designer',
+      role: 'AHN_DESIGNER',
+      title: 'Design Lead',
+    });
+    expect(result.ok).toBe(true);
+
+    const user = await db.user.findUniqueOrThrow({ where: { email } });
+    inviteeIds.push(user.id);
+    expect(user.role).toBe('AHN_DESIGNER');
+    // Same team as every other AHN role, not a separate one - RBAC (comment
+    // visibility, project scoping) treats AHN_DESIGNER identically to
+    // AHN_PROJECT_MANAGER. It gets its own card only on the People page,
+    // a display-only grouping keyed off role, not this column.
+    expect(user.team).toBe('AHN');
+  });
+
   it('is refused for an email that already has an active account', async () => {
     const email = `invitee-${Date.now()}@relay.test`;
     const first = await inviteUserAction({ email, name: 'First', role: 'AHN_DEVELOPER' });

@@ -52,17 +52,27 @@ export const USER_ROLE_LABEL: Record<UserRole, Descriptor> = {
   AHN_ADMIN: { label: 'AHN Admin', tone: 'accent' },
   AHN_PROJECT_MANAGER: { label: 'AHN Project Manager', tone: 'accent' },
   AHN_DEVELOPER: { label: 'AHN Developer', tone: 'accent' },
+  AHN_DESIGNER: { label: 'AHN Designer', tone: 'accent' },
   SHOPLINE_ADMIN: { label: 'SHOPLINE Admin', tone: 'info' },
   SHOPLINE_ACCOUNT_MANAGER: { label: 'SHOPLINE Account Manager', tone: 'info' },
   SHOPLINE_SOLUTIONS_ENGINEER: { label: 'SHOPLINE Solutions Engineer', tone: 'info' },
   MERCHANT: { label: 'Merchant', tone: 'warning', hint: 'Limited access to their own project.' },
 };
 
+/**
+ * `AHN_DESIGNER` is `'AHN'` here deliberately, same as every other AHN role -
+ * it carries identical RBAC (comment visibility, project scoping) to
+ * AHN_PROJECT_MANAGER. The People page's own "Design" grouping is a display
+ * concern only (`people/page.tsx`'s `PEOPLE_GROUP`), kept separate from this
+ * map so introducing it never touches blocker routing, comment visibility,
+ * or any other place `Team` gates real access.
+ */
 export const USER_ROLE_TEAM: Record<UserRole, Team> = {
   PLATFORM_ADMIN: 'AHN',
   AHN_ADMIN: 'AHN',
   AHN_PROJECT_MANAGER: 'AHN',
   AHN_DEVELOPER: 'AHN',
+  AHN_DESIGNER: 'AHN',
   SHOPLINE_ADMIN: 'SHOPLINE',
   SHOPLINE_ACCOUNT_MANAGER: 'SHOPLINE',
   SHOPLINE_SOLUTIONS_ENGINEER: 'SHOPLINE',

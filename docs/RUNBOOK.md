@@ -850,3 +850,54 @@ is recoverable or replaceable.
 
 `AuditLog` and `ActivityEvent` are append-only in practice. Nothing in the application updates or
 deletes them, and nothing should: they are what makes "who changed this and when" answerable.
+
+---
+
+## A Design tab on People, without a new RBAC team
+
+Requested from Slack: "you know where it says merchant, AHN, shopline - there should be 1 more
+tab" for whoever is in charge of design. The People page (`apps/web/src/app/(app)/people/page.tsx`)
+already groups members into one card per `Team`, so this reads at first like "add `DESIGN` to the
+`Team` enum" - but `Team` is a real Postgres enum that also drives comment visibility and blocker
+routing (`packages/rbac/src/engine.ts`, `BLOCKER_CATEGORY_TEAM`) across ~47 files, and "Design" isn't
+a real destination for either of those - a blocker is never "waiting on Design," and comments have no
+Design-only visibility tier. Widening `Team` would have opened edge cases nobody asked for.
+
+**Split instead: a new `UserRole` (`AHN_DESIGNER`), same `Team` as every other AHN role.**
+`USER_ROLE_TEAM['AHN_DESIGNER'] = 'AHN'` (`packages/core/src/labels.ts`), so every place that branches
+on team - comment visibility forcing `INTERNAL_AHN`, project scoping, `readableVisibilities` -
+treats an AHN Designer exactly like an AHN Project Manager, by construction, with zero new branches
+to get wrong. `ROLE_PERMISSIONS.AHN_DESIGNER` (`packages/rbac/src/matrix.ts`) is a literal duplicate
+of `AHN_PROJECT_MANAGER`'s grant list, per explicit request ("same permissions as AHN Project
+Manager") rather than a narrower or role-derived set.
+
+The actual "1 more tab" lives entirely in `people/page.tsx`: a `GROUP_ORDER` one step finer than
+`TEAM_ORDER` was, carving `role === 'AHN_DESIGNER'` out into its own "Design" card by role, ahead of
+the generic AHN group, without `Team` (or the database column backing it) ever gaining a `DESIGN`
+value. `person.team` stays `'AHN'` in the database for a designer; the split is a display-only
+computation over `role`, done fresh on every render.
+
+**`AHN_DESIGNER` needed its own migration** (`prisma/migrations/20260917000000_add_ahn_designer_role`,
+`ALTER TYPE "UserRole" ADD VALUE 'AHN_DESIGNER'`) since `UserRole` is a real Postgres enum, unlike the
+`Team` type this stayed out of. `prisma migrate dev` refused to run against the production database -
+it wanted to reset the `public` schema first, citing an unrelated pre-existing checksum mismatch on
+migration `20260911065843_clickup_status_sync` (likely from `migrate dev`'s shadow-database diffing,
+which needs a direct, non-pooled connection Supabase's pooler doesn't give it - `prisma migrate
+status` reported the schema clean by comparison). Never run `migrate reset` against this database -
+it drops everything. The migration file was hand-written instead, following the exact
+`ALTER TYPE ... ADD VALUE` pattern already in this repo's history
+(`20260907042852_integration_link_activity_events`), and applied with `prisma migrate deploy`, which
+applies pending files directly without a shadow database.
+
+**Lynn (My Linh, mylinh@ahnmedia.com) is the first `AHN_DESIGNER`** - her account and a 7-day
+INVITE-purpose `PasswordToken` were created directly (mirroring `createInvitedUser` in
+`apps/web/src/features/people/actions.ts` exactly: same `scrypt` placeholder-hash scheme from
+`packages/auth/src/password.ts`, same `hashToken`/`randomToken` from `@relay/core/server`), since
+running the real server action needs an authenticated session a script doesn't have. The set-password
+link was handed directly to the requester to forward, rather than reimplementing
+`deliverInviteEmail`'s provider-specific send path in a one-off script.
+
+**Also noticed in passing, not yet acted on**: an organization named "Maintenance Sweep Test Org"
+(7 users, 0 projects, created 2026-09-16) sitting in production alongside "AHN Media" - predates this
+session's own test runs, looks like leftover fixture data from an earlier interrupted test run rather
+than anything this change created. Flagged for cleanup, not deleted unprompted.
