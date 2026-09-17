@@ -985,4 +985,29 @@ the UI would surface that row to someone browsing the Invoices tab. Consistent w
 `recordPaymentAction` already refuses to let `paidMinor` decrease and `upsertInvoiceAction` refuses to
 lower `amountMinor` below what's paid - the same "never silently lose real payment history" rule this
 feature already followed everywhere else, just extended to cover deletion too.
-decision, not parity with what already exists.
+
+---
+
+## Outstanding showed $0 with a $2,000 contract and only $1,400 paid
+
+Live bug, reported directly against `PRJ-0008`: contract $2,000, one $1,400 milestone paid in full,
+Invoices tab's "Outstanding" stat tile (and the "Has AHN been paid?" answer tile - "Nothing
+outstanding.") both read $0. `rollUpInvoices` (`features/projects/snapshot.ts`) computed
+`outstandingMinor` as `invoicedMinor - paidMinor` - outstanding against whatever had been *invoiced*
+so far, not against the contract. The one milestone actually billed was paid in full, so that
+subtraction came out to zero, even though $600 of the $2,000 contract had never been invoiced at all -
+exactly backwards from what the tile is supposed to answer ("does AHN still have money coming?").
+
+**Fixed to `totalMinor - paidMinor`** - `totalMinor` was already computed two lines above as
+`Math.max(contractTotalMinor, invoicedMinor)`, so this is exactly Bryan's own stated formula from the
+earlier status-derivation fix: "contract value - paid = outstanding balance." A project past its
+original contract (invoiced more than the contract total, e.g. an approved change request) still
+falls back to `invoicedMinor` the same way it always did; a project with a contract entered but
+nothing invoiced yet now correctly shows the full contract as outstanding, rather than $0.
+
+**One rollup, every reader gets it for free** - `rollUpInvoices` is a pure function computed fresh
+from live `Invoice` rows on every read (no stored, separately-maintained total to get out of sync),
+already established while fixing the invoice-delete rollup above. The same fix is therefore
+automatically correct at invoice creation, editing, payment, and deletion - `snapshot.test.ts` (new)
+proves the exact `PRJ-0008` numbers directly, plus the delete case explicitly, without needing
+separate code paths for "just created" vs "just deleted."

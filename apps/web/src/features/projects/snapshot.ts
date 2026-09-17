@@ -77,7 +77,15 @@ export function rollUpInvoices(
     totalMinor,
     invoicedMinor,
     paidMinor,
-    outstandingMinor: Math.max(0, invoicedMinor - paidMinor),
+    // Against the contract, not just what happened to be invoiced so far -
+    // `invoicedMinor - paidMinor` reads as "$0 outstanding" the moment the
+    // one milestone actually billed is paid in full, even with most of the
+    // contract never invoiced at all yet (PRJ-0008: $1,400 of a $2,000
+    // contract billed and paid, "$0 outstanding" shown - the merchant still
+    // owes $600). `totalMinor` is already `max(contractTotalMinor,
+    // invoicedMinor)`, so this is exactly Bryan's own formula: "contract
+    // value - paid = outstanding balance".
+    outstandingMinor: Math.max(0, totalMinor - paidMinor),
     currency,
     nextDueDate,
     overdue,
