@@ -934,3 +934,25 @@ been a product decision nobody asked for, not a mechanical parity fix. Same reas
 `project-board.tsx`'s compact card avatar stack and `filters-bar.tsx`'s project-list filters
 untouched - the board card already omits `shoplineSeId` for space (existing precedent, not new), and
 neither Developer nor Solutions Engineer had a list filter before this either.
+
+---
+
+## Start date became editable
+
+`Project.startDate` was write-once: set from `now` in `createProjectAction`, read everywhere (aging
+band, SLA breach targeting, the "age" sort), but nothing ever let it be corrected afterward, unlike
+`targetLaunchDate` which already had an edit field. Requested directly: "add a feature to update each
+project's start date." Added to `updateProjectAction` and the Settings page's `ProjectDetailsForm`,
+right next to Target launch date.
+
+**Handled differently from `targetLaunchDate` on purpose**: `startDate` is `NOT NULL` on the row - it
+is what every "days since start" figure is computed from, so clearing it isn't a valid state the way
+an unset target launch date is. `updateProjectAction`'s input treats an empty/omitted `startDate` as
+"leave it alone" (never "clear it"), the same convention `targetLaunchDate` uses for "skip this
+field", just without a path to null. A non-empty but unparseable date still throws, from `parseDate`
+itself - no separate check needed, since `parseDate` never returns `null` for a value that was
+actually supplied.
+
+No cross-field validation was added (e.g. refusing a start date after the target launch date) - the
+existing `targetLaunchDate` field has none either, and inventing a new rule here would be a product
+decision, not parity with what already exists.

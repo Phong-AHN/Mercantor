@@ -52,6 +52,7 @@ export default async function ProjectSettingsPage({
     <div className="grid gap-4 lg:grid-cols-2">
       <ProjectDetailsForm
         code={project.code}
+        startDate={project.startDate.toISOString()}
         migrationType={project.migrationType}
         targetLaunchDate={project.targetLaunchDate?.toISOString() ?? null}
         scopeSummary={project.scopeSummary}

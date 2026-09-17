@@ -8,7 +8,7 @@ import {
   signInAs,
   type TestUser,
 } from '../../../test/fixtures';
-import { advanceStageAction, assignPeopleAction } from './actions';
+import { advanceStageAction, assignPeopleAction, updateProjectAction } from './actions';
 
 /**
  * Automated approvals (Phase 2): only the *request* step is automatic - the
@@ -265,5 +265,62 @@ describe('assignPeopleAction - AHN designer', () => {
 
     const project = await db.project.findUniqueOrThrow({ where: { id: projectId } });
     expect(project.ahnDesignerId).toBeNull();
+  });
+});
+
+/**
+ * `startDate` used to be write-once, set only at creation - nothing ever let
+ * it be corrected afterward even though the actual kickoff date is routinely
+ * known later than the row was entered. Unlike `targetLaunchDate` it is
+ * `NOT NULL` on the row (D-016-adjacent: it anchors every "days since start"
+ * figure - aging band, SLA breach targeting), so an empty value has to mean
+ * "leave it alone", never "clear it" - proven here, not just by the schema
+ * constraint that would catch a genuine attempt to null it out.
+ */
+describe('updateProjectAction - start date', () => {
+  let pm: TestUser;
+  let projectCode: string;
+  let projectId: string;
+
+  beforeAll(async () => {
+    pm = await createTestUser('AHN_PROJECT_MANAGER');
+    const project = await createTestProject({ as: pm, ahnProjectManagerId: pm.id });
+    projectCode = project.code;
+    projectId = project.id;
+    await signInAs(pm);
+  });
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('corrects the start date to an earlier real kickoff', async () => {
+    const result = await updateProjectAction({ code: projectCode, startDate: '2026-01-15' });
+    expect(result.ok).toBe(true);
+
+    const project = await db.project.findUniqueOrThrow({ where: { id: projectId } });
+    expect(project.startDate.toISOString().slice(0, 10)).toBe('2026-01-15');
+  });
+
+  it('rejects an invalid start date and changes nothing', async () => {
+    const before = await db.project.findUniqueOrThrow({ where: { id: projectId } });
+
+    const result = await updateProjectAction({ code: projectCode, startDate: 'not-a-date' });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.fieldErrors?.startDate).toBeTruthy();
+
+    const after = await db.project.findUniqueOrThrow({ where: { id: projectId } });
+    expect(after.startDate.getTime()).toBe(before.startDate.getTime());
+  });
+
+  it('leaves the start date untouched when the field is omitted entirely', async () => {
+    const before = await db.project.findUniqueOrThrow({ where: { id: projectId } });
+
+    const result = await updateProjectAction({ code: projectCode, scopeSummary: 'Unrelated edit.' });
+    expect(result.ok).toBe(true);
+
+    const after = await db.project.findUniqueOrThrow({ where: { id: projectId } });
+    expect(after.startDate.getTime()).toBe(before.startDate.getTime());
   });
 });

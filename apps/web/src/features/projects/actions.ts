@@ -368,6 +368,7 @@ export const updateProjectAction = defineAction({
   permission: 'project:update',
   input: z.object({
     code: z.string().min(1),
+    startDate: z.string().optional(),
     targetLaunchDate: z.string().optional(),
     migrationType: z.enum(['ONE_TO_ONE', 'CUSTOM_BUILD', 'HYBRID']).optional(),
     scopeSummary: z.string().trim().max(2000).optional(),
@@ -377,11 +378,17 @@ export const updateProjectAction = defineAction({
   async handler(input, ctx) {
     const project = await resolveProject(ctx.principal, input.code);
     const targetLaunchDate = parseDate(input.targetLaunchDate, 'targetLaunchDate');
+    // Unlike targetLaunchDate, startDate is NOT NULL on the row - it anchors
+    // every "days since start" figure (aging band, SLA breach targeting), so
+    // an empty value here means "leave it alone", never "clear it". A
+    // non-empty, unparseable one still throws, from parseDate itself.
+    const startDate = input.startDate ? parseDate(input.startDate, 'startDate') : undefined;
 
     await transaction(async (tx) => {
       const before = await tx.project.findUniqueOrThrow({
         where: { id: project.id },
         select: {
+          startDate: true,
           targetLaunchDate: true,
           migrationType: true,
           scopeSummary: true,
@@ -393,6 +400,7 @@ export const updateProjectAction = defineAction({
       await tx.project.update({
         where: { id: project.id },
         data: {
+          startDate: startDate ?? undefined,
           targetLaunchDate: input.targetLaunchDate === undefined ? undefined : targetLaunchDate,
           migrationType: input.migrationType,
           scopeSummary: input.scopeSummary,

@@ -45,6 +45,7 @@ function personOptionLabel(person: Person): string {
 
 export function ProjectDetailsForm({
   code,
+  startDate,
   migrationType,
   targetLaunchDate,
   scopeSummary,
@@ -52,6 +53,7 @@ export function ProjectDetailsForm({
   contractTotal,
 }: {
   code: string;
+  startDate: string;
   migrationType: MigrationType;
   targetLaunchDate: string | null;
   scopeSummary: string | null;
@@ -59,6 +61,7 @@ export function ProjectDetailsForm({
   contractTotal: number | null;
 }) {
   const [form, setForm] = useState({
+    startDate: startDate.slice(0, 10),
     migrationType,
     targetLaunchDate: targetLaunchDate?.slice(0, 10) ?? '',
     scopeSummary: scopeSummary ?? '',
@@ -71,7 +74,7 @@ export function ProjectDetailsForm({
     <Card>
       <CardHeader
         title="Project details"
-        description="The target launch date drives the ahead/behind figures everywhere else."
+        description="Start and target launch dates drive the ageing and ahead/behind figures everywhere else."
       />
       <CardBody className="space-y-4">
         {action.error && (
@@ -80,7 +83,7 @@ export function ProjectDetailsForm({
           </Alert>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Migration type" htmlFor="migrationType">
             <Select
               id="migrationType"
@@ -95,6 +98,20 @@ export function ProjectDetailsForm({
                 </option>
               ))}
             </Select>
+          </Field>
+          <Field
+            label="Start date"
+            htmlFor="startDate"
+            required
+            error={action.fieldErrors.startDate ?? null}
+            hint="Changes the project's age everywhere it's shown."
+          >
+            <Input
+              id="startDate"
+              type="date"
+              value={form.startDate}
+              onChange={(event) => setForm({ ...form, startDate: event.target.value })}
+            />
           </Field>
           <Field
             label="Target launch date"
@@ -157,6 +174,7 @@ export function ProjectDetailsForm({
             onClick={() =>
               action.run({
                 code,
+                startDate: form.startDate || undefined,
                 migrationType: form.migrationType,
                 targetLaunchDate: form.targetLaunchDate || undefined,
                 scopeSummary: form.scopeSummary || undefined,
