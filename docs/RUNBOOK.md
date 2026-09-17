@@ -956,3 +956,33 @@ actually supplied.
 No cross-field validation was added (e.g. refusing a start date after the target launch date) - the
 existing `targetLaunchDate` field has none either, and inventing a new rule here would be a product
 decision, not parity with what already exists.
+
+---
+
+## Deleting an invoice
+
+Requested directly, from a "Milestone billing" screenshot: a delete button per row, with the
+rollup figures ($ invoiced/paid/outstanding at the top of the Invoices tab) reflecting the removal.
+`deleteInvoiceAction` (`invoice:manage`) added next to Edit on each row in `InvoiceControls`, behind a
+confirm dialog (`Trash2` icon, `variant="danger"` on the confirming button - destructive and
+irreversible, so it gets the same click-to-confirm shape as everything else in this app that deletes
+something for good).
+
+**"Refunding the calculated values" turned out to need no separate code at all.** `rollUpInvoices`
+(`features/projects/snapshot.ts`) was already a pure function over whatever `Invoice` rows exist for a
+project, summed fresh on every read - `invoicedMinor`, `paidMinor`, `outstandingMinor`, `count` were
+never a stored, separately-maintained total that a delete could leave stale. Deleting the row *is* the
+fix; the stat tiles and the milestone table just render one fewer row and a smaller sum the next time
+anyone loads the page (`revalidateProject` after the delete makes sure that next load isn't a cached
+one). Proven in `deleteInvoiceAction`'s test by rolling the live rows up before and after with the
+exact same `rollUpInvoices` call `getProject` uses, rather than only checking the row disappeared.
+
+**One guard added that was not explicitly asked for**: `deleteInvoiceAction` refuses anything with
+`paidMinor > 0` - "This is already paid against this milestone... cannot be deleted." Deleting a
+milestone nothing was ever paid against loses nothing; deleting one with a real payment recorded would
+erase that payment history with only an audit-log row left to prove it ever happened, and nothing in
+the UI would surface that row to someone browsing the Invoices tab. Consistent with how
+`recordPaymentAction` already refuses to let `paidMinor` decrease and `upsertInvoiceAction` refuses to
+lower `amountMinor` below what's paid - the same "never silently lose real payment history" rule this
+feature already followed everywhere else, just extended to cover deletion too.
+decision, not parity with what already exists.

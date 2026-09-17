@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '@relay/db';
 import { readableVisibilities } from '@relay/rbac';
+import { rollUpInvoices } from '@/features/projects/snapshot';
 import {
   cleanupFixtures,
   createTestProject,
@@ -8,7 +9,12 @@ import {
   signInAs,
   type TestUser,
 } from '../../../test/fixtures';
-import { chaseInvoiceAction, recordPaymentAction, upsertInvoiceAction } from './actions';
+import {
+  chaseInvoiceAction,
+  deleteInvoiceAction,
+  recordPaymentAction,
+  upsertInvoiceAction,
+} from './actions';
 
 /**
  * Money as integer minor units, end to end (D-016): a payment tips an
@@ -335,5 +341,120 @@ describe('upsertInvoiceAction derives status instead of accepting it', () => {
     expect(updated.status).toBe('PAID');
     expect(updated.paidMinor).toBe(50_000);
     expect(updated.paidDate?.getTime()).toBe(afterPayment.paidDate?.getTime());
+  });
+});
+
+/**
+ * The invoices tab has no separately-stored rollup to "give back" after a
+ * delete - `rollUpInvoices` sums whatever `Invoice` rows exist, fresh, every
+ * time it's called (`features/projects/snapshot.ts`). Deleting a row is
+ * therefore the entire fix: proven here by rolling the live rows up before
+ * and after, the same way `getProject` does, rather than trusting that a
+ * missing row implies a correct total.
+ */
+describe('deleteInvoiceAction', () => {
+  let pm: TestUser;
+  let projectCode: string;
+  let projectId: string;
+
+  beforeAll(async () => {
+    pm = await createTestUser('AHN_PROJECT_MANAGER');
+    const project = await createTestProject({ as: pm, ahnProjectManagerId: pm.id });
+    projectCode = project.code;
+    projectId = project.id;
+    await signInAs(pm);
+  });
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  async function currentRollup() {
+    const invoices = await db.invoice.findMany({
+      where: { projectId },
+      select: { status: true, amountMinor: true, paidMinor: true, currency: true, dueDate: true },
+    });
+    return rollUpInvoices(invoices, 0, 'USD');
+  }
+
+  it('deletes an unpaid milestone, and the rollup figures recompute without it', async () => {
+    const first = await upsertInvoiceAction({
+      code: projectCode,
+      milestone: 'Kickoff deposit',
+      number: 'AHN-DEL-1',
+      amount: 1000,
+      invoiceDate: '2026-01-01',
+    });
+    expect(first.ok).toBe(true);
+    const kept = await upsertInvoiceAction({
+      code: projectCode,
+      milestone: 'Final milestone',
+      number: 'AHN-DEL-2',
+      amount: 500,
+      invoiceDate: '2026-02-01',
+    });
+    expect(kept.ok).toBe(true);
+
+    const invoice = await db.invoice.findFirstOrThrow({
+      where: { projectId, milestone: 'Kickoff deposit' },
+    });
+
+    const before = await currentRollup();
+    expect(before.invoicedMinor).toBe(150_000);
+    expect(before.count).toBe(2);
+
+    const result = await deleteInvoiceAction({ code: projectCode, invoiceId: invoice.id });
+    expect(result.ok).toBe(true);
+
+    expect(await db.invoice.findUnique({ where: { id: invoice.id } })).toBeNull();
+    const after = await currentRollup();
+    expect(after.invoicedMinor).toBe(50_000);
+    expect(after.count).toBe(1);
+  });
+
+  it('refuses to delete a milestone with a payment recorded, and changes nothing', async () => {
+    const created = await upsertInvoiceAction({
+      code: projectCode,
+      milestone: 'Already paid milestone',
+      number: 'AHN-DEL-3',
+      amount: 300,
+      invoiceDate: '2026-03-01',
+    });
+    expect(created.ok).toBe(true);
+    const invoice = await db.invoice.findFirstOrThrow({
+      where: { projectId, milestone: 'Already paid milestone' },
+    });
+    const paid = await recordPaymentAction({ code: projectCode, invoiceId: invoice.id, amount: 100 });
+    expect(paid.ok).toBe(true);
+
+    const result = await deleteInvoiceAction({ code: projectCode, invoiceId: invoice.id });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('VALIDATION_FAILED');
+
+    const stillThere = await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(stillThere.paidMinor).toBe(10_000);
+  });
+
+  it('refuses to delete an invoice from another project', async () => {
+    const otherPm = await createTestUser('AHN_PROJECT_MANAGER');
+    const otherProject = await createTestProject({ as: otherPm, ahnProjectManagerId: otherPm.id });
+    const created = await upsertInvoiceAction({
+      code: otherProject.code,
+      milestone: "Someone else's milestone",
+      amount: 200,
+    });
+    expect(created.ok).toBe(true);
+    const invoice = await db.invoice.findFirstOrThrow({
+      where: { projectId: otherProject.id, milestone: "Someone else's milestone" },
+    });
+
+    await signInAs(pm);
+    const result = await deleteInvoiceAction({ code: projectCode, invoiceId: invoice.id });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('CONFLICT');
+
+    expect(await db.invoice.findUnique({ where: { id: invoice.id } })).not.toBeNull();
   });
 });

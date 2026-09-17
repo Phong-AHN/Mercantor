@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { BellRing, Banknote, Pencil, Plus } from 'lucide-react';
+import { BellRing, Banknote, Pencil, Plus, Trash2 } from 'lucide-react';
 import { formatMoney, type InvoiceStatus } from '@relay/core';
 import { Alert, Button, Dialog, Field, Input, Textarea } from '@relay/ui';
 import { useAction } from '@/components/use-action';
 import {
   chaseInvoiceAction,
+  deleteInvoiceAction,
   recordPaymentAction,
   upsertInvoiceAction,
 } from '@/features/invoices/actions';
@@ -257,12 +258,13 @@ export function InvoiceControls({
   invoice: InvoiceForm;
   contractValue: number;
 }) {
-  const [dialog, setDialog] = useState<'edit' | 'payment' | null>(null);
+  const [dialog, setDialog] = useState<'edit' | 'payment' | 'delete' | null>(null);
   const [amount, setAmount] = useState('');
   const [paidDate, setPaidDate] = useState('');
 
   const payment = useAction(recordPaymentAction, { onSuccess: () => setDialog(null) });
   const chase = useAction(chaseInvoiceAction);
+  const remove = useAction(deleteInvoiceAction, { onSuccess: () => setDialog(null) });
 
   const outstanding = invoice.amount - invoice.paid;
   const paidAfterPct = contractSharePct((invoice.paid + Number(amount || 0)).toString(), contractValue);
@@ -273,6 +275,9 @@ export function InvoiceControls({
     <div className="flex items-center gap-1">
       <Button variant="ghost" size="xs" onClick={() => setDialog('edit')} title="Edit">
         <Pencil className="size-3.5" />
+      </Button>
+      <Button variant="ghost" size="xs" onClick={() => setDialog('delete')} title="Delete">
+        <Trash2 className="size-3.5" />
       </Button>
 
       {outstanding > 0 && invoice.status !== 'NOT_INVOICED' && (
@@ -374,6 +379,37 @@ export function InvoiceControls({
             />
           </Field>
         </div>
+      </Dialog>
+
+      <Dialog
+        open={dialog === 'delete'}
+        onClose={() => setDialog(null)}
+        title={`Delete ${invoice.milestone}?`}
+        description="This removes the milestone and its figures from the invoices tab for good - it cannot be undone."
+        size="sm"
+        busy={remove.pending}
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setDialog(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={remove.pending}
+              onClick={() => remove.run({ code, invoiceId: invoice.id! })}
+            >
+              <Trash2 className="size-3.5" />
+              Delete
+            </Button>
+          </>
+        }
+      >
+        {remove.error && (
+          <Alert tone="danger" dense>
+            {remove.error}
+          </Alert>
+        )}
       </Dialog>
     </div>
   );

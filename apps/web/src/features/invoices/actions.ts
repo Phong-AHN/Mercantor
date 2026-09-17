@@ -232,6 +232,72 @@ export const recordPaymentAction = defineAction({
   },
 });
 
+/**
+ * Refuses anything with a real payment on it - deleting it would erase that
+ * payment history with nothing left to show it ever happened, beyond an
+ * audit row nobody browsing the invoices tab would think to check. A
+ * milestone that was only ever entered wrong (nothing paid yet) has no such
+ * history to lose, so the rollup figures on the invoices tab simply
+ * recompute without it - they were never a stored, separately-maintained
+ * total to begin with (`rollUpInvoices` in `features/projects/snapshot.ts`
+ * sums the live `Invoice` rows fresh on every read), so there is nothing to
+ * "give back" beyond deleting the row itself.
+ */
+export const deleteInvoiceAction = defineAction({
+  name: 'invoice.delete',
+  permission: 'invoice:manage',
+  input: z.object({ code: z.string().min(1), invoiceId: z.string().uuid() }),
+  async handler(input, ctx) {
+    const project = await resolveProject(ctx.principal, input.code);
+
+    await transaction(async (tx) => {
+      const invoice = await tx.invoice.findFirst({
+        where: { id: input.invoiceId, projectId: project.id },
+        select: {
+          id: true,
+          milestone: true,
+          number: true,
+          amountMinor: true,
+          paidMinor: true,
+          currency: true,
+          status: true,
+        },
+      });
+      if (!invoice) throw new ConflictError('That invoice is not on this project.');
+      if (invoice.paidMinor > 0) {
+        throw new ValidationError(
+          `${formatMoney(invoice.paidMinor, invoice.currency)} is already paid against this milestone - remove that payment history first is not supported, so it cannot be deleted.`,
+        );
+      }
+
+      await tx.invoice.delete({ where: { id: invoice.id } });
+
+      await recordActivity(tx, {
+        projectId: project.id,
+        type: 'INVOICE_UPDATED',
+        actorId: ctx.principal.id,
+        summary: `Invoice removed: ${invoice.milestone}.`,
+        visibility: 'INTERNAL_AHN',
+      });
+
+      await audit(tx, {
+        principal: ctx.principal,
+        projectId: project.id,
+        action: 'invoice.delete',
+        entityType: 'Invoice',
+        entityId: invoice.id,
+        before: invoice,
+        ip: ctx.ip,
+      });
+
+      await recomputeHealth(tx, project.id);
+    });
+
+    revalidateProject(input.code);
+    return actionOk(undefined, 'Invoice removed.');
+  },
+});
+
 export const chaseInvoiceAction = defineAction({
   name: 'invoice.chase',
   permission: 'invoice:manage',
