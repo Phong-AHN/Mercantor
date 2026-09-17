@@ -58,6 +58,7 @@ function fixture(overrides: Partial<ProjectListItem> = {}): ProjectListItem {
     people: {
       ahnPm: { id: 'user-1', name: 'Jamie Lee', team: 'AHN', role: 'AHN_PROJECT_MANAGER' },
       ahnDev: null,
+      ahnDesigner: null,
       shoplineAm: null,
       shoplineSe: null,
     },

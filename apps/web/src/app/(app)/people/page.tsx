@@ -89,6 +89,7 @@ export default async function PeoplePage() {
                     const projects =
                       person._count.managedProjects +
                       person._count.developedProjects +
+                      person._count.designedProjects +
                       person._count.accountManagedProject +
                       person._count.engineeredProjects;
                     const permissions = permissionsForRole(person.role);

@@ -45,6 +45,7 @@ export const createProjectAction = defineAction({
 
     ahnProjectManagerId: z.string().uuid().optional(),
     ahnDeveloperId: z.string().uuid().optional(),
+    ahnDesignerId: z.string().uuid().optional(),
     shoplineAmId: z.string().uuid().optional(),
     shoplineSeId: z.string().uuid().optional(),
 
@@ -117,6 +118,7 @@ export const createProjectAction = defineAction({
           contractTotalMinor: input.contractTotal ? Math.round(input.contractTotal * 100) : 0,
           ahnProjectManagerId: input.ahnProjectManagerId ?? null,
           ahnDeveloperId: input.ahnDeveloperId ?? null,
+          ahnDesignerId: input.ahnDesignerId ?? null,
           shoplineAmId: input.shoplineAmId ?? null,
           shoplineSeId: input.shoplineSeId ?? null,
           nextAction: 'Send the introduction email to the merchant.',
@@ -188,6 +190,7 @@ export const createProjectAction = defineAction({
         userIds: [
           input.ahnProjectManagerId,
           input.ahnDeveloperId,
+          input.ahnDesignerId,
           input.shoplineAmId,
           input.shoplineSeId,
         ].filter((id): id is string => typeof id === 'string'),

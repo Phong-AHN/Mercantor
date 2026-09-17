@@ -901,3 +901,36 @@ link was handed directly to the requester to forward, rather than reimplementing
 (7 users, 0 projects, created 2026-09-16) sitting in production alongside "AHN Media" - predates this
 session's own test runs, looks like leftover fixture data from an earlier interrupted test run rather
 than anything this change created. Flagged for cleanup, not deleted unprompted.
+
+---
+
+## A fifth project assignee: `ahnDesignerId`
+
+Follow-up to the AHN Designer role above: "add a field for designer in the assign section" - the
+project now has a fifth assignment slot, `ahnDesignerId`, alongside `ahnProjectManagerId`/
+`ahnDeveloperId`/`shoplineAmId`/`shoplineSeId` on the `Project` model
+(`prisma/migrations/20260917010000_add_ahn_designer_to_project`, another hand-written
+`ALTER TABLE`/`CREATE INDEX`/`ADD CONSTRAINT` migration for the same reason the role migration above
+was - `migrate dev`'s shadow-database diffing doesn't work against this pooled connection).
+
+**Wired through every place the existing four fields already were** - the create/edit assignment
+forms, `assignPeopleAction`'s Zod input/before-after-diff/notify, `createProjectAction`'s initial
+notify, `notifyStageChange`'s "everyone on this project" audience, the project detail page, the
+project table's avatar stack, CSV export, the merchant-facing portal's "Who to ask" card, and the
+People page's per-person project count (`designedProjects`, the new back-relation on `User`). One
+easy-to-miss spot: `features/projects/queries.ts` keeps its own hand-maintained `TEAM_BY_ROLE` map
+(a duplicate of `USER_ROLE_TEAM`, not an import of it) for turning a `role` into an avatar color -
+missing `AHN_DESIGNER` there would have rendered every assigned designer in the muted "OTHER" color
+instead of AHN's, with no type error to catch it (the map is `Record<string, Team>`, not a total
+`Record<UserRole, Team>`).
+
+**Deliberately not extended**: `assignPeopleAction` also joined the `AHN` bucket in
+`blockers/actions.ts`'s `notifyOwners` (an AHN-owned blocker now also notifies the assigned
+designer, same as PM/Developer already did) - but the deployment-approval notify in
+`approvals/actions.ts` and the launch-blocker escalation in `issues/actions.ts` were left alone.
+Both are per-event-type escalation lists scoped to deployment/build concerns, not the "everyone
+assigned to this project" pattern the other five fields share - adding Designer there would have
+been a product decision nobody asked for, not a mechanical parity fix. Same reasoning kept
+`project-board.tsx`'s compact card avatar stack and `filters-bar.tsx`'s project-list filters
+untouched - the board card already omits `shoplineSeId` for space (existing precedent, not new), and
+neither Developer nor Solutions Engineer had a list filter before this either.

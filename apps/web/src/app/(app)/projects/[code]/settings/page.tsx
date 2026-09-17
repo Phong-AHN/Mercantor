@@ -90,6 +90,7 @@ export default async function ProjectSettingsPage({
           current={{
             ahnProjectManagerId: project.people.ahnPm?.id ?? null,
             ahnDeveloperId: project.people.ahnDev?.id ?? null,
+            ahnDesignerId: project.people.ahnDesigner?.id ?? null,
             shoplineAmId: project.people.shoplineAm?.id ?? null,
             shoplineSeId: project.people.shoplineSe?.id ?? null,
           }}

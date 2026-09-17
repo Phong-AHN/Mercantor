@@ -26,6 +26,7 @@ export interface ProjectFilters {
   migrationType?: MigrationType[];
   ahnPmId?: string;
   ahnDevId?: string;
+  ahnDesignerId?: string;
   shoplineAmId?: string;
   blockerOwner?: Team;
   invoiceStatus?: string[];
@@ -57,6 +58,7 @@ const listSelect = {
   },
   ahnProjectManager: { select: { id: true, name: true, email: true, role: true } },
   ahnDeveloper: { select: { id: true, name: true, email: true, role: true } },
+  ahnDesigner: { select: { id: true, name: true, email: true, role: true } },
   shoplineAm: { select: { id: true, name: true, email: true, role: true } },
   shoplineSe: { select: { id: true, name: true, email: true, role: true } },
   nextActionOwner: { select: { id: true, name: true, role: true } },
@@ -124,6 +126,7 @@ export interface ProjectListItem {
   people: {
     ahnPm: PersonRef | null;
     ahnDev: PersonRef | null;
+    ahnDesigner: PersonRef | null;
     shoplineAm: PersonRef | null;
     shoplineSe: PersonRef | null;
   };
@@ -148,6 +151,7 @@ const TEAM_BY_ROLE: Record<string, Team> = {
   AHN_ADMIN: 'AHN',
   AHN_PROJECT_MANAGER: 'AHN',
   AHN_DEVELOPER: 'AHN',
+  AHN_DESIGNER: 'AHN',
   SHOPLINE_ADMIN: 'SHOPLINE',
   SHOPLINE_ACCOUNT_MANAGER: 'SHOPLINE',
   SHOPLINE_SOLUTIONS_ENGINEER: 'SHOPLINE',
@@ -216,6 +220,7 @@ function toListItem(row: ProjectListRecord, now: Date): ProjectListItem {
     people: {
       ahnPm: toPerson(row.ahnProjectManager),
       ahnDev: toPerson(row.ahnDeveloper),
+      ahnDesigner: toPerson(row.ahnDesigner),
       shoplineAm: toPerson(row.shoplineAm),
       shoplineSe: toPerson(row.shoplineSe),
     },
@@ -256,6 +261,7 @@ function buildWhere(principal: Principal, filters: ProjectFilters): Prisma.Proje
   if (filters.migrationType?.length) and.push({ migrationType: { in: filters.migrationType } });
   if (filters.ahnPmId) and.push({ ahnProjectManagerId: filters.ahnPmId });
   if (filters.ahnDevId) and.push({ ahnDeveloperId: filters.ahnDevId });
+  if (filters.ahnDesignerId) and.push({ ahnDesignerId: filters.ahnDesignerId });
   if (filters.shoplineAmId) and.push({ shoplineAmId: filters.shoplineAmId });
   if (filters.blockerOwner) {
     and.push({ blockers: { some: { resolvedAt: null, ownerTeam: filters.blockerOwner } } });
@@ -563,7 +569,7 @@ export type ProjectDetail = Awaited<ReturnType<typeof getProject>>;
 
 /** Assignable people, grouped by side, for the assignment controls. */
 /**
- * Candidates for the four assignment fields on a project. Scoped to the
+ * Candidates for the five assignment fields on a project. Scoped to the
  * caller's own organization - without it, a project manager in one
  * organization could see, and assign, staff from a completely different
  * tenant company, which is exactly the kind of cross-tenant leak

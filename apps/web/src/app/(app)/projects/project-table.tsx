@@ -182,6 +182,7 @@ export function ProjectTable({
                     people={[
                       project.people.ahnPm,
                       project.people.ahnDev,
+                      project.people.ahnDesigner,
                       project.people.shoplineAm,
                       project.people.shoplineSe,
                     ]

@@ -118,6 +118,7 @@ export async function createTestProject(input: {
   merchantName?: string;
   ahnProjectManagerId?: string;
   ahnDeveloperId?: string;
+  ahnDesignerId?: string;
   shoplineAmId?: string;
   shoplineSeId?: string;
 }): Promise<{ id: string; code: string }> {
@@ -130,6 +131,7 @@ export async function createTestProject(input: {
     contactEmail: `owner-${suffix}@relay.test`,
     ahnProjectManagerId: input.ahnProjectManagerId,
     ahnDeveloperId: input.ahnDeveloperId,
+    ahnDesignerId: input.ahnDesignerId,
     shoplineAmId: input.shoplineAmId,
     shoplineSeId: input.shoplineSeId,
   });

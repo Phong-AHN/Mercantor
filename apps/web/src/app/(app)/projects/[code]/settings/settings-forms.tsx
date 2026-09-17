@@ -189,6 +189,7 @@ export function AssignmentForm({
   current: {
     ahnProjectManagerId: string | null;
     ahnDeveloperId: string | null;
+    ahnDesignerId: string | null;
     shoplineAmId: string | null;
     shoplineSeId: string | null;
   };
@@ -196,6 +197,7 @@ export function AssignmentForm({
   const [form, setForm] = useState({
     ahnProjectManagerId: current.ahnProjectManagerId ?? '',
     ahnDeveloperId: current.ahnDeveloperId ?? '',
+    ahnDesignerId: current.ahnDesignerId ?? '',
     shoplineAmId: current.shoplineAmId ?? '',
     shoplineSeId: current.shoplineSeId ?? '',
   });
@@ -222,7 +224,7 @@ export function AssignmentForm({
     <Card>
       <CardHeader
         title="Who is responsible"
-        description="These four names are who gets notified when something needs a decision."
+        description="These five names are who gets notified when something needs a decision."
       />
       <CardBody className="space-y-4">
         {action.error && (
@@ -238,6 +240,7 @@ export function AssignmentForm({
           'Owns delivery, and is the merchant"s main point of contact at AHN.',
         )}
         {field('AHN developer', 'ahnDeveloperId', ahn, 'Does the migration and the build.')}
+        {field('AHN designer', 'ahnDesignerId', ahn, 'Owns the visual design and merchant design review.')}
         {field(
           'SHOPLINE account manager',
           'shoplineAmId',
@@ -261,6 +264,7 @@ export function AssignmentForm({
                 code,
                 ahnProjectManagerId: form.ahnProjectManagerId || null,
                 ahnDeveloperId: form.ahnDeveloperId || null,
+                ahnDesignerId: form.ahnDesignerId || null,
                 shoplineAmId: form.shoplineAmId || null,
                 shoplineSeId: form.shoplineSeId || null,
               })

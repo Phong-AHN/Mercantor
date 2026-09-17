@@ -70,6 +70,7 @@ export function NewProjectForm({
     contractTotal: '',
     ahnProjectManagerId: '',
     ahnDeveloperId: '',
+    ahnDesignerId: '',
     shoplineAmId: '',
     shoplineSeId: '',
     clickUpTrackedStages: [] as ProjectStage[],
@@ -302,6 +303,20 @@ export function NewProjectForm({
                 ))}
               </Select>
             </Field>
+            <Field label="AHN designer" htmlFor="ahnDesignerId">
+              <Select
+                id="ahnDesignerId"
+                value={form.ahnDesignerId}
+                onChange={(event) => set('ahnDesignerId')(event.target.value)}
+              >
+                <option value="">Not assigned yet</option>
+                {ahn.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {personOptionLabel(person)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
             <Field label="SHOPLINE account manager" htmlFor="shoplineAmId">
               <Select
                 id="shoplineAmId"
@@ -382,6 +397,7 @@ export function NewProjectForm({
                 contractTotal: form.contractTotal ? Number(form.contractTotal) : undefined,
                 ahnProjectManagerId: form.ahnProjectManagerId || undefined,
                 ahnDeveloperId: form.ahnDeveloperId || undefined,
+                ahnDesignerId: form.ahnDesignerId || undefined,
                 shoplineAmId: form.shoplineAmId || undefined,
                 shoplineSeId: form.shoplineSeId || undefined,
                 clickUpTrackedStages: form.clickUpTrackedStages,

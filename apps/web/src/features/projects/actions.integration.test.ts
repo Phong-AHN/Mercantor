@@ -8,7 +8,7 @@ import {
   signInAs,
   type TestUser,
 } from '../../../test/fixtures';
-import { advanceStageAction } from './actions';
+import { advanceStageAction, assignPeopleAction } from './actions';
 
 /**
  * Automated approvals (Phase 2): only the *request* step is automatic - the
@@ -208,5 +208,62 @@ describe('SLA breach records close at the exact moment moveStage learns of them'
 
     const closed = await db.slaBreach.findUniqueOrThrow({ where: { id: breach.id } });
     expect(closed.resolvedAt).not.toBeNull();
+  });
+});
+
+/**
+ * The Designer field added alongside PM/Developer/AM/SE: same shape, same
+ * `project:assign` gate, same "notify whoever is newly added" behavior -
+ * proven here rather than assumed from the other four, since `assignPeopleAction`
+ * has no dedicated coverage of its own to lean on.
+ */
+describe('assignPeopleAction - AHN designer', () => {
+  let pm: TestUser;
+  let designer: TestUser;
+  let projectCode: string;
+  let projectId: string;
+
+  beforeAll(async () => {
+    pm = await createTestUser('AHN_PROJECT_MANAGER');
+    designer = await createTestUser('AHN_DESIGNER', { organizationId: pm.organizationId });
+    const project = await createTestProject({ as: pm, ahnProjectManagerId: pm.id });
+    projectCode = project.code;
+    projectId = project.id;
+    await signInAs(pm);
+  });
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('assigns an AHN designer and notifies them, same as any other newly-added assignee', async () => {
+    const result = await assignPeopleAction({ code: projectCode, ahnDesignerId: designer.id });
+    expect(result.ok).toBe(true);
+
+    const project = await db.project.findUniqueOrThrow({ where: { id: projectId } });
+    expect(project.ahnDesignerId).toBe(designer.id);
+
+    const notification = await db.notification.findFirstOrThrow({
+      where: { userId: designer.id, projectId, type: 'ASSIGNED' },
+    });
+    expect(notification.title).toContain('assigned');
+  });
+
+  it('re-saving the same designer does not notify them again - only newly-added ids do', async () => {
+    const before = await db.notification.count({ where: { userId: designer.id, projectId } });
+
+    const result = await assignPeopleAction({ code: projectCode, ahnDesignerId: designer.id });
+    expect(result.ok).toBe(true);
+
+    const after = await db.notification.count({ where: { userId: designer.id, projectId } });
+    expect(after).toBe(before);
+  });
+
+  it('clearing the designer removes the assignment', async () => {
+    const result = await assignPeopleAction({ code: projectCode, ahnDesignerId: null });
+    expect(result.ok).toBe(true);
+
+    const project = await db.project.findUniqueOrThrow({ where: { id: projectId } });
+    expect(project.ahnDesignerId).toBeNull();
   });
 });

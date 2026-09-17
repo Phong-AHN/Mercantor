@@ -238,6 +238,7 @@ export default async function PortalOverviewPage() {
               {[
                 { label: 'AHN project manager', person: project.people.ahnPm },
                 { label: 'AHN developer', person: project.people.ahnDev },
+                { label: 'AHN designer', person: project.people.ahnDesigner },
                 { label: 'SHOPLINE account manager', person: project.people.shoplineAm },
               ].map(({ label, person }) => (
                 <div key={label} className="flex items-center justify-between gap-3">

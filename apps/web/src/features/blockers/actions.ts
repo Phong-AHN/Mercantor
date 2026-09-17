@@ -317,6 +317,7 @@ async function notifyOwners(
     select: {
       ahnProjectManagerId: true,
       ahnDeveloperId: true,
+      ahnDesignerId: true,
       shoplineAmId: true,
       shoplineSeId: true,
       members: { select: { userId: true } },
@@ -325,7 +326,7 @@ async function notifyOwners(
   if (!project) return;
 
   const byTeam: Record<Team, (string | null)[]> = {
-    AHN: [project.ahnProjectManagerId, project.ahnDeveloperId],
+    AHN: [project.ahnProjectManagerId, project.ahnDeveloperId, project.ahnDesignerId],
     SHOPLINE: [project.shoplineAmId, project.shoplineSeId],
     MERCHANT: project.members.map((member) => member.userId),
     OTHER: [project.ahnProjectManagerId],

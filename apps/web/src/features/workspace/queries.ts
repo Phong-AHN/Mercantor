@@ -302,6 +302,7 @@ export async function listPeople(principal: Principal) {
         select: {
           managedProjects: true,
           developedProjects: true,
+          designedProjects: true,
           accountManagedProject: true,
           engineeredProjects: true,
         },

@@ -475,6 +475,7 @@ model User {
   projectMemberships             ProjectMember[]
   managedProjects                Project[]                 @relation("ProjectAhnPm")
   developedProjects              Project[]                 @relation("ProjectAhnDev")
+  designedProjects               Project[]                 @relation("ProjectAhnDesigner")
   accountManagedProject          Project[]                 @relation("ProjectShoplineAm")
   engineeredProjects             Project[]                 @relation("ProjectShoplineSe")
   nextActionProjects             Project[]                 @relation("ProjectNextActionOwner")
@@ -626,6 +627,7 @@ model Project {
 
   ahnProjectManagerId String? @db.Uuid
   ahnDeveloperId      String? @db.Uuid
+  ahnDesignerId       String? @db.Uuid
   shoplineAmId        String? @db.Uuid
   shoplineSeId        String? @db.Uuid
 
@@ -672,6 +674,7 @@ model Project {
   merchant          Merchant @relation(fields: [merchantId], references: [id])
   ahnProjectManager User?    @relation("ProjectAhnPm", fields: [ahnProjectManagerId], references: [id])
   ahnDeveloper      User?    @relation("ProjectAhnDev", fields: [ahnDeveloperId], references: [id])
+  ahnDesigner       User?    @relation("ProjectAhnDesigner", fields: [ahnDesignerId], references: [id])
   shoplineAm        User?    @relation("ProjectShoplineAm", fields: [shoplineAmId], references: [id])
   shoplineSe        User?    @relation("ProjectShoplineSe", fields: [shoplineSeId], references: [id])
   nextActionOwner   User?    @relation("ProjectNextActionOwner", fields: [nextActionOwnerId], references: [id])
@@ -702,6 +705,7 @@ model Project {
   @@index([organizationId])
   @@index([merchantId])
   @@index([ahnProjectManagerId])
+  @@index([ahnDesignerId])
   @@index([shoplineAmId])
   @@index([targetLaunchDate])
   @@index([lastActivityAt])

@@ -180,6 +180,7 @@ export default async function ProjectOverviewPage({
           <CardBody className="space-y-3">
             <PersonRow label="AHN project manager" person={project.people.ahnPm} />
             <PersonRow label="AHN developer" person={project.people.ahnDev} />
+            <PersonRow label="AHN designer" person={project.people.ahnDesigner} />
             <PersonRow label="SHOPLINE account manager" person={project.people.shoplineAm} />
             <PersonRow label="SHOPLINE solutions engineer" person={project.people.shoplineSe} />
 

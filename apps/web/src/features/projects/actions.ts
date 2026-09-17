@@ -157,6 +157,7 @@ async function notifyStageChange(
     select: {
       ahnProjectManagerId: true,
       ahnDeveloperId: true,
+      ahnDesignerId: true,
       shoplineAmId: true,
       shoplineSeId: true,
     },
@@ -166,6 +167,7 @@ async function notifyStageChange(
   const everyone = [
     project.ahnProjectManagerId,
     project.ahnDeveloperId,
+    project.ahnDesignerId,
     project.shoplineAmId,
     project.shoplineSeId,
   ].filter((id): id is string => id !== null);
@@ -275,6 +277,7 @@ export const assignPeopleAction = defineAction({
     code: z.string().min(1),
     ahnProjectManagerId: z.string().uuid().nullable().optional(),
     ahnDeveloperId: z.string().uuid().nullable().optional(),
+    ahnDesignerId: z.string().uuid().nullable().optional(),
     shoplineAmId: z.string().uuid().nullable().optional(),
     shoplineSeId: z.string().uuid().nullable().optional(),
   }),
@@ -287,6 +290,7 @@ export const assignPeopleAction = defineAction({
         select: {
           ahnProjectManagerId: true,
           ahnDeveloperId: true,
+          ahnDesignerId: true,
           shoplineAmId: true,
           shoplineSeId: true,
         },
@@ -297,6 +301,7 @@ export const assignPeopleAction = defineAction({
         data: {
           ahnProjectManagerId: input.ahnProjectManagerId ?? null,
           ahnDeveloperId: input.ahnDeveloperId ?? null,
+          ahnDesignerId: input.ahnDesignerId ?? null,
           shoplineAmId: input.shoplineAmId ?? null,
           shoplineSeId: input.shoplineSeId ?? null,
         },
@@ -318,6 +323,7 @@ export const assignPeopleAction = defineAction({
         after: {
           ahnProjectManagerId: input.ahnProjectManagerId ?? null,
           ahnDeveloperId: input.ahnDeveloperId ?? null,
+          ahnDesignerId: input.ahnDesignerId ?? null,
           shoplineAmId: input.shoplineAmId ?? null,
           shoplineSeId: input.shoplineSeId ?? null,
         },
@@ -327,6 +333,7 @@ export const assignPeopleAction = defineAction({
       const added = [
         input.ahnProjectManagerId,
         input.ahnDeveloperId,
+        input.ahnDesignerId,
         input.shoplineAmId,
         input.shoplineSeId,
       ].filter(
@@ -335,6 +342,7 @@ export const assignPeopleAction = defineAction({
           ![
             before.ahnProjectManagerId,
             before.ahnDeveloperId,
+            before.ahnDesignerId,
             before.shoplineAmId,
             before.shoplineSeId,
           ].includes(id),
