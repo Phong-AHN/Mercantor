@@ -26,6 +26,20 @@ export interface InvoiceRollup {
   invoicedMinor: number;
   paidMinor: number;
   outstandingMinor: number;
+  /**
+   * The slice of `outstandingMinor` with no invoice row behind it at all -
+   * `totalMinor - invoicedMinor`, floored at 0. This is what makes
+   * `outstandingMinor` look unexplained next to a milestone table where
+   * every row is paid in full: that table only ever has a row for money
+   * that was actually billed, so a contract's never-invoiced remainder is
+   * real money owed with nowhere on the screen to show it. Surfaced
+   * separately so a reader isn't left to guess where the gap went.
+   */
+  notInvoicedMinor: number;
+  /** Sum of `amountMinor - paidMinor` over invoices individually overdue -
+   * a concrete figure alongside the `overdue` flag below, which only says
+   * yes/no. */
+  overdueMinor: number;
   currency: string;
   nextDueDate: Date | null;
   overdue: boolean;
@@ -47,14 +61,16 @@ export function rollUpInvoices(
     .reduce((sum, invoice) => sum + invoice.amountMinor, 0);
   const paidMinor = invoices.reduce((sum, invoice) => sum + invoice.paidMinor, 0);
 
-  const overdue = invoices.some(
-    (invoice) =>
-      invoice.status === 'OVERDUE' ||
-      (invoice.dueDate !== null &&
-        invoice.dueDate.getTime() < now.getTime() &&
-        invoice.paidMinor < invoice.amountMinor &&
-        invoice.status !== 'NOT_INVOICED'),
-  );
+  const isOverdue = (invoice: (typeof invoices)[number]) =>
+    invoice.status === 'OVERDUE' ||
+    (invoice.dueDate !== null &&
+      invoice.dueDate.getTime() < now.getTime() &&
+      invoice.paidMinor < invoice.amountMinor &&
+      invoice.status !== 'NOT_INVOICED');
+  const overdue = invoices.some(isOverdue);
+  const overdueMinor = invoices
+    .filter(isOverdue)
+    .reduce((sum, invoice) => sum + (invoice.amountMinor - invoice.paidMinor), 0);
 
   const nextDueDate =
     invoices
@@ -86,6 +102,8 @@ export function rollUpInvoices(
     // invoicedMinor)`, so this is exactly Bryan's own formula: "contract
     // value - paid = outstanding balance".
     outstandingMinor: Math.max(0, totalMinor - paidMinor),
+    notInvoicedMinor: Math.max(0, totalMinor - invoicedMinor),
+    overdueMinor,
     currency,
     nextDueDate,
     overdue,
@@ -97,6 +115,11 @@ export interface PortfolioInvoiceRollup {
   invoicedMinor: number;
   paidMinor: number;
   outstandingMinor: number;
+  /** Sum of each project's own `notInvoicedMinor` - see `InvoiceRollup` for
+   * why this needs to be visible on its own, not just implied by
+   * `outstandingMinor`. */
+  notInvoicedMinor: number;
+  overdueMinor: number;
 }
 
 /**
@@ -128,13 +151,17 @@ export function rollUpPortfolioInvoices(
     group.push(invoice);
     byProject.set(invoice.projectId, group);
   }
-  const outstandingMinor = [...byProject.values()].reduce(
-    (sum, group) =>
-      sum + rollUpInvoices(group, group[0]!.projectContractTotalMinor, group[0]!.currency, now).outstandingMinor,
-    0,
+  const perProjectRollups = [...byProject.values()].map((group) =>
+    rollUpInvoices(group, group[0]!.projectContractTotalMinor, group[0]!.currency, now),
   );
+  const outstandingMinor = perProjectRollups.reduce((sum, rollup) => sum + rollup.outstandingMinor, 0);
+  const notInvoicedMinor = perProjectRollups.reduce((sum, rollup) => sum + rollup.notInvoicedMinor, 0);
+  // Overdue-ness is a per-invoice-row fact (unlike outstanding, it never
+  // needs the project's contract to make sense), so a flat sum is exactly
+  // right here - no grouping needed.
+  const overdueMinor = perProjectRollups.reduce((sum, rollup) => sum + rollup.overdueMinor, 0);
 
-  return { invoicedMinor, paidMinor, outstandingMinor };
+  return { invoicedMinor, paidMinor, outstandingMinor, notInvoicedMinor, overdueMinor };
 }
 
 export function toStageSegments(

@@ -82,13 +82,32 @@ export default async function ProjectInvoicesPage({
         <Stat
           label="Outstanding"
           value={formatMoney(rollup.outstandingMinor, currency)}
-          detail={rollup.nextDueDate ? `Next due ${formatDate(rollup.nextDueDate)}` : 'Nothing due'}
+          detail={
+            // Explains the figure rather than leaving it to look unexplained
+            // next to a milestone table where every row can show "-" - most
+            // of the time that gap is simply nothing left to bill yet, not a
+            // mistake in the total.
+            rollup.notInvoicedMinor > 0
+              ? `${formatMoney(rollup.notInvoicedMinor, currency)} not yet invoiced`
+              : rollup.nextDueDate
+                ? `Next due ${formatDate(rollup.nextDueDate)}`
+                : 'Nothing due'
+          }
           tone={rollup.overdue ? 'danger' : rollup.outstandingMinor > 0 ? 'warning' : 'success'}
         />
       </div>
 
+      {rollup.notInvoicedMinor > 0 && (
+        <Alert tone="info" title="Part of the contract has not been invoiced yet">
+          {formatMoney(rollup.notInvoicedMinor, currency)} of the{' '}
+          {formatMoney(project.contractTotalMinor || rollup.totalMinor, currency)} contract has no
+          milestone billing it - that's the gap between "Outstanding" above and what the table below
+          adds up to.
+        </Alert>
+      )}
+
       {rollup.overdue && (
-        <Alert tone="danger" title="An invoice is overdue">
+        <Alert tone="danger" title={`${formatMoney(rollup.overdueMinor, currency)} overdue`}>
           Overdue payment makes the project At Risk on the dashboard until it is settled.
         </Alert>
       )}

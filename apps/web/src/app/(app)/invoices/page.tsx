@@ -39,6 +39,7 @@ export default async function InvoicesPage() {
     invoicedMinor: invoiced,
     paidMinor: paid,
     outstandingMinor: outstanding,
+    notInvoicedMinor,
   } = rollUpPortfolioInvoices(
     invoices.map((invoice) => ({
       ...invoice,
@@ -83,7 +84,17 @@ export default async function InvoicesPage() {
         <Stat
           label="Outstanding"
           value={formatMoney(outstanding, currency, { compact: true })}
-          detail={outstanding > 0 ? 'Not yet received' : 'Nothing outstanding'}
+          detail={
+            // Same reasoning as the per-project Invoices tab: this can be
+            // non-zero even when every row in the table below is fully paid,
+            // because it also covers whatever slice of each project's
+            // contract has no milestone billing it at all yet.
+            notInvoicedMinor > 0
+              ? `incl. ${formatMoney(notInvoicedMinor, currency, { compact: true })} not yet invoiced`
+              : outstanding > 0
+                ? 'Not yet received'
+                : 'Nothing outstanding'
+          }
           tone={outstanding > 0 ? 'warning' : 'success'}
         />
         <Stat

@@ -1077,3 +1077,33 @@ redundant `title` attribute was dropped along with it, now that the absolute tim
 sitting in the open. Scoped to the comment thread only - the Timeline section on the portal's own
 Activity page (a different, unrelated list of system events) still shows relative time alone, since
 the request was specifically about "Conversation".
+
+---
+
+## Naming the gap: `notInvoicedMinor` and `overdueMinor`
+
+Follow-up to the Outstanding fix above, reported directly: "why does the list show no project with
+outstanding, but the total still has a value?" - the milestone table (and the portfolio-wide "All
+milestones" table) only ever has a row for money that was actually billed, so once a milestone is
+paid in full its own row shows "-" outstanding. `rollup.outstandingMinor` being non-zero anyway
+(PRJ-0008's $600) is correct - it is the contract's never-invoiced remainder - but nothing on screen
+said so, leaving a reader to conclude the total was simply wrong.
+
+**`InvoiceRollup` gained two named fields** (`features/projects/snapshot.ts`), both computed inside
+`rollUpInvoices` rather than left for every caller to re-derive:
+- `notInvoicedMinor` = `totalMinor - invoicedMinor`, floored at 0 - the exact slice of
+  `outstandingMinor` with no invoice row behind it at all.
+- `overdueMinor` = the unpaid remainder summed only over invoices the existing `overdue` boolean's
+  own condition already flags - a concrete figure next to a flag that used to only say yes/no.
+  `rollUpPortfolioInvoices` sums both across projects the same way it already summed
+  `outstandingMinor` (`notInvoicedMinor` needs the per-project grouping and reuses each project's own
+  `rollUpInvoices` result; `overdueMinor` is a flat sum either way, since overdue-ness is a fact about
+  one invoice row, never about a project's contract).
+
+**Surfaced on both invoice screens**: the per-project Invoices tab's Outstanding stat now reads
+"$600 not yet invoiced" instead of a generic "Nothing due" whenever `notInvoicedMinor > 0`, plus a new
+`Alert` above the milestone table spelling out the same gap in a full sentence; the overdue `Alert`
+now leads with the dollar figure ("$X overdue") instead of a bare title. The portfolio-wide Invoices
+page's Outstanding stat detail got the same "incl. $X not yet invoiced" treatment. Its own Overdue
+stat tile already showed a concrete dollar figure and a row count - the standard this brought the
+per-project tab's overdue `Alert` up to, not something that itself needed changing.
