@@ -39,6 +39,15 @@ export function ProjectTable({
   showMoney: boolean;
 }) {
   const columns = showMoney ? 9 : 8;
+  const totalInvoicedMinor = projects.reduce(
+    (sum, project) => sum + project.snapshot.invoice.invoicedMinor,
+    0,
+  );
+  const totalOutstandingMinor = projects.reduce(
+    (sum, project) => sum + project.snapshot.invoice.outstandingMinor,
+    0,
+  );
+  const totalsCurrency = projects[0]?.snapshot.invoice.currency ?? 'USD';
 
   return (
     <TableScroller>
@@ -194,6 +203,25 @@ export function ProjectTable({
               </TR>
             );
           })}
+
+          {showMoney && projects.length > 0 && (
+            <TR className="bg-surface-2/50">
+              <TD colSpan={8} className="text-ink font-medium">
+                Total Invoicing
+              </TD>
+              <TD>
+                <p className="tabular text-ink font-medium">
+                  {formatMoney(totalInvoicedMinor, totalsCurrency, { compact: true })} invoiced
+                </p>
+                {totalOutstandingMinor > 0 && (
+                  <p className="tabular text-muted mt-0.5 text-[11.5px]">
+                    {formatMoney(totalOutstandingMinor, totalsCurrency, { compact: true })} due
+                  </p>
+                )}
+              </TD>
+              <TD />
+            </TR>
+          )}
         </TBody>
       </Table>
     </TableScroller>

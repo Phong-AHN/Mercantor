@@ -1041,3 +1041,22 @@ computed, not just the one screen reported - `grep -rn outstanding` turned up th
 implementation immediately. A screen from a screenshot can be an ambiguous instruction, too: "the
 Invoices tab" turned out to mean the portfolio-wide page here, not the project-level one already
 fixed - worth confirming which, when in doubt, rather than assuming.
+
+---
+
+## A "Total Invoicing" row on the portfolio Projects list
+
+Requested directly: a totals row at the bottom of the Projects list's own "Invoicing" column
+(`app/(app)/projects/project-table.tsx` - the portfolio table at `/projects`, not either Invoices
+page above). That column already showed, per project, the invoice status pill and an "$X due" line
+when `outstandingMinor > 0` - no total dollar figure existed anywhere in that table before.
+
+Added a row at the end of `TBody` (gated behind the same `showMoney` flag that already hides the
+whole column from a role without `invoice:read`, and skipped when the filtered list is empty), summing
+`invoicedMinor` and `outstandingMinor` straight from `project.snapshot.invoice` across whichever
+projects are currently in `projects` - so it reflects the active filters, not the whole portfolio
+regardless of what is on screen. Labeled "Total Invoicing" with the invoiced sum as the headline figure
+and the outstanding sum underneath as a second line, mirroring the per-row cell's own two-line shape
+(status + due) rather than showing only one number and leaving the other implicit. No new component -
+a plain `TR`/`TD` pair with a distinguishing background, `TD`'s existing `colSpan` support given by its
+already-generic `React.TdHTMLAttributes` passthrough.
