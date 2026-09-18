@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rollUpInvoices } from './snapshot';
+import { rollUpInvoices, rollUpPortfolioInvoices } from './snapshot';
 
 const NOW = new Date('2026-09-17T00:00:00.000Z');
 
@@ -94,6 +94,85 @@ describe('rollUpInvoices - outstanding is against the contract, not just what ha
     const rollup = rollUpInvoices([], 200_000, 'USD', NOW);
     expect(rollup.invoicedMinor).toBe(0);
     expect(rollup.paidMinor).toBe(0);
+    expect(rollup.outstandingMinor).toBe(200_000);
+  });
+});
+
+/**
+ * The portfolio-wide Invoices page (`app/(app)/invoices/page.tsx`) had its
+ * own second copy of the same bug, one level up: it summed `amountMinor -
+ * paidMinor` flat across every invoice row in the whole portfolio, which
+ * undercounts exactly the same way `rollUpInvoices` used to for a single
+ * project - just hidden inside a portfolio-wide total instead of a
+ * per-project one. Fixed by grouping per project and reusing
+ * `rollUpInvoices` for each group, rather than a third, independent
+ * "outstanding" formula.
+ */
+describe('rollUpPortfolioInvoices - sums each project against its own contract', () => {
+  it('reproduces the PRJ-0008 case at the portfolio level: fixing it project by project fixes the total', () => {
+    const rollup = rollUpPortfolioInvoices(
+      [
+        {
+          ...invoice({ status: 'PAID', amountMinor: 140_000, paidMinor: 140_000 }),
+          projectId: 'prj-0008',
+          projectContractTotalMinor: 200_000,
+        },
+      ],
+      NOW,
+    );
+
+    expect(rollup.invoicedMinor).toBe(140_000);
+    expect(rollup.paidMinor).toBe(140_000);
+    expect(rollup.outstandingMinor).toBe(60_000);
+  });
+
+  it('never lets one project with money left on its contract get masked by another that is fully settled', () => {
+    const rollup = rollUpPortfolioInvoices(
+      [
+        // Fully paid against its own $500 contract - contributes $0.
+        {
+          ...invoice({ status: 'PAID', amountMinor: 50_000, paidMinor: 50_000 }),
+          projectId: 'project-a',
+          projectContractTotalMinor: 50_000,
+        },
+        // $1,400 of a $2,000 contract billed and paid - $600 still owed,
+        // same as PRJ-0008.
+        {
+          ...invoice({ status: 'PAID', amountMinor: 140_000, paidMinor: 140_000 }),
+          projectId: 'project-b',
+          projectContractTotalMinor: 200_000,
+        },
+      ],
+      NOW,
+    );
+
+    expect(rollup.invoicedMinor).toBe(190_000);
+    expect(rollup.paidMinor).toBe(190_000);
+    // A flat `invoicedMinor - paidMinor` over these same two rows would read
+    // $0 - exactly the bug being guarded against here.
+    expect(rollup.outstandingMinor).toBe(60_000);
+  });
+
+  it('sums correctly across several milestones on the same project, not just one row per project', () => {
+    const rollup = rollUpPortfolioInvoices(
+      [
+        {
+          ...invoice({ status: 'PAID', amountMinor: 100_000, paidMinor: 100_000 }),
+          projectId: 'project-a',
+          projectContractTotalMinor: 300_000,
+        },
+        {
+          ...invoice({ status: 'INVOICE_SENT', amountMinor: 100_000, paidMinor: 0 }),
+          projectId: 'project-a',
+          projectContractTotalMinor: 300_000,
+        },
+      ],
+      NOW,
+    );
+
+    expect(rollup.invoicedMinor).toBe(200_000);
+    expect(rollup.paidMinor).toBe(100_000);
+    // $300,000 contract - $100,000 paid, not $200,000 invoiced - $100,000 paid.
     expect(rollup.outstandingMinor).toBe(200_000);
   });
 });

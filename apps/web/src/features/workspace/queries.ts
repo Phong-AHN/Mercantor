@@ -145,7 +145,11 @@ export async function listInvoices(principal: Principal) {
       currency: true,
       invoiceDate: true,
       dueDate: true,
-      project: { select: PROJECT_BRIEF },
+      // Needed to roll each project's own invoices up against its actual
+      // contract, the same way `rollUpInvoices` already does for a single
+      // project's Invoices tab - not in `PROJECT_BRIEF` itself, since none of
+      // its other callers need a money figure.
+      project: { select: { ...PROJECT_BRIEF, contractTotalMinor: true } },
     },
     orderBy: [{ dueDate: 'asc' }],
     take: 300,

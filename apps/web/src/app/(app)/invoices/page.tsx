@@ -20,6 +20,7 @@ import {
   TR,
 } from '@relay/ui';
 import { DueDate, ProjectLink, StagePill } from '@/components/domain';
+import { rollUpPortfolioInvoices } from '@/features/projects/snapshot';
 import { listInvoices } from '@/features/workspace/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
 
@@ -34,11 +35,18 @@ export default async function InvoicesPage() {
   const now = clock.now();
   const currency = invoices[0]?.currency ?? 'USD';
 
-  const invoiced = invoices
-    .filter((invoice) => invoice.status !== 'NOT_INVOICED')
-    .reduce((sum, invoice) => sum + invoice.amountMinor, 0);
-  const paid = invoices.reduce((sum, invoice) => sum + invoice.paidMinor, 0);
-  const outstanding = invoiced - paid;
+  const {
+    invoicedMinor: invoiced,
+    paidMinor: paid,
+    outstandingMinor: outstanding,
+  } = rollUpPortfolioInvoices(
+    invoices.map((invoice) => ({
+      ...invoice,
+      projectId: invoice.project.id,
+      projectContractTotalMinor: invoice.project.contractTotalMinor,
+    })),
+    now,
+  );
 
   const isOverdue = (invoice: (typeof invoices)[number]) =>
     invoice.status !== 'NOT_INVOICED' &&

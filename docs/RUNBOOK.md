@@ -1011,3 +1011,33 @@ already established while fixing the invoice-delete rollup above. The same fix i
 automatically correct at invoice creation, editing, payment, and deletion - `snapshot.test.ts` (new)
 proves the exact `PRJ-0008` numbers directly, plus the delete case explicitly, without needing
 separate code paths for "just created" vs "just deleted."
+
+---
+
+## A second copy of the same Outstanding bug, one level up
+
+After the fix above, the reporter still saw $0 Outstanding - not stale deploy, but a genuinely
+different bug: the portfolio-wide **Invoices** page (`app/(app)/invoices/page.tsx`, the top-level
+sidebar item, not any one project's own Invoices tab) had its own, separate `outstanding = invoiced -
+paid` computed flat over every invoice row across the whole portfolio - never routed through
+`rollUpInvoices` at all, so the fix above never touched it. Same root cause, one level up: summing
+`amountMinor - paidMinor` (or here, invoiced-so-far minus paid) across every row undercounts exactly
+the way the per-project version did, just hidden inside a portfolio-wide total instead of a
+per-project one.
+
+**Fixed by grouping, not by a third formula.** `rollUpPortfolioInvoices` (new, `features/projects/
+snapshot.ts`) groups the flat invoice list by `projectId` and calls the *same* `rollUpInvoices` per
+group, summing each project's own `outstandingMinor` - each project's balance is measured against
+its own contract, the same as the per-project tab, rather than the whole portfolio being measured
+against one flattened total that has no single "contract" to mean anything. `invoicedMinor`/
+`paidMinor` didn't need the same treatment - a sum is associative, so summing every row directly or
+summing each project's own total comes out identical either way; only `outstandingMinor`'s `max(0,
+total - paid)` floor is what breaks under flattening. `listInvoices` (`features/workspace/queries.ts`)
+now also selects each invoice's `project.contractTotalMinor`, needed to roll each group up - added to
+that one query's own `project` select, not to the shared `PROJECT_BRIEF` every other caller reuses.
+
+**Lesson for next time a money figure looks wrong**: grep for every place the same *concept* is
+computed, not just the one screen reported - `grep -rn outstanding` turned up this second, independent
+implementation immediately. A screen from a screenshot can be an ambiguous instruction, too: "the
+Invoices tab" turned out to mean the portfolio-wide page here, not the project-level one already
+fixed - worth confirming which, when in doubt, rather than assuming.

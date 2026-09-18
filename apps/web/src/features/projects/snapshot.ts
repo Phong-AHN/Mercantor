@@ -93,6 +93,50 @@ export function rollUpInvoices(
   };
 }
 
+export interface PortfolioInvoiceRollup {
+  invoicedMinor: number;
+  paidMinor: number;
+  outstandingMinor: number;
+}
+
+/**
+ * The portfolio-wide Invoices page's own totals, across every project a
+ * principal can see - `invoicedMinor`/`paidMinor` are still a flat sum (sums
+ * are associative, so summing every row directly or summing each project's
+ * own total comes out the same either way), but `outstandingMinor` is not:
+ * it has to be each project's own balance against *its* contract, summed,
+ * not `invoicedMinor - paidMinor` over the flat list. That flat subtraction
+ * is exactly the bug `rollUpInvoices` above was fixed for - grouping by
+ * project and reusing that same function here is what keeps this page from
+ * quietly making the same mistake one level up.
+ */
+export function rollUpPortfolioInvoices(
+  invoices: readonly (Pick<Invoice, 'status' | 'amountMinor' | 'paidMinor' | 'currency' | 'dueDate'> & {
+    projectId: string;
+    projectContractTotalMinor: number;
+  })[],
+  now: Date = clock.now(),
+): PortfolioInvoiceRollup {
+  const invoicedMinor = invoices
+    .filter((invoice) => invoice.status !== 'NOT_INVOICED')
+    .reduce((sum, invoice) => sum + invoice.amountMinor, 0);
+  const paidMinor = invoices.reduce((sum, invoice) => sum + invoice.paidMinor, 0);
+
+  const byProject = new Map<string, typeof invoices[number][]>();
+  for (const invoice of invoices) {
+    const group = byProject.get(invoice.projectId) ?? [];
+    group.push(invoice);
+    byProject.set(invoice.projectId, group);
+  }
+  const outstandingMinor = [...byProject.values()].reduce(
+    (sum, group) =>
+      sum + rollUpInvoices(group, group[0]!.projectContractTotalMinor, group[0]!.currency, now).outstandingMinor,
+    0,
+  );
+
+  return { invoicedMinor, paidMinor, outstandingMinor };
+}
+
 export function toStageSegments(
   events: readonly Pick<StageEvent, 'stage' | 'enteredAt' | 'exitedAt' | 'ownerTeam'>[],
 ): StageSegmentInput[] {
