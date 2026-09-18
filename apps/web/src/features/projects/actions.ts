@@ -219,7 +219,9 @@ export const setNextActionAction = defineAction({
     code: z.string().min(1),
     nextAction: z.string().trim().min(1, 'Say what happens next.').max(500),
     ownerUserId: z.string().uuid().optional(),
-    ownerTeam: z.enum(TEAMS),
+    // A step can genuinely need more than one team before it moves - not
+    // every "who owns it" is a single answer.
+    ownerTeam: z.array(z.enum(TEAMS)).min(1, 'Pick at least one team.'),
     dueDate: z.string().optional(),
   }),
   async handler(input, ctx) {

@@ -78,8 +78,12 @@ export function ProjectTable({
 
           {projects.map((project) => {
             const time = project.snapshot.time;
+            // First team wins for this compact single-label cell - a next
+            // step owned by several teams still only has room for one here,
+            // the same "not every field fits everywhere" tradeoff the board
+            // card's avatar stack already makes for space.
             const owner: Team =
-              project.blocker?.ownerTeam ?? project.nextActionOwnerTeam ?? 'OTHER';
+              project.blocker?.ownerTeam ?? project.nextActionOwnerTeam[0] ?? 'OTHER';
 
             return (
               <TR key={project.id} interactive>

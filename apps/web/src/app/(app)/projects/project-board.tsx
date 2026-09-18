@@ -99,7 +99,9 @@ export function ProjectBoard({
 }
 
 function ProjectCard({ project, now }: { project: ProjectListItem; now: Date }) {
-  const owner = project.blocker?.ownerTeam ?? project.nextActionOwnerTeam ?? 'OTHER';
+  // First team wins for this compact card - same tradeoff project-table.tsx
+  // makes for its own single-label cell.
+  const owner = project.blocker?.ownerTeam ?? project.nextActionOwnerTeam[0] ?? 'OTHER';
 
   return (
     <Link

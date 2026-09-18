@@ -647,7 +647,9 @@ model Project {
 
   nextAction          String?
   nextActionOwnerId   String?   @db.Uuid
-  nextActionOwnerTeam Team?
+  /// Which team(s) own the next step - an array on purpose (D-055): a step
+  /// can genuinely need both AHN and SHOPLINE before it moves, not just one.
+  nextActionOwnerTeam Team[]    @default([])
   nextActionDueDate   DateTime? @db.Timestamptz(3)
 
   contractTotalMinor Int    @default(0)

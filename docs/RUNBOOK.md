@@ -1139,3 +1139,36 @@ already uses, even though `resolveSession` (`packages/auth/src/session.ts`) alre
 **`RemovePersonButton`** (new) is a confirm-dialog delete, the same shape this app already uses for
 every other hard-to-reverse action (an invoice, a comment) - `variant="danger"` on the confirming
 button, cancel by default.
+
+---
+
+## "Who owns it" on the next step became a checkbox group
+
+Requested directly: the "Next step" card's `<Select>` dropdown for "who owns it" only ever let one
+team be picked (AHN/SHOPLINE/Merchant/Other), and a step genuinely can need more than one - a
+redirect map both AHN and SHOPLINE need to sign off on, for instance. Confirmed with the user before
+building it (a real schema change, not just a UI swap): `Project.nextActionOwnerTeam` went from a
+single nullable `Team?` to `Team[]` (`prisma/migrations/20260918000000_next_action_owner_team_array`
+- `ALTER COLUMN ... TYPE "Team"[] USING (...)`, converting each existing single value into a
+one-element array and each `NULL` into `{}`, since a bare enum→enum[] cast isn't valid Postgres on
+its own).
+
+**`next-action-card.tsx`** swaps the single `<Select>` for a `Checkbox` per team (`@relay/ui`'s
+existing multi-select checkbox group, the same primitive `new-project-form.tsx` already uses for
+ClickUp tracked stages), state now `Team[]` instead of `Team`, Save disabled when nothing is checked
+(`setNextActionAction`'s own Zod input already refuses an empty array server-side too -
+`z.array(z.enum(TEAMS)).min(1)` - the client-side disable is just to avoid a round trip for the
+same rejection). The read view now renders one dot per owning team and joins their labels with " & ".
+
+**Everywhere else `nextActionOwnerTeam` was read got its own, deliberately different treatment**,
+because "one field became an array" doesn't mean one universal fix:
+- The "Who owns the next step?" answer tile (`packages/core/src/answers.ts`) and the CSV export join
+  every team's label with " & ", the same as the card's own read view - there's room for the full
+  list in both.
+- The compact project table row and board card (`project-table.tsx`, `project-board.tsx`) both keep
+  showing only the *first* team - there was never room for more than one label in either of those
+  already-tight cells, the same "not every field fits everywhere" tradeoff the board card's avatar
+  stack already makes.
+- The merchant portal's "Next step" stat (`(portal)/portal/page.tsx`) checks `.includes('MERCHANT')`
+  first and always wins with "With you" regardless of who else also owns the step - a merchant mainly
+  needs to know whether the ball is in their own court, not the full committee.

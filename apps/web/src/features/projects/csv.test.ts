@@ -53,7 +53,7 @@ function fixture(overrides: Partial<ProjectListItem> = {}): ProjectListItem {
     nextAction: 'Confirm DNS cutover',
     nextActionDueDate: new Date('2026-09-10T00:00:00.000Z'),
     nextActionOwner: { id: 'user-1', name: 'Jamie Lee', team: 'AHN', role: 'AHN_PROJECT_MANAGER' },
-    nextActionOwnerTeam: null,
+    nextActionOwnerTeam: [],
     contractTotalMinor: 1_000_000,
     people: {
       ahnPm: { id: 'user-1', name: 'Jamie Lee', team: 'AHN', role: 'AHN_PROJECT_MANAGER' },
@@ -109,7 +109,7 @@ describe('buildProjectsCsv', () => {
       nextAction: null,
       nextActionDueDate: null,
       nextActionOwner: null,
-      nextActionOwnerTeam: null,
+      nextActionOwnerTeam: [],
       targetLaunchDate: null,
       blocker: null,
     });

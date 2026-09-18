@@ -73,7 +73,7 @@ export function buildProjectsCsv(projects: readonly ProjectListItem[], showMoney
       project.snapshot.launchBlockerCount,
       project.nextAction ?? '',
       project.nextActionOwner?.name ??
-        (project.nextActionOwnerTeam ? TEAM_LABEL[project.nextActionOwnerTeam].label : ''),
+        project.nextActionOwnerTeam.map((team) => TEAM_LABEL[team].label).join(' & '),
       isoDate(project.nextActionDueDate),
       project.people.ahnPm?.name ?? '',
       project.people.ahnDev?.name ?? '',

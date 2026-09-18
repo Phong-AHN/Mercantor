@@ -8,7 +8,12 @@ import {
   signInAs,
   type TestUser,
 } from '../../../test/fixtures';
-import { advanceStageAction, assignPeopleAction, updateProjectAction } from './actions';
+import {
+  advanceStageAction,
+  assignPeopleAction,
+  setNextActionAction,
+  updateProjectAction,
+} from './actions';
 
 /**
  * Automated approvals (Phase 2): only the *request* step is automatic - the
@@ -322,5 +327,62 @@ describe('updateProjectAction - start date', () => {
 
     const after = await db.project.findUniqueOrThrow({ where: { id: projectId } });
     expect(after.startDate.getTime()).toBe(before.startDate.getTime());
+  });
+});
+
+/**
+ * `nextActionOwnerTeam` went from a single `Team` to `Team[]` - a next step
+ * can genuinely need more than one team before it moves, not just one.
+ */
+describe('setNextActionAction - multiple owning teams', () => {
+  let pm: TestUser;
+  let projectCode: string;
+  let projectId: string;
+
+  beforeAll(async () => {
+    pm = await createTestUser('AHN_PROJECT_MANAGER');
+    const project = await createTestProject({ as: pm, ahnProjectManagerId: pm.id });
+    projectCode = project.code;
+    projectId = project.id;
+    await signInAs(pm);
+  });
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('stores every team checked, not just one', async () => {
+    const result = await setNextActionAction({
+      code: projectCode,
+      nextAction: 'Confirm the redirect map together',
+      ownerTeam: ['AHN', 'SHOPLINE'],
+    });
+    expect(result.ok).toBe(true);
+
+    const project = await db.project.findUniqueOrThrow({ where: { id: projectId } });
+    expect(project.nextActionOwnerTeam).toEqual(['AHN', 'SHOPLINE']);
+  });
+
+  it('still works with exactly one team, same as before this changed', async () => {
+    const result = await setNextActionAction({
+      code: projectCode,
+      nextAction: 'Merchant approves the theme',
+      ownerTeam: ['MERCHANT'],
+    });
+    expect(result.ok).toBe(true);
+
+    const project = await db.project.findUniqueOrThrow({ where: { id: projectId } });
+    expect(project.nextActionOwnerTeam).toEqual(['MERCHANT']);
+  });
+
+  it('refuses an empty team list rather than storing an unowned next step', async () => {
+    const result = await setNextActionAction({
+      code: projectCode,
+      nextAction: 'Nobody owns this',
+      ownerTeam: [],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.fieldErrors?.ownerTeam).toBeTruthy();
   });
 });

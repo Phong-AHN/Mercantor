@@ -9,10 +9,10 @@ import {
   Card,
   CardBody,
   CardHeader,
+  Checkbox,
   cn,
   Field,
   Input,
-  Select,
   TEAM_BAR,
 } from '@relay/ui';
 import { useAction } from '@/components/use-action';
@@ -37,19 +37,26 @@ export function NextActionCard({
   nextAction: string | null;
   ownerName: string | null;
   ownerId: string | null;
-  ownerTeam: Team | null;
+  ownerTeam: readonly Team[];
   dueDate: string | null;
   canEdit: boolean;
   now: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(nextAction ?? '');
-  const [team, setTeam] = useState<Team>(ownerTeam ?? 'AHN');
+  const [teams, setTeams] = useState<Team[]>(ownerTeam.length > 0 ? [...ownerTeam] : ['AHN']);
   const [due, setDue] = useState(dueDate ? dueDate.slice(0, 10) : '');
   const action = useAction(setNextActionAction, { onSuccess: () => setEditing(false) });
 
+  function toggleTeam(value: Team) {
+    setTeams((current) =>
+      current.includes(value) ? current.filter((team) => team !== value) : [...current, value],
+    );
+  }
+
   const dueAt = dueDate ? new Date(dueDate) : null;
   const overdue = dueAt !== null && dueAt.getTime() < new Date(now).getTime();
+  const displayTeams: readonly Team[] = ownerTeam.length > 0 ? ownerTeam : ['OTHER'];
 
   return (
     <Card>
@@ -94,18 +101,24 @@ export function NextActionCard({
               />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Who owns it" htmlFor="ownerTeam">
-                <Select
-                  id="ownerTeam"
-                  value={team}
-                  onChange={(event) => setTeam(event.target.value as Team)}
-                >
+              <Field
+                label="Who owns it"
+                htmlFor="ownerTeam"
+                required
+                error={action.fieldErrors.ownerTeam ?? null}
+                hint="Pick one or more teams."
+              >
+                <div id="ownerTeam" className="flex flex-wrap gap-x-4 gap-y-1">
                   {TEAMS.map((value) => (
-                    <option key={value} value={value}>
-                      {TEAM_LABEL[value].label}
-                    </option>
+                    <Checkbox
+                      key={value}
+                      id={`ownerTeam-${value}`}
+                      label={TEAM_LABEL[value].label}
+                      checked={teams.includes(value)}
+                      onChange={() => toggleTeam(value)}
+                    />
                   ))}
-                </Select>
+                </div>
               </Field>
               <Field label="Due" htmlFor="due" hint="Optional, but it is what makes it chaseable.">
                 <Input
@@ -121,11 +134,12 @@ export function NextActionCard({
                 variant="primary"
                 size="sm"
                 loading={action.pending}
+                disabled={teams.length === 0}
                 onClick={() =>
                   action.run({
                     code,
                     nextAction: text,
-                    ownerTeam: team,
+                    ownerTeam: teams,
                     ownerUserId: ownerId ?? undefined,
                     dueDate: due || undefined,
                   })
@@ -143,8 +157,12 @@ export function NextActionCard({
             </p>
             <div className="flex shrink-0 items-center gap-4">
               <span className="text-ink-soft flex items-center gap-2 text-[13px]">
-                <span className={cn('size-2 rounded-full', TEAM_BAR[ownerTeam ?? 'OTHER'])} />
-                {ownerName ?? TEAM_LABEL[ownerTeam ?? 'OTHER'].label}
+                <span className="flex items-center gap-0.5">
+                  {displayTeams.map((value) => (
+                    <span key={value} className={cn('size-2 rounded-full', TEAM_BAR[value])} />
+                  ))}
+                </span>
+                {ownerName ?? displayTeams.map((value) => TEAM_LABEL[value].label).join(' & ')}
               </span>
               {dueAt && (
                 <span

@@ -1319,7 +1319,7 @@ async function main() {
         contractTotalMinor: spec.contractTotalMinor,
         nextAction: spec.nextAction.text,
         nextActionOwnerId: spec.nextAction.ownerKey ? id(spec.nextAction.ownerKey) : null,
-        nextActionOwnerTeam: spec.nextAction.ownerTeam,
+        nextActionOwnerTeam: [spec.nextAction.ownerTeam],
         nextActionDueDate:
           spec.nextAction.dueInDays === null ? null : ahead(spec.nextAction.dueInDays),
         deploymentNotes:

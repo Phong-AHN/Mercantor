@@ -48,7 +48,9 @@ export interface AnswerInput {
   health: HealthVerdict;
   nextAction: string | null;
   nextActionOwnerName: string | null;
-  nextActionOwnerTeam: Team | null;
+  /** A next step can be owned by more than one team at once - an empty
+   * array falls back to `delayOwner`, same as `null` used to. */
+  nextActionOwnerTeam: readonly Team[];
   nextActionDueDate: Date | null;
   openBlocker: {
     title: string;
@@ -104,6 +106,10 @@ export function buildAnswers(input: AnswerInput): Answer[] {
   );
 
   const delayOwner: Team = input.openBlocker?.ownerTeam ?? descriptor.ownerTeam;
+  const nextOwnerTeams: readonly Team[] =
+    input.nextActionOwnerTeam.length > 0 ? input.nextActionOwnerTeam : [delayOwner];
+  const nextOwnerLabel = nextOwnerTeams.map((team) => TEAM_LABEL[team].label).join(' & ');
+  const nextOwnerTone = TEAM_LABEL[nextOwnerTeams[0]!].tone;
   const merchantApproval = input.approvals.MERCHANT_FINAL ?? 'NOT_REQUESTED';
   const designApproval = input.approvals.DESIGN ?? 'NOT_REQUESTED';
 
@@ -181,11 +187,11 @@ export function buildAnswers(input: AnswerInput): Answer[] {
     {
       id: 'next-owner',
       question: 'Who owns the next step?',
-      value: input.nextActionOwnerName ?? TEAM_LABEL[input.nextActionOwnerTeam ?? delayOwner].label,
+      value: input.nextActionOwnerName ?? nextOwnerLabel,
       detail: input.nextActionDueDate
         ? `Due ${formatDate(input.nextActionDueDate)}`
-        : `${TEAM_LABEL[input.nextActionOwnerTeam ?? delayOwner].label} - no due date set`,
-      tone: TEAM_LABEL[input.nextActionOwnerTeam ?? delayOwner].tone,
+        : `${nextOwnerLabel} - no due date set`,
+      tone: nextOwnerTone,
       href: `${base}#next-action`,
     },
     {

@@ -123,7 +123,7 @@ export const createProjectAction = defineAction({
           shoplineSeId: input.shoplineSeId ?? null,
           nextAction: 'Send the introduction email to the merchant.',
           nextActionOwnerId: input.shoplineAmId ?? null,
-          nextActionOwnerTeam: 'SHOPLINE',
+          nextActionOwnerTeam: ['SHOPLINE'],
           clickUpTrackedStages: input.clickUpTrackedStages,
           stageEvents: {
             create: { stage: 'INTRODUCTION', enteredAt: now, changedById: ctx.principal.id },

@@ -121,7 +121,7 @@ export interface ProjectListItem {
   nextAction: string | null;
   nextActionDueDate: Date | null;
   nextActionOwner: PersonRef | null;
-  nextActionOwnerTeam: Team | null;
+  nextActionOwnerTeam: Team[];
   contractTotalMinor: number;
   people: {
     ahnPm: PersonRef | null;
@@ -215,7 +215,7 @@ function toListItem(row: ProjectListRecord, now: Date): ProjectListItem {
     nextAction: row.nextAction,
     nextActionDueDate: row.nextActionDueDate,
     nextActionOwner: toPerson(row.nextActionOwner),
-    nextActionOwnerTeam: row.nextActionOwnerTeam as Team | null,
+    nextActionOwnerTeam: row.nextActionOwnerTeam as Team[],
     contractTotalMinor: row.contractTotalMinor,
     people: {
       ahnPm: toPerson(row.ahnProjectManager),

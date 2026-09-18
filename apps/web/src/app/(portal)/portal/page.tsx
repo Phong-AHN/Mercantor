@@ -9,6 +9,7 @@ import {
   isAppError,
   LINEAR_STAGES,
   STAGES,
+  TEAM_LABEL,
 } from '@relay/core';
 import {
   Alert,
@@ -77,6 +78,16 @@ export default async function PortalOverviewPage() {
     accessOutstanding.length +
     assetsOutstanding.length +
     pendingApprovals.length;
+
+  // "With you" always wins - a merchant mainly needs to know whether the
+  // ball is in their own court, regardless of which other team also owns
+  // this step alongside them.
+  const nextStepOwnedByMerchant = project.nextActionOwnerTeam.includes('MERCHANT');
+  const nextStepOwnerLabel = nextStepOwnedByMerchant
+    ? 'With you'
+    : project.nextActionOwnerTeam.length > 0
+      ? `With ${project.nextActionOwnerTeam.map((team) => TEAM_LABEL[team].label).join(' & ')}`
+      : 'Not set';
 
   return (
     <div className="space-y-5">
@@ -181,17 +192,9 @@ export default async function PortalOverviewPage() {
         />
         <Stat
           label="Next step"
-          value={
-            project.nextActionOwnerTeam === 'MERCHANT'
-              ? 'With you'
-              : project.nextActionOwnerTeam === 'AHN'
-                ? 'With AHN'
-                : project.nextActionOwnerTeam === 'SHOPLINE'
-                  ? 'With SHOPLINE'
-                  : 'Not set'
-          }
+          value={nextStepOwnerLabel}
           detail={project.nextAction ?? 'No next step recorded'}
-          tone={project.nextActionOwnerTeam === 'MERCHANT' ? 'warning' : 'success'}
+          tone={nextStepOwnedByMerchant ? 'warning' : 'success'}
           icon={<Clock className="size-3.5" />}
         />
       </div>

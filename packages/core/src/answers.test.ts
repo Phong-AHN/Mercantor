@@ -16,7 +16,7 @@ function baseInput(): Omit<AnswerInput, 'invoice'> {
     health: { health: 'ON_TRACK', reasons: [] },
     nextAction: null,
     nextActionOwnerName: null,
-    nextActionOwnerTeam: null,
+    nextActionOwnerTeam: [],
     nextActionDueDate: null,
     openBlocker: null,
     openIssues: [],
@@ -61,5 +61,45 @@ describe('buildAnswers', () => {
     expect(withoutInvoice.length).toBeGreaterThan(0);
     expect(withoutInvoice.find((a) => a.id === 'where')).toBeDefined();
     expect(withoutInvoice.find((a) => a.id === 'shopline-ready')).toBeDefined();
+  });
+
+  /**
+   * `nextActionOwnerTeam` went from a single `Team | null` to `Team[]` - a
+   * step can genuinely need more than one team before it moves.
+   */
+  it('joins every owning team on the "Who owns the next step?" tile', () => {
+    const answers = buildAnswers({
+      ...baseInput(),
+      nextActionOwnerTeam: ['AHN', 'SHOPLINE'],
+    });
+
+    const tile = answers.find((a) => a.id === 'next-owner');
+    expect(tile!.value).toBe('AHN & SHOPLINE');
+  });
+
+  it('falls back to the delay owner when no team is set on the next step, same as before', () => {
+    const answers = buildAnswers({
+      ...baseInput(),
+      openBlocker: {
+        title: 'Waiting on DNS',
+        ownerTeam: 'SHOPLINE',
+        ownerName: null,
+        startedAt: START,
+      },
+    });
+
+    const tile = answers.find((a) => a.id === 'next-owner');
+    expect(tile!.value).toBe('SHOPLINE');
+  });
+
+  it('prefers a specific person over the team label(s), same as before', () => {
+    const answers = buildAnswers({
+      ...baseInput(),
+      nextActionOwnerName: 'Jamie Lee',
+      nextActionOwnerTeam: ['AHN', 'SHOPLINE'],
+    });
+
+    const tile = answers.find((a) => a.id === 'next-owner');
+    expect(tile!.value).toBe('Jamie Lee');
   });
 });
