@@ -14,6 +14,7 @@ import {
   platformResendInviteAction,
   platformSetUserActiveAction,
   platformUpdateUserAction,
+  removeOrgUserAction,
   updateOrgUserRoleAction,
 } from './actions';
 
@@ -205,6 +206,110 @@ describe('updateOrgUserRoleAction', () => {
     expect(updated.role).toBe('AHN_PROJECT_MANAGER');
     expect(updated.team).toBe('AHN');
     expect(updated.title).toBe('Delivery Lead');
+  });
+});
+
+/**
+ * The `/people` counterpart to `updateOrgUserRoleAction`, from the other
+ * direction - gated by its own `user:remove` permission rather than
+ * `user:manage`, so the two really are independently grantable, not just
+ * granted together by coincidence in today's matrix.
+ */
+describe('removeOrgUserAction', () => {
+  let orgAAdmin: TestUser;
+  let orgAMember: TestUser;
+  let orgBMember: TestUser;
+  let merchant: TestUser;
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('is refused for a role without user:remove', async () => {
+    const developer = await createTestUser('AHN_DEVELOPER');
+    orgAMember = await createTestUser('AHN_DEVELOPER', { organizationId: developer.organizationId });
+    await signInAs(developer);
+
+    const result = await removeOrgUserAction({ userId: orgAMember.id });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('FORBIDDEN');
+  });
+
+  it("refuses to remove the caller's own account", async () => {
+    orgAAdmin = await createTestUser('AHN_ADMIN');
+    await signInAs(orgAAdmin);
+
+    const result = await removeOrgUserAction({ userId: orgAAdmin.id });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('FORBIDDEN');
+  });
+
+  it('refuses to remove a MERCHANT account', async () => {
+    merchant = await createTestUser('MERCHANT');
+    const result = await removeOrgUserAction({ userId: merchant.id });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('VALIDATION_FAILED');
+  });
+
+  it("refuses to remove another organization's staff", async () => {
+    const otherOrg = await createTestOrganization();
+    orgBMember = await createTestUser('AHN_DEVELOPER', { organizationId: otherOrg.id });
+
+    const result = await removeOrgUserAction({ userId: orgBMember.id });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('CONFLICT');
+
+    const unchanged = await db.user.findUniqueOrThrow({ where: { id: orgBMember.id } });
+    expect(unchanged.deletedAt).toBeNull();
+  });
+
+  it('soft-deletes a member within the same organization and revokes their live sessions', async () => {
+    // orgAAdmin and orgAMember both landed in the shared default test
+    // organization (neither passed an explicit one), so this is a
+    // same-organization removal.
+    await signInAs(orgAMember);
+    const activeSession = await db.session.findFirstOrThrow({
+      where: { userId: orgAMember.id, revokedAt: null },
+    });
+
+    await signInAs(orgAAdmin);
+    const result = await removeOrgUserAction({ userId: orgAMember.id });
+    expect(result.ok).toBe(true);
+
+    const updated = await db.user.findUniqueOrThrow({ where: { id: orgAMember.id } });
+    expect(updated.deletedAt).not.toBeNull();
+    expect(updated.isActive).toBe(false);
+
+    const revoked = await db.session.findUniqueOrThrow({ where: { id: activeSession.id } });
+    expect(revoked.revokedAt).not.toBeNull();
+  });
+
+  it('refuses to remove an account that is already removed', async () => {
+    const result = await removeOrgUserAction({ userId: orgAMember.id });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.code).toBe('CONFLICT');
+  });
+
+  it('re-inviting the same email reactivates the removed account, same as before removal existed', async () => {
+    const removed = await db.user.findUniqueOrThrow({ where: { id: orgAMember.id } });
+
+    const result = await inviteUserAction({
+      email: removed.email,
+      name: 'Reinstated Member',
+      role: 'AHN_PROJECT_MANAGER',
+    });
+    expect(result.ok).toBe(true);
+
+    const reactivated = await db.user.findUniqueOrThrow({ where: { id: orgAMember.id } });
+    expect(reactivated.deletedAt).toBeNull();
+    expect(reactivated.isActive).toBe(true);
+    expect(reactivated.role).toBe('AHN_PROJECT_MANAGER');
+    expect(reactivated.name).toBe('Reinstated Member');
   });
 });
 

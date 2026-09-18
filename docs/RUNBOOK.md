@@ -1107,3 +1107,35 @@ now leads with the dollar figure ("$X overdue") instead of a bare title. The por
 page's Outstanding stat detail got the same "incl. $X not yet invoiced" treatment. Its own Overdue
 stat tile already showed a concrete dollar figure and a row count - the standard this brought the
 per-project tab's overdue `Alert` up to, not something that itself needed changing.
+
+---
+
+## Removing a person from the People page
+
+Requested directly, alongside a new permission: "add" (`inviteUserAction`) and "edit"
+(`updateOrgUserRoleAction`) already existed on `/people` for an `AHN_ADMIN`/`SHOPLINE_ADMIN` managing
+their own organization's staff - the platform level already had a deactivate action
+(`platformSetUserActiveAction`), but only behind `platform:manage` on `/admin/platform`, out of reach
+for an org's own admin. `removeOrgUserAction` (new) is the `/people` counterpart, mirroring
+`updateOrgUserRoleAction`'s own org-scoping, self-refusal and `MERCHANT`-refusal exactly.
+
+**A new permission, `user:remove`, deliberately separate from `user:manage`** - explicitly requested
+("thêm luôn hành động remove people vào phân quyền account"), rather than folding removal into the
+existing invite/edit grant. Both are given to `AHN_ADMIN`/`SHOPLINE_ADMIN` today, so in practice the
+two travel together, but keeping them as separate `Permission` values means a `RolePermissionOverride`
+row (`PLATFORM_ADMIN`'s own matrix-editing screen) can grant or revoke one without touching the other -
+"can edit roles" and "can remove people" are different levels of trust even when the same roles happen
+to hold both by default. The People page's own Actions column reflects this: `EditRoleButton` and the
+new `RemovePersonButton` are each independently gated on their own `can(principal, ...)` check, not a
+single combined flag, so the column still renders correctly for a role with only one of the two.
+
+**Soft-delete, not a real delete** - `removeOrgUserAction` sets the same `deletedAt` field
+`createInvitedUser` already knew how to reactivate (re-inviting the same email brings the account
+back, `isActive: true` and `deletedAt: null` again, no separate "restore" button needed). Also calls
+`revokeAllSessionsForUser` immediately, the same belt-and-suspenders `platformSetUserActiveAction`
+already uses, even though `resolveSession` (`packages/auth/src/session.ts`) already refuses a
+`deletedAt`-set account on its own very next lookup.
+
+**`RemovePersonButton`** (new) is a confirm-dialog delete, the same shape this app already uses for
+every other hard-to-reverse action (an invoice, a comment) - `variant="danger"` on the confirming
+button, cancel by default.

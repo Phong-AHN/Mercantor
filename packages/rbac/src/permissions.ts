@@ -65,6 +65,10 @@ export const PERMISSIONS = [
   'integration:manage',
   'user:read',
   'user:manage',
+  /** Soft-deletes a staff account (`removeOrgUserAction`) - separate from
+   * `user:manage` (invite, edit role/title) so a role can hold one without
+   * the other, e.g. via a `RolePermissionOverride`. */
+  'user:remove',
   'audit:read',
   'settings:manage',
 

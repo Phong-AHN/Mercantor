@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import {
+  clock,
   ConflictError,
   ForbiddenError,
   renderAccountInviteEmail,
@@ -285,6 +286,69 @@ export const updateOrgUserRoleAction = defineAction({
 
     revalidatePath('/people');
     return actionOk(undefined, `Updated ${target.name}.`);
+  },
+});
+
+/**
+ * The `/people` counterpart to `inviteUserAction`'s "create" from the other
+ * direction: soft-deletes a member of the viewer's own organization, the
+ * same `deletedAt` field `createInvitedUser` already knows how to reactivate
+ * - re-inviting the same email brings them back, so this needs no separate
+ * "restore" action. Also revokes every live session immediately
+ * (`revokeAllSessionsForUser`), the same belt-and-suspenders
+ * `platformSetUserActiveAction` uses, even though `resolveSession` already
+ * refuses a `deletedAt`-set account on its own next lookup. Same org-scoping,
+ * self-refusal and `MERCHANT`-refusal as `updateOrgUserRoleAction` - a
+ * merchant's access is a project-scoped `ProjectMember` row, not a staff
+ * account this page manages.
+ */
+export const removeOrgUserAction = defineAction({
+  name: 'people.remove',
+  permission: 'user:remove',
+  input: z.object({ userId: z.string().uuid() }),
+  async handler(input, ctx) {
+    if (!ctx.principal.organizationId) {
+      throw new ForbiddenError('Platform admins manage organizations, not their staff.');
+    }
+    if (input.userId === ctx.principal.id) {
+      throw new ForbiddenError('You cannot remove your own account here.');
+    }
+
+    const target = await db.user.findUnique({
+      where: { id: input.userId },
+      select: { id: true, name: true, role: true, organizationId: true, deletedAt: true },
+    });
+    if (!target || target.deletedAt !== null) {
+      throw new ConflictError('That account no longer exists.');
+    }
+    if (target.role === 'MERCHANT') {
+      throw new ValidationError('Merchant accounts are managed from their project, not here.');
+    }
+    if (target.organizationId !== ctx.principal.organizationId) {
+      throw new ConflictError('That account is not part of your organization.');
+    }
+
+    await transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: input.userId },
+        data: { deletedAt: clock.now(), isActive: false },
+      });
+
+      await audit(tx, {
+        principal: ctx.principal,
+        action: 'people.remove',
+        entityType: 'User',
+        entityId: target.id,
+        before: { deletedAt: null },
+        after: { deletedAt: clock.now() },
+        ip: ctx.ip,
+      });
+    });
+
+    await revokeAllSessionsForUser(input.userId);
+
+    revalidatePath('/people');
+    return actionOk(undefined, `Removed ${target.name}.`);
   },
 });
 

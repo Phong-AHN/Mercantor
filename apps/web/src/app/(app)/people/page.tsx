@@ -21,6 +21,7 @@ import { listPeople } from '@/features/workspace/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
 import { EditRoleButton } from './edit-role-button';
 import { InvitePersonButton } from './invite-person-button';
+import { RemovePersonButton } from './remove-person-button';
 
 export const metadata: Metadata = { title: 'People' };
 export const dynamic = 'force-dynamic';
@@ -50,6 +51,8 @@ export default async function PeoplePage() {
   const people = await listPeople(principal);
   const now = clock.now();
   const canManage = can(principal, 'user:manage');
+  const canRemove = can(principal, 'user:remove');
+  const canAct = canManage || canRemove;
 
   return (
     <div className="space-y-5">
@@ -81,7 +84,7 @@ export default async function PeoplePage() {
                     <TH>Last seen</TH>
                     <TH>Status</TH>
                     <TH className="min-w-[16rem]">What they can do</TH>
-                    {canManage && <TH>Actions</TH>}
+                    {canAct && <TH>Actions</TH>}
                   </tr>
                 </THead>
                 <TBody>
@@ -152,15 +155,22 @@ export default async function PeoplePage() {
                             )}
                           </div>
                         </TD>
-                        {canManage && (
+                        {canAct && (
                           <TD>
                             {person.team !== 'MERCHANT' && person.id !== principal.id && (
-                              <EditRoleButton
-                                userId={person.id}
-                                name={person.name}
-                                role={person.role}
-                                title={person.title}
-                              />
+                              <div className="flex items-center gap-1">
+                                {canManage && (
+                                  <EditRoleButton
+                                    userId={person.id}
+                                    name={person.name}
+                                    role={person.role}
+                                    title={person.title}
+                                  />
+                                )}
+                                {canRemove && (
+                                  <RemovePersonButton userId={person.id} name={person.name} />
+                                )}
+                              </div>
                             )}
                           </TD>
                         )}
