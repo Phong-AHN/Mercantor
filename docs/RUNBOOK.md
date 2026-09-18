@@ -1172,3 +1172,16 @@ because "one field became an array" doesn't mean one universal fix:
 - The merchant portal's "Next step" stat (`(portal)/portal/page.tsx`) checks `.includes('MERCHANT')`
   first and always wins with "With you" regardless of who else also owns the step - a merchant mainly
   needs to know whether the ball is in their own court, not the full committee.
+
+---
+
+## Browser tab showed the project code, not its name
+
+`/projects/[code]/layout.tsx`'s `generateMetadata` returned `{ title: code }` - literally "PRJ-0008"
+in the tab, useless with several project tabs open side by side since every one of them differs only
+in a number nobody has memorized. Now fetches the project and titles the tab with
+`project.merchant.name` instead, falling back to the code only if the project can't be resolved
+(deleted, wrong tenant, a stale link). `getProject` is wrapped in React's `cache()`, so this and the
+layout's own call to it dedupe into one query per request, not two - no extra cost for the fix. Covers
+every tab under a project (Invoices, Settings, Blockers, ...) at once, since none of them override the
+layout's `generateMetadata` with one of their own.

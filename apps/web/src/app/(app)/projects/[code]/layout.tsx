@@ -198,7 +198,19 @@ function AnswerStrip({ answers, code }: { answers: Answer[]; code: string }) {
   );
 }
 
+/**
+ * The merchant's name, not the project code - "PRJ-0008" in a browser tab
+ * tells nobody which project they have open among several. `getProject` is
+ * wrapped in React's own `cache()`, so this and the layout's own call below
+ * dedupe into one query per request, not two.
+ */
 export async function generateMetadata({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  return { title: code };
+  const principal = await requirePrincipalOrRedirect(`/projects/${code}`);
+  try {
+    const project = await getProject(principal, code);
+    return { title: project.merchant.name };
+  } catch {
+    return { title: code };
+  }
 }
