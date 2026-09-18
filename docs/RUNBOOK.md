@@ -1060,3 +1060,20 @@ and the outstanding sum underneath as a second line, mirroring the per-row cell'
 (status + due) rather than showing only one number and leaving the other implicit. No new component -
 a plain `TR`/`TD` pair with a distinguishing background, `TD`'s existing `colSpan` support given by its
 already-generic `React.TdHTMLAttributes` passthrough.
+
+---
+
+## Comment timestamps now show the absolute UTC time, not just "X ago"
+
+Requested directly: each comment in a project's "Conversation" (`comment-thread.tsx` - shared by the
+internal Activity tab and the merchant portal's own Activity page, so one change covers both) showed
+only a relative time ("2h ago"); the absolute UTC timestamp existed already, but only as a hover
+`title` tooltip nobody would think to check, invisible on mobile and to anyone who doesn't hover.
+
+Now both are visible inline: `formatDateTime(comment.createdAt)} ({formatRelative(comment.createdAt,
+now)})`, e.g. "18 Sep 2026, 14:32 UTC (2h ago)" - `formatDateTime` (`packages/core/src/format.ts`)
+already rendered in UTC with the zone suffixed, exactly what was asked for, just not surfaced. The
+redundant `title` attribute was dropped along with it, now that the absolute time it used to hide is
+sitting in the open. Scoped to the comment thread only - the Timeline section on the portal's own
+Activity page (a different, unrelated list of system events) still shows relative time alone, since
+the request was specifically about "Conversation".

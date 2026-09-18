@@ -184,11 +184,8 @@ function CommentRow({
           {comment.status !== 'NONE' && (
             <StatusPill descriptor={COMMENT_STATUS_LABEL[comment.status]} size="sm" />
           )}
-          <span
-            className="text-faint ml-auto text-[11.5px]"
-            title={formatDateTime(comment.createdAt)}
-          >
-            {formatRelative(comment.createdAt, now)}
+          <span className="text-faint ml-auto text-[11.5px]">
+            {formatDateTime(comment.createdAt)} ({formatRelative(comment.createdAt, now)})
             {comment.source !== 'PORTAL' && ` ${SOURCE_LABEL[comment.source]}`}
             {comment.updatedAt.getTime() !== comment.createdAt.getTime() && (
               <span title={`Edited ${formatDateTime(comment.updatedAt)}`}> (edited)</span>
