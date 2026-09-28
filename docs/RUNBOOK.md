@@ -1259,3 +1259,42 @@ the existing `@relay/ui` design system like the rest of the app.
 grammar findings with confidence, scheduled and post-deploy scans, browser-grade performance metrics
 and checkout measurement, a public share link, and DesignDecision screens (the model exists, unused).
 These need a Chromium-capable worker, which in turn needs the Railway deploy fixed.
+
+---
+
+## Automated before/after captures
+
+Before & after (`/projects/[code]/qa/comparisons`) now has an "Automatic captures" card: per page,
+Desktop/Mobile buttons for BEFORE and AFTER, and "Capture all before/after" that runs every included
+page x both viewports, one server-action call each (a capture is ~10 s; a batch in one request would
+outlive the function). Manual upload still exists for anything the browser cannot reach.
+
+**Where the browser runs.** Inside the web app's own function, not the worker (still not deploying)
+and not a third-party screenshot API: `puppeteer-core` + `@sparticuz/chromium` on Vercel/Linux, the
+installed Chrome locally (or `CHROME_EXECUTABLE_PATH`). Both are in `serverExternalPackages`, and
+Chromium's compressed binary is force-included only for `/projects/[code]/qa/comparisons` via
+`outputFileTracingIncludes` (it is read by path at runtime, which tracing cannot see; verified in the
+route's `.nft.json`). That page exports `maxDuration = 60` so its actions get a minute.
+
+**What a capture is.** `captureSourceUrl`: BEFORE = the page's path on the current storefront, AFTER =
+the same path on the destination URL, or the same URL when there is none (a Glow-Up on the same
+domain - take the before early, the after after launch). Desktop 1440 px at 1x, mobile 390 px at 2x,
+full length up to 10,000/9,000 CSS px (longer pages are cut and say so), JPEG q72. Before shooting it
+freezes animations, presses Escape, clicks common consent/newsletter/region close buttons, hides any
+remaining fixed element covering 40%+ of the screen (a modal or its backdrop - a sticky header is
+fixed too but short), unlocks body scroll, and scrolls once to trigger lazy images. A Shopify-style
+`/password` page fails with a clear message rather than capturing the lock screen.
+
+The capture is stored with `putObject` (new; user uploads still only go through presigned POSTs) as an
+ordinary PageCapture whose `url` is the page's identity, so before and after group together even from
+two hosts. Once a page+viewport has both, its comparison is created, or moved to the newest pair; a
+comparison the client could already see goes back to internal when its images change.
+
+**SSRF.** The page URL gets the full `assertFetchable` check (allowlisted hosts, DNS, public IPs).
+Every request the page makes inside the browser is intercepted: non-web schemes, `localhost`,
+`.local`/`.internal` names and non-public IP literals are aborted, and a main-frame navigation off the
+storefront hosts is refused.
+
+**Also fixed:** `/api/captures/[id]` used to redirect to the bucket, which the app's own CSP
+(`img-src 'self'`) blocks inside an `<img>` - so no before/after image would have rendered. It now
+streams the object from this origin (`readObject`).

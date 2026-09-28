@@ -3,8 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import {
+  CAPTURE_PHASE_LABEL,
   CAPTURE_PHASES,
+  CAPTURE_VIEWPORT_LABEL,
   CAPTURE_VIEWPORTS,
+  PAGE_TYPE_LABEL,
   clock,
   ConflictError,
   ForbiddenError,
@@ -12,12 +15,13 @@ import {
   NotFoundError,
   ValidationError,
 } from '@relay/core';
-import { transaction } from '@relay/db';
+import { db, transaction } from '@relay/db';
 import {
   deleteObject,
   deriveAttachmentKey,
   headObject,
   presignUpload,
+  putObject,
   readObjectHead,
   sniffIsConsistentWith,
   sniffMimeType,
@@ -26,7 +30,10 @@ import { normaliseUrl } from '@relay/storefront';
 import { actionOk, defineAction } from '@/server/action';
 import { audit } from '@/server/record';
 import { resolveProject, revalidateProject } from '@/features/projects/mutations';
+import { captureSourceUrl } from './capture-plan';
 import { CAPTURE_MAX_BYTES, CAPTURE_TYPES } from './capture-types';
+import { allowedHostsFor, FetchRefused } from './fetch-page';
+import { CaptureFailed, captureScreenshot } from './screenshot';
 
 function revalidateCaptures(code: string): void {
   revalidateProject(code);
@@ -187,6 +194,156 @@ export const deleteCaptureAction = defineAction({
     await deleteObject(key).catch(() => undefined);
     revalidateCaptures(input.code);
     return actionOk(undefined, 'Capture deleted.');
+  },
+});
+
+// ─── Automated capture ──────────────────────────────────────────────────────
+
+/**
+ * Screenshot one page, one viewport, one phase with a headless browser and
+ * file it exactly like an upload: a new PageCapture row, never an overwrite.
+ *
+ * When the page then has both a before and an after for that viewport, its
+ * comparison is created, or moved to the newest pair. A comparison the
+ * client can already see is taken back to internal when its images change,
+ * so nobody publishes a capture they have not looked at.
+ */
+export const autoCaptureAction = defineAction({
+  name: 'qa.capture.auto',
+  permission: 'qa:manage',
+  input: z.object({
+    code: z.string().min(1),
+    pageId: z.string().uuid(),
+    phase: z.enum(CAPTURE_PHASES),
+    viewport: z.enum(CAPTURE_VIEWPORTS),
+  }),
+  async handler(input, ctx) {
+    const project = await resolveProject(ctx.principal, input.code);
+    const [profile, page] = await Promise.all([
+      db.storefrontProfile.findUnique({
+        where: { projectId: project.id },
+        select: { storefrontUrl: true, destinationUrl: true },
+      }),
+      db.storefrontPage.findFirst({
+        where: { id: input.pageId, projectId: project.id },
+        select: { id: true, url: true, pageType: true },
+      }),
+    ]);
+    if (!profile) throw new ConflictError('Set the storefront URL for this project first.');
+    if (!page) throw new NotFoundError('That page is not on this project.');
+
+    const sourceUrl = captureSourceUrl(page.url, input.phase, profile);
+    let shot;
+    try {
+      shot = await captureScreenshot(sourceUrl, {
+        allowedHosts: allowedHostsFor([profile.storefrontUrl, profile.destinationUrl]),
+        viewport: input.viewport,
+      });
+    } catch (error) {
+      if (error instanceof CaptureFailed || error instanceof FetchRefused) {
+        throw new ConflictError(error.message);
+      }
+      throw error;
+    }
+
+    const { key } = deriveAttachmentKey({ projectId: project.id, extension: 'jpg' });
+    await putObject({ key, body: shot.bytes, contentType: 'image/jpeg' });
+
+    const result = await transaction(async (tx) => {
+      const capture = await tx.pageCapture.create({
+        data: {
+          projectId: project.id,
+          pageId: page.id,
+          // The page's identity, so before and after group together even
+          // when they come from two different hosts.
+          url: page.url,
+          phase: input.phase,
+          viewport: input.viewport,
+          width: shot.width,
+          height: shot.height,
+          storageKey: key,
+          fileSize: shot.bytes.byteLength,
+          projectStage: project.stage,
+          changeNote: `Automated from ${shot.finalUrl}${shot.truncated ? ' (cut off at the maximum height)' : ''}`,
+          requestedById: ctx.principal.id,
+        },
+        select: { id: true },
+      });
+
+      const latest = async (phase: 'BEFORE' | 'AFTER') =>
+        tx.pageCapture.findFirst({
+          where: { projectId: project.id, url: page.url, viewport: input.viewport, phase },
+          orderBy: { capturedAt: 'desc' },
+          select: { id: true },
+        });
+      const [before, after] = await Promise.all([latest('BEFORE'), latest('AFTER')]);
+
+      let paired: 'created' | 'updated' | 'unshared' | null = null;
+      if (before && after) {
+        const existing = await tx.comparisonPair.findFirst({
+          where: {
+            projectId: project.id,
+            beforeCapture: { url: page.url, viewport: input.viewport },
+          },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, beforeCaptureId: true, afterCaptureId: true, clientVisibleAt: true },
+        });
+        if (!existing) {
+          const path = new URL(page.url).pathname;
+          await tx.comparisonPair.create({
+            data: {
+              projectId: project.id,
+              beforeCaptureId: before.id,
+              afterCaptureId: after.id,
+              label: path === '/' ? 'Homepage' : `${PAGE_TYPE_LABEL[page.pageType].label} ${path}`,
+              afterLabel: 'AFTER',
+            },
+          });
+          paired = 'created';
+        } else if (existing.beforeCaptureId !== before.id || existing.afterCaptureId !== after.id) {
+          const clash = await tx.comparisonPair.findUnique({
+            where: {
+              beforeCaptureId_afterCaptureId: { beforeCaptureId: before.id, afterCaptureId: after.id },
+            },
+            select: { id: true },
+          });
+          if (!clash) {
+            await tx.comparisonPair.update({
+              where: { id: existing.id },
+              data: {
+                beforeCaptureId: before.id,
+                afterCaptureId: after.id,
+                clientVisibleAt: null,
+              },
+            });
+            paired = existing.clientVisibleAt ? 'unshared' : 'updated';
+          }
+        }
+      }
+
+      await audit(tx, {
+        principal: ctx.principal,
+        projectId: project.id,
+        action: 'qa.capture.auto',
+        entityType: 'PageCapture',
+        entityId: capture.id,
+        after: { url: sourceUrl, phase: input.phase, viewport: input.viewport, paired },
+        ip: ctx.ip,
+      });
+      return { id: capture.id, paired };
+    });
+
+    revalidateCaptures(input.code);
+    const label = `${CAPTURE_PHASE_LABEL[input.phase].label} ${CAPTURE_VIEWPORT_LABEL[input.viewport].label.toLowerCase()} captured`;
+    const message =
+      result.paired === 'created'
+        ? `${label}; comparison created.`
+        : result.paired === 'unshared'
+          ? `${label}. The comparison now uses it and is hidden from the client until it is shared again.`
+          : result.paired === 'updated'
+            ? `${label}; comparison updated.`
+            : `${label}.`;
+    return actionOk({ id: result.id }, message);
   },
 });
 

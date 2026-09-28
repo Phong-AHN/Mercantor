@@ -1,4 +1,9 @@
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { s3Bucket, s3Client } from './client';
@@ -101,5 +106,46 @@ function isNotFound(error: unknown): boolean {
     typeof error === 'object' &&
     error !== null &&
     ('name' in error ? (error as { name?: string }).name === 'NotFound' : false)
+  );
+}
+
+/**
+ * Server-side write, for files this server produced itself (automated
+ * screenshots). Everything a person uploads still goes through
+ * `presignUpload`, so user bytes never pass through the app.
+ */
+/**
+ * The object's bytes as a web stream, for routes that must serve a file from
+ * this origin - an `<img>` under the app's `img-src 'self'` CSP cannot follow
+ * a redirect to the bucket.
+ */
+export async function readObject(
+  key: string,
+): Promise<{ body: ReadableStream; contentType: string | null; sizeBytes: number | null } | null> {
+  try {
+    const result = await s3Client().send(new GetObjectCommand({ Bucket: s3Bucket(), Key: key }));
+    if (!result.Body) return null;
+    return {
+      body: result.Body.transformToWebStream(),
+      contentType: result.ContentType ?? null,
+      sizeBytes: result.ContentLength ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function putObject(input: {
+  key: string;
+  body: Uint8Array;
+  contentType: string;
+}): Promise<void> {
+  await s3Client().send(
+    new PutObjectCommand({
+      Bucket: s3Bucket(),
+      Key: input.key,
+      Body: input.body,
+      ContentType: input.contentType,
+    }),
   );
 }

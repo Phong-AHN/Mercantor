@@ -51,6 +51,12 @@ const config: NextConfig = {
   // harmless - dropped now that this is being tightened anyway.
   outputFileTracingIncludes: {
     '/*': ['../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**/*'],
+    // The compressed Chromium that automated before/after captures launch.
+    // It is read from disk by path at runtime, which tracing cannot see, and
+    // only the one route whose actions take screenshots needs its ~60 MB.
+    '/projects/[code]/qa/comparisons': [
+      '../../node_modules/.pnpm/@sparticuz+chromium@*/node_modules/@sparticuz/chromium/bin/**/*',
+    ],
   },
   // Workspace packages ship TypeScript source, not a build artefact.
   transpilePackages: [
@@ -68,7 +74,15 @@ const config: NextConfig = {
   // These are Node libraries with dynamic requires and native bits. Bundling
   // them breaks pino's transport resolution and BullMQ's optional drivers, so
   // the server runtime loads them directly instead.
-  serverExternalPackages: ['bullmq', 'ioredis', 'pino', 'pino-pretty', '@prisma/client'],
+  serverExternalPackages: [
+    'bullmq',
+    'ioredis',
+    'pino',
+    'pino-pretty',
+    '@prisma/client',
+    '@sparticuz/chromium',
+    'puppeteer-core',
+  ],
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },

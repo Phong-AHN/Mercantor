@@ -1,12 +1,31 @@
 import {
   CAPTURE_PHASE_LABEL,
   CAPTURE_VIEWPORT_LABEL,
+  clock,
   formatDate,
+  formatRelative,
+  PAGE_TYPE_LABEL,
   stageLabel,
 } from '@relay/core';
 import { can } from '@relay/rbac';
-import { BeforeAfter, Badge, Card, CardBody, CardHeader, Empty, StatusPill } from '@relay/ui';
 import {
+  BeforeAfter,
+  Badge,
+  Card,
+  CardBody,
+  CardHeader,
+  Empty,
+  StatusPill,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '@relay/ui';
+import {
+  AutoCaptureAllButton,
+  AutoCaptureButton,
   CompareButton,
   ComparisonControls,
   DeleteCaptureButton,
@@ -16,9 +35,16 @@ import { captureSrc, getSiteQa, groupCaptures } from '@/features/qa/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
 
 export const dynamic = 'force-dynamic';
+// Server actions run in this page's function: an automated full-page
+// screenshot needs a browser start plus a page load, well past the default.
+export const maxDuration = 60;
 
 function pathOf(url: string): string {
   return url.replace(/^https?:\/\/[^/]+/, '') || '/';
+}
+
+function host(url: string): string {
+  return new URL(url).host;
 }
 
 export default async function ComparisonsPage({ params }: { params: Promise<{ code: string }> }) {
@@ -28,6 +54,14 @@ export default async function ComparisonsPage({ params }: { params: Promise<{ co
   const canManage = can(principal, 'qa:manage');
   const canApprove = can(principal, 'finding:approve');
   const groups = groupCaptures(qa.captures);
+  const now = clock.now();
+  const includedPages = qa.pages.filter((page) => page.includeInScans);
+  // Captures arrive newest first, so the first one seen per key is the latest.
+  const latestCapture = new Map<string, (typeof qa.captures)[number]>();
+  for (const capture of qa.captures) {
+    const key = `${capture.url}|${capture.viewport}|${capture.phase}`;
+    if (!latestCapture.has(key)) latestCapture.set(key, capture);
+  }
   const pageUrls = [
     ...new Set([
       ...qa.pages.map((page) => page.url),
@@ -94,6 +128,73 @@ export default async function ComparisonsPage({ params }: { params: Promise<{ co
           </CardBody>
         )}
       </Card>
+
+      {canManage && qa.profile && (
+        <Card>
+          <CardHeader
+            title="Automatic captures"
+            description={
+              qa.profile.destinationUrl
+                ? `A browser screenshots each page, full length. Before comes from ${host(qa.profile.storefrontUrl)}, after from the same path on ${host(qa.profile.destinationUrl)}.`
+                : `A browser screenshots each page, full length, from ${host(qa.profile.storefrontUrl)}. Take the before now; take the after from the same URL once the new site is live, or set the new storefront URL on the overview.`
+            }
+            actions={
+              <>
+                <AutoCaptureAllButton code={code} pageIds={includedPages.map((page) => page.id)} phase="BEFORE" />
+                <AutoCaptureAllButton code={code} pageIds={includedPages.map((page) => page.id)} phase="AFTER" />
+              </>
+            }
+          />
+          {includedPages.length === 0 ? (
+            <Empty
+              title="No pages to capture"
+              description="Add pages on the overview first: homepage, a collection, a product, the cart."
+              className="py-10"
+            />
+          ) : (
+            <div className="scrollbar-slim overflow-x-auto">
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Page</TH>
+                    <TH>Before</TH>
+                    <TH>After</TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {includedPages.map((page) => (
+                    <TR key={page.id}>
+                      <TD className="max-w-[18rem]">
+                        <span className="text-ink block truncate font-mono text-[12.5px]" title={page.url}>
+                          {pathOf(page.url)}
+                        </span>
+                        <span className="text-muted text-[12px]">{PAGE_TYPE_LABEL[page.pageType].label}</span>
+                      </TD>
+                      {(['BEFORE', 'AFTER'] as const).map((phase) => (
+                        <TD key={phase}>
+                          <div className="flex flex-wrap gap-3">
+                            {(['DESKTOP', 'MOBILE'] as const).map((viewport) => {
+                              const last = latestCapture.get(`${page.url}|${viewport}|${phase}`);
+                              return (
+                                <div key={viewport} className="space-y-0.5">
+                                  <AutoCaptureButton code={code} pageId={page.id} phase={phase} viewport={viewport} />
+                                  <p className="text-faint text-[11px]">
+                                    {last ? formatRelative(last.capturedAt, now) : 'none yet'}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </TD>
+                      ))}
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+          )}
+        </Card>
+      )}
 
       {!qa.merchant && (
         <Card>

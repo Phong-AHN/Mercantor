@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Eye, EyeOff, ImageUp, Layers, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Camera, Eye, EyeOff, ImageUp, Layers, Trash2 } from 'lucide-react';
 import {
   CAPTURE_PHASE_LABEL,
   CAPTURE_VIEWPORT_LABEL,
@@ -20,9 +21,11 @@ import {
   Input,
   RadioCards,
   Select,
+  useToast,
 } from '@relay/ui';
 import { useAction } from '@/components/use-action';
 import {
+  autoCaptureAction,
   confirmCaptureUploadAction,
   deleteCaptureAction,
   deleteComparisonAction,
@@ -399,6 +402,83 @@ export function ComparisonControls({
         </Button>
       )}
     </div>
+  );
+}
+
+const AUTO_VIEWPORTS: CaptureViewport[] = ['DESKTOP', 'MOBILE'];
+
+export function AutoCaptureButton({
+  code,
+  pageId,
+  phase,
+  viewport,
+}: {
+  code: string;
+  pageId: string;
+  phase: CapturePhase;
+  viewport: CaptureViewport;
+}) {
+  const action = useAction(autoCaptureAction);
+  return (
+    <Button
+      variant="subtle"
+      size="xs"
+      loading={action.pending}
+      onClick={() => action.run({ code, pageId, phase, viewport })}
+      title={`Capture the ${viewport.toLowerCase()} ${phase.toLowerCase()} now`}
+    >
+      <Camera className="size-3" />
+      {CAPTURE_VIEWPORT_LABEL[viewport].label}
+    </Button>
+  );
+}
+
+/**
+ * Every page × desktop and mobile, one request each: a full-page screenshot
+ * takes 10-30 seconds, so a batch in one request would outlive the function.
+ * Failures are counted and the run carries on.
+ */
+export function AutoCaptureAllButton({
+  code,
+  pageIds,
+  phase,
+}: {
+  code: string;
+  pageIds: string[];
+  phase: CapturePhase;
+}) {
+  const toast = useToast();
+  const router = useRouter();
+  const action = useAction(autoCaptureAction, { toastOnSuccess: false, refresh: false });
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  async function runAll() {
+    const jobs = pageIds.flatMap((pageId) => AUTO_VIEWPORTS.map((viewport) => ({ pageId, viewport })));
+    let failed = 0;
+    for (let index = 0; index < jobs.length; index += 1) {
+      setProgress({ done: index, total: jobs.length });
+      const result = await action.run({ code, phase, ...jobs[index]! });
+      if (!result.ok) failed += 1;
+    }
+    setProgress(null);
+    router.refresh();
+    const captured = jobs.length - failed;
+    if (failed === 0) toast.success(`${captured} ${phase.toLowerCase()} capture${captured === 1 ? '' : 's'} taken.`);
+    else toast.error(`${captured} captured, ${failed} failed`, 'Each failure says why; retry those pages one by one.');
+  }
+
+  return (
+    <Button
+      variant={phase === 'BEFORE' ? 'secondary' : 'primary'}
+      size="sm"
+      disabled={pageIds.length === 0 || progress !== null}
+      onClick={runAll}
+    >
+      <Camera className={progress ? 'size-3.5 animate-pulse' : 'size-3.5'} />
+      {progress
+        ? `Capturing ${progress.done + 1} of ${progress.total}`
+        : `Capture all ${phase === 'BEFORE' ? 'before' : 'after'}`}
+    </Button>
   );
 }
 

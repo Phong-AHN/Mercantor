@@ -95,7 +95,32 @@ function isPublicV4(address: string): boolean {
   return true;
 }
 
-async function assertFetchable(url: URL, allowedHosts: readonly string[] | null): Promise<void> {
+/**
+ * For requests a page makes inside the headless browser (scripts, images,
+ * XHR). Resolving DNS for each of hundreds of requests is too slow, so this
+ * refuses what is recognisable without a lookup: non-web schemes, local
+ * names, and IP literals that are not public. The top-level page itself
+ * still goes through `assertFetchable`.
+ */
+export function isBlockedSubresource(rawUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return true;
+  }
+  if (url.protocol === 'data:' || url.protocol === 'blob:') return false;
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return true;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || /\.(localhost|local|internal)$/.test(host)) return true;
+  if (isIP(host)) return !isPublicAddress(host);
+  return false;
+}
+
+export async function assertFetchable(
+  url: URL,
+  allowedHosts: readonly string[] | null,
+): Promise<void> {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new FetchRefused('Only http and https pages can be checked.');
   }

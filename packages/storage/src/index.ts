@@ -6,5 +6,7 @@ export {
   headObject,
   readObjectHead,
   deleteObject,
+  putObject,
+  readObject,
 } from './presign';
 export { sniffMimeType, sniffIsConsistentWith } from './sniff';

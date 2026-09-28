@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@relay/db';
 import { NotFoundError, toAppError } from '@relay/core';
 import { assertCan, isConfinedToOwnProjects } from '@relay/rbac';
-import { presignDownload } from '@relay/storage';
+import { readObject } from '@relay/storage';
 import { resolveProject } from '@/features/projects/mutations';
 import { requirePrincipal } from '@/server/session';
 
@@ -12,8 +12,6 @@ import { requirePrincipal } from '@/server/session';
  * A merchant additionally only sees captures that are part of a comparison
  * someone shared with them - an internal work-in-progress capture stays
  * internal even if its id leaks.
- *
- * No Content-Disposition, so the image renders inline in an <img>.
  */
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -41,10 +39,20 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
     await resolveProject(principal, capture.project.code);
 
-    const url = await presignDownload(capture.storageKey);
-    const response = NextResponse.redirect(url);
-    response.headers.set('Cache-Control', 'private, max-age=300');
-    return response;
+    // Streamed from this origin rather than redirected to the bucket: the
+    // app's CSP is `img-src 'self'`, so an <img> cannot follow a redirect
+    // to another origin.
+    const object = await readObject(capture.storageKey);
+    if (!object) throw new NotFoundError('That capture does not exist.');
+    return new Response(object.body, {
+      headers: {
+        'Content-Type': object.contentType ?? 'image/jpeg',
+        ...(object.sizeBytes ? { 'Content-Length': String(object.sizeBytes) } : {}),
+        // Captures are immutable (a new screenshot is a new row), so a
+        // private cache for a day is safe.
+        'Cache-Control': 'private, max-age=86400, immutable',
+      },
+    });
   } catch (error) {
     const appError = toAppError(error);
     return NextResponse.json(appError.toJSON(), { status: appError.status });
