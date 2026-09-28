@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronDown } from 'lucide-react';
@@ -8,6 +9,30 @@ import { cn, MenuButton, type TabItem } from '@relay/ui';
 export interface ProjectTab extends TabItem {
   /** Shown in the strip. Everything else lives under "More", in the same order. */
   primary: boolean;
+  /** What the count counts, singular and plural - read out and shown on hover. */
+  countNoun?: readonly [string, string];
+}
+
+function countText(item: ProjectTab): string | undefined {
+  if (item.count === undefined || !item.countNoun) return undefined;
+  return `${item.count} ${item.count === 1 ? item.countNoun[0] : item.countNoun[1]}`;
+}
+
+/** The number says what it counts on hover and to a screen reader: "2 open questions", not "2". */
+function CountPill({ item, active }: { item: ProjectTab; active: boolean }) {
+  const text = countText(item);
+  return (
+    <span
+      title={text}
+      className={cn(
+        'tabular rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold leading-4',
+        active ? 'bg-accent-soft text-accent-ink' : 'bg-surface-2 text-muted',
+      )}
+    >
+      <span aria-hidden={text ? true : undefined}>{item.count}</span>
+      {text && <span className="sr-only">{text}</span>}
+    </span>
+  );
 }
 
 function AttentionDot({ label }: { label: string }) {
@@ -43,9 +68,28 @@ export function ProjectTabs({ items, base }: { items: readonly ProjectTab[]; bas
   const activeMore = more.find(isActive);
   const moreNeedsAttention = more.some((item) => item.alert);
 
+  // On a phone only two or three tabs fit; bring the current one into view
+  // so "where am I" never needs a sideways scroll to answer.
+  const stripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const strip = stripRef.current;
+    const current = strip?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!strip || !current) return;
+    const left = current.offsetLeft - strip.offsetLeft;
+    if (
+      left < strip.scrollLeft ||
+      left + current.offsetWidth > strip.scrollLeft + strip.clientWidth
+    ) {
+      strip.scrollLeft = Math.max(0, left - 16);
+    }
+  }, [pathname]);
+
   return (
     <div className="border-line -mb-px flex items-end border-b">
-      <div className="scrollbar-slim min-w-0 flex-1 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)] sm:[mask-image:none]">
+      <div
+        ref={stripRef}
+        className="scrollbar-slim relative min-w-0 flex-1 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)] sm:[mask-image:none]"
+      >
         <nav
           className="flex min-w-max items-center gap-0.5 pr-6 sm:pr-0"
           aria-label="Project sections"
@@ -66,14 +110,7 @@ export function ProjectTabs({ items, base }: { items: readonly ProjectTab[]; bas
               >
                 {item.label}
                 {item.count !== undefined && item.count > 0 && (
-                  <span
-                    className={cn(
-                      'tabular rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold leading-4',
-                      active ? 'bg-accent-soft text-accent-ink' : 'bg-surface-2 text-muted',
-                    )}
-                  >
-                    {item.count}
-                  </span>
+                  <CountPill item={item} active={active} />
                 )}
                 {item.alert && <AttentionDot label="needs attention" />}
               </Link>
@@ -101,9 +138,7 @@ export function ProjectTabs({ items, base }: { items: readonly ProjectTab[]; bas
             trailing: (
               <span className="flex items-center gap-1.5">
                 {item.count !== undefined && item.count > 0 && (
-                  <span className="tabular bg-surface-2 text-muted rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold leading-4">
-                    {item.count}
-                  </span>
+                  <CountPill item={item} active={false} />
                 )}
                 {item.alert && <AttentionDot label="needs attention" />}
               </span>

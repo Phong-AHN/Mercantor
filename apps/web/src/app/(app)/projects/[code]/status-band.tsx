@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { OctagonAlert } from 'lucide-react';
 import {
   formatDate,
+  formatDays,
   formatDuration,
   HEALTH_LABEL,
   TEAM_LABEL,
@@ -45,9 +46,13 @@ export interface StatusBandProps {
   };
 }
 
+/** Same whole-day rule as the answer tiles (`formatDays`), so the two never disagree by one. */
 function days(value: number): string {
-  const abs = Math.abs(Math.round(value));
-  return `${abs} day${abs === 1 ? '' : 's'}`;
+  return formatDays(value);
+}
+
+function isToday(value: number): boolean {
+  return Math.floor(Math.abs(value)) === 0;
 }
 
 /**
@@ -60,6 +65,10 @@ export function StatusBand({ code, now, health, nextStep, blocker, launch }: Sta
   const descriptor = HEALTH_LABEL[health.health];
   const reasons = health.reasons.filter(Boolean);
   const late = launch.daysToTarget !== null && launch.daysToTarget < 0;
+  const launchSlip =
+    launch.actualLaunchDate && launch.targetLaunchDate
+      ? (launch.actualLaunchDate.getTime() - launch.targetLaunchDate.getTime()) / 86_400_000
+      : null;
 
   return (
     <section
@@ -140,9 +149,28 @@ export function StatusBand({ code, now, health, nextStep, blocker, launch }: Sta
             Are we on time for launch?
           </h2>
           {launch.actualLaunchDate ? (
-            <p className="text-success-ink mt-1 text-[14px] font-semibold">
-              Live since {formatDate(launch.actualLaunchDate)}
-            </p>
+            <>
+              <p className="text-success-ink mt-1 text-[14px] font-semibold">
+                Live since {formatDate(launch.actualLaunchDate)}
+              </p>
+              {/* Says how the launch compared with the plan, so an "At risk:
+                  past target launch" reason above does not read as a
+                  contradiction of "Live". */}
+              {launchSlip !== null && (
+                <p
+                  className={cn(
+                    'text-[12.5px]',
+                    launchSlip >= 1 ? 'text-warning-ink' : 'text-muted',
+                  )}
+                >
+                  {isToday(launchSlip)
+                    ? `Went live on the target date`
+                    : launchSlip > 0
+                      ? `Went live ${days(launchSlip)} after the target date (${formatDate(launch.targetLaunchDate)})`
+                      : `Went live ${days(launchSlip)} ahead of target`}
+                </p>
+              )}
+            </>
           ) : launch.targetLaunchDate ? (
             <>
               <p
@@ -151,9 +179,11 @@ export function StatusBand({ code, now, health, nextStep, blocker, launch }: Sta
                   late ? 'text-danger-ink' : 'text-ink',
                 )}
               >
-                {late
-                  ? `${days(launch.daysToTarget!)} past target`
-                  : `${days(launch.daysToTarget ?? 0)} to target`}
+                {isToday(launch.daysToTarget ?? 0)
+                  ? 'Target launch is today'
+                  : late
+                    ? `${days(launch.daysToTarget!)} past target`
+                    : `${days(launch.daysToTarget ?? 0)} to target`}
               </p>
               <p className="text-muted text-[12.5px]">
                 Target launch {formatDate(launch.targetLaunchDate)}

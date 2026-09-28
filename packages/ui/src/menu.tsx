@@ -173,8 +173,13 @@ export function MenuButton({
             const itemClass = cn(
               'flex w-full items-start gap-2 px-3 py-2 text-left outline-none transition-colors',
               'hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:ring-accent focus-visible:ring-2 focus-visible:ring-inset',
-              item.current ? 'text-accent-ink' : 'text-ink',
-              item.disabled && 'cursor-not-allowed opacity-60 hover:bg-transparent',
+              // A disabled item dims its label only; the description under it
+              // is the reason it is unavailable and has to stay readable.
+              item.disabled
+                ? 'text-muted cursor-not-allowed hover:bg-transparent'
+                : item.current
+                  ? 'text-accent-ink'
+                  : 'text-ink',
             );
             const ref = (element: HTMLElement | null) => {
               if (element) itemRefs.current.push(element);

@@ -104,7 +104,9 @@ export function ProjectActions(props: ProjectActionsProps) {
         </Button>
       )}
 
-      {props.permissions.advanceStage && (
+      {/* A completed project has nowhere left to go (the state machine says
+          so), so the primary action would open an empty dialog. */}
+      {props.permissions.advanceStage && allowedTransitions(props.stage).length > 0 && (
         <Button variant="primary" size="md" onClick={() => setOpen('stage')}>
           <MoveRight className="size-4" />
           Move stage

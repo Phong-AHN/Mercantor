@@ -49,16 +49,21 @@ export function Breadcrumbs({
   className?: string;
 }) {
   return (
-    <nav aria-label="Breadcrumb" className={cn('flex items-center gap-1 text-[12.5px]', className)}>
+    <nav
+      aria-label="Breadcrumb"
+      className={cn('flex min-w-0 items-center gap-1 text-[12.5px]', className)}
+    >
       {items.map((item, index) => (
         <React.Fragment key={`${item.label}-${index}`}>
           {index > 0 && <ChevronRight className="text-faint size-3.5 shrink-0" aria-hidden />}
+          {/* Links back keep their full label; only the current page, last,
+              gives way on a narrow screen - "Pr..." is not a way back. */}
           {item.href ? (
-            <a href={item.href} className="text-muted hover:text-ink truncate transition-colors">
+            <a href={item.href} className="text-muted hover:text-ink shrink-0 transition-colors">
               {item.label}
             </a>
           ) : (
-            <span className="text-ink-soft truncate font-medium" aria-current="page">
+            <span className="text-ink-soft min-w-0 truncate font-medium" aria-current="page">
               {item.label}
             </span>
           )}
