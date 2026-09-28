@@ -18,3 +18,4 @@ export * from './toast';
 export * from './chart';
 export * from './showcase';
 export * from './before-after';
+export * from './menu';

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ExternalLink, Store } from 'lucide-react';
 import {
@@ -5,31 +6,25 @@ import {
   formatDuration,
   isAppError,
   OPEN_FINDING_STATUSES,
-  TEAM_LABEL,
   type Answer,
 } from '@relay/core';
 import { db } from '@relay/db';
 import { can, writableVisibilities } from '@relay/rbac';
-import {
-  AnswerTile,
-  Badge,
-  BlockerBanner,
-  Breadcrumbs,
-  Mono,
-  PageHeader,
-  type TabItem,
-} from '@relay/ui';
-import { HealthPill, MigrationTypePill, StagePill } from '@/components/domain';
+import { AnswerTile, Badge, Breadcrumbs, Mono, PageHeader } from '@relay/ui';
+import { MigrationTypePill, StagePill } from '@/components/domain';
 import { answerHref, answersForProject } from '@/features/projects/answers';
+import { unmetHandoffRequirements } from '@/features/projects/mutations';
 import { getProject } from '@/features/projects/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
 import { ProjectActions } from './project-actions';
-import { ProjectTabs } from './project-tabs';
+import { ProjectTabs, type ProjectTab } from './project-tabs';
+import { StatusBand } from './status-band';
 
 /**
  * The project shell. Everything above the tabs is the "one screen" the brief
- * asks for: the blocker if there is one, then the ten answers, then the way in
- * to the detail. A reader should not have to click to know where things stand.
+ * asks for: the status band (what happens next, is anything stuck, are we on
+ * time), then the ten answers, then the way in to the detail. A reader should
+ * not have to click to know where things stand.
  */
 export default async function ProjectLayout({
   children,
@@ -72,25 +67,34 @@ export default async function ProjectLayout({
       })
     : null;
 
+  // The same "Needs an answer" set the Conversation tab lists: comments still
+  // flagged open or in progress, among those this reader may see.
+  const openQuestions = project.comments.filter(
+    (comment) => comment.status === 'OPEN' || comment.status === 'IN_PROGRESS',
+  ).length;
+
+  const canSubmitHandoff = can(principal, 'handoff:submit');
+  const handoffUnmet = canSubmitHandoff ? await unmetHandoffRequirements(project.id) : [];
+
   const base = `/projects/${project.code}`;
-  const tabs: TabItem[] = [
-    { href: base, label: 'Overview' },
-    { href: `${base}/time`, label: 'Time & SLA' },
-    { href: `${base}/scope`, label: 'Scope', count: project.scopeItems.length },
-    { href: `${base}/access`, label: 'Access', count: outstandingAccess },
-    { href: `${base}/assets`, label: 'Assets', count: outstandingAssets },
-    { href: `${base}/activity`, label: 'Activity', count: project.comments.length },
+  // Routes are unchanged; only the labels of Activity/Timeline changed, so
+  // every existing link and bookmark still lands on the same page.
+  const tabs: ProjectTab[] = [
+    { href: base, label: 'Overview', primary: true },
+    { href: `${base}/activity`, label: 'Conversation', count: openQuestions, primary: true },
     {
       href: `${base}/blockers`,
       label: 'Blockers',
       count: project.blockers.filter((blocker) => blocker.resolvedAt === null).length,
       alert: Boolean(openBlocker),
+      primary: true,
     },
     {
       href: `${base}/issues`,
       label: 'Issues',
       count: openIssues.length,
       alert: openIssues.some((issue) => issue.severity === 'LAUNCH_BLOCKER'),
+      primary: true,
     },
     ...(openFindings
       ? [
@@ -99,16 +103,30 @@ export default async function ProjectLayout({
             label: 'Site QA',
             count: openFindings.reduce((sum, group) => sum + group._count._all, 0),
             alert: openFindings.some((group) => group.severity === 'CRITICAL'),
+            primary: true,
           },
         ]
       : []),
-    { href: `${base}/approvals`, label: 'Approvals', count: pendingApprovals },
+    { href: `${base}/approvals`, label: 'Approvals', count: pendingApprovals, primary: true },
+    { href: `${base}/access`, label: 'Access', count: outstandingAccess, primary: false },
+    { href: `${base}/assets`, label: 'Assets', count: outstandingAssets, primary: false },
+    { href: `${base}/scope`, label: 'Scope', count: project.scopeItems.length, primary: false },
+    { href: `${base}/time`, label: 'Time & SLA', primary: false },
+    { href: `${base}/timeline`, label: 'Events', primary: false },
     ...(can(principal, 'invoice:read')
-      ? [{ href: `${base}/invoices`, label: 'Invoices', alert: project.snapshot.invoice.overdue }]
+      ? [
+          {
+            href: `${base}/invoices`,
+            label: 'Invoices',
+            alert: project.snapshot.invoice.overdue,
+            primary: false,
+          },
+        ]
       : []),
-    { href: `${base}/handoff`, label: 'SHOPLINE handoff' },
-    { href: `${base}/timeline`, label: 'Timeline' },
-    ...(can(principal, 'project:update') ? [{ href: `${base}/settings`, label: 'Settings' }] : []),
+    { href: `${base}/handoff`, label: 'SHOPLINE handoff', primary: false },
+    ...(can(principal, 'project:update')
+      ? [{ href: `${base}/settings`, label: 'Settings', primary: false }]
+      : []),
   ];
 
   return (
@@ -132,11 +150,8 @@ export default async function ProjectLayout({
         title={project.merchant.name}
         meta={
           <>
+            {/* Health lives in the status band below, with its reason written out. */}
             <StagePill stage={project.stage} showPhase />
-            <HealthPill
-              health={project.snapshot.health.health}
-              reason={project.snapshot.health.reasons.join(' ')}
-            />
             <MigrationTypePill type={project.migrationType} />
             {project.merchantDetail.currentPlatform && (
               <Badge tone="muted" size="md">
@@ -173,24 +188,43 @@ export default async function ProjectLayout({
               advanceStage: can(principal, 'project:advance_stage'),
               comment: can(principal, 'comment:create'),
               sendIntroduction: can(principal, 'introduction:send'),
-              submitHandoff: can(principal, 'handoff:submit'),
+              submitHandoff: canSubmitHandoff,
             }}
+            handoffUnmet={handoffUnmet}
           />
         }
       />
 
-      {openBlocker && (
-        <BlockerBanner
-          title={openBlocker.title}
-          owner={openBlocker.owner?.name ?? TEAM_LABEL[openBlocker.ownerTeam].label}
-          duration={formatDuration(now.getTime() - openBlocker.startedAt.getTime(), {
-            compact: true,
-          })}
-          nextAction={openBlocker.nextAction}
-          dueDate={openBlocker.dueDate ? formatDate(openBlocker.dueDate) : null}
-          href={`${base}/blockers`}
-        />
-      )}
+      <StatusBand
+        code={project.code}
+        now={now}
+        health={project.snapshot.health}
+        nextStep={{
+          text: project.nextAction,
+          ownerName: project.nextActionOwner?.name ?? null,
+          ownerId: project.nextActionOwner?.id ?? null,
+          ownerTeam: project.nextActionOwnerTeam,
+          dueDate: project.nextActionDueDate,
+          canEdit: can(principal, 'project:update'),
+        }}
+        blocker={
+          openBlocker
+            ? {
+                title: openBlocker.title,
+                ownerName: openBlocker.owner?.name ?? null,
+                ownerTeam: openBlocker.ownerTeam,
+                startedAt: openBlocker.startedAt,
+                dueDate: openBlocker.dueDate,
+                nextAction: openBlocker.nextAction,
+              }
+            : null
+        }
+        launch={{
+          targetLaunchDate: project.targetLaunchDate,
+          actualLaunchDate: project.actualLaunchDate,
+          daysToTarget: project.snapshot.time.daysToTarget,
+        }}
+      />
 
       <AnswerStrip answers={answers} code={project.code} />
 
@@ -208,18 +242,23 @@ export default async function ProjectLayout({
 function AnswerStrip({ answers, code }: { answers: Answer[]; code: string }) {
   return (
     <section aria-label="Project status at a glance">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      {/* A swipeable strip until there is room for a 5-across grid; the fade
+          on the right edge says there is more to scroll to. */}
+      <ul className="scrollbar-slim -mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] sm:mx-0 sm:px-0 xl:grid xl:snap-none xl:grid-cols-5 xl:overflow-visible xl:pb-0 xl:[mask-image:none]">
         {answers.map((answer) => (
-          <AnswerTile
-            key={answer.id}
-            question={answer.question}
-            value={answer.value}
-            detail={answer.detail}
-            tone={answer.tone}
-            href={answerHref(code, answer.id)}
-          />
+          <li key={answer.id} className="w-[12.5rem] shrink-0 snap-start xl:w-auto">
+            <AnswerTile
+              question={answer.question}
+              value={answer.value}
+              detail={answer.detail}
+              tone={answer.tone}
+              href={answerHref(code, answer.id)}
+              density="compact"
+              linkAs={Link}
+            />
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }

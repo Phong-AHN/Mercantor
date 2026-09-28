@@ -258,7 +258,12 @@ export function AssignmentForm({
           'Owns delivery, and is the merchant"s main point of contact at AHN.',
         )}
         {field('AHN developer', 'ahnDeveloperId', ahn, 'Does the migration and the build.')}
-        {field('AHN designer', 'ahnDesignerId', ahn, 'Owns the visual design and merchant design review.')}
+        {field(
+          'AHN designer',
+          'ahnDesignerId',
+          ahn,
+          'Owns the visual design and merchant design review.',
+        )}
         {field(
           'SHOPLINE account manager',
           'shoplineAmId',

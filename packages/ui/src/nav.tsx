@@ -20,7 +20,7 @@ export function PageHeader({
 }) {
   return (
     <header className={cn('flex flex-wrap items-start justify-between gap-4', className)}>
-      <div className="min-w-0">
+      <div className="min-w-0 max-w-full">
         {eyebrow && (
           <div className="text-muted mb-1 flex items-center gap-2 text-[12px] font-medium">
             {eyebrow}
@@ -34,7 +34,9 @@ export function PageHeader({
         )}
         {meta && <div className="mt-3 flex flex-wrap items-center gap-2">{meta}</div>}
       </div>
-      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {/* No shrink-0: on a phone the action group must be allowed to wrap onto
+          its own lines rather than hold one row wider than the screen. */}
+      {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }

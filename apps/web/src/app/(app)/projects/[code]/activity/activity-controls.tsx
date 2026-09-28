@@ -397,7 +397,12 @@ export function EditCommentButton({
               {action.error}
             </Alert>
           )}
-          <Textarea value={text} onChange={(event) => setText(event.target.value)} rows={4} autoFocus />
+          <Textarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            rows={4}
+            autoFocus
+          />
         </div>
       </Dialog>
     </>

@@ -133,10 +133,14 @@ export default async function FindingDetailPage({
                 </section>
               )}
               {finding.falsePositiveReason && (
-                <p className="text-muted text-[12.5px]">Not a problem: {finding.falsePositiveReason}</p>
+                <p className="text-muted text-[12.5px]">
+                  Not a problem: {finding.falsePositiveReason}
+                </p>
               )}
               {finding.verificationNote && (
-                <p className="text-success-ink text-[12.5px]">Verified: {finding.verificationNote}</p>
+                <p className="text-success-ink text-[12.5px]">
+                  Verified: {finding.verificationNote}
+                </p>
               )}
 
               {canManage && (
@@ -170,11 +174,18 @@ export default async function FindingDetailPage({
                       <div className="min-w-0 flex-1">
                         <p className="flex flex-wrap items-center gap-x-2 text-[12px]">
                           <span className="text-ink font-semibold">{comment.author.name}</span>
-                          <span className="text-muted">{USER_ROLE_LABEL[comment.author.role].label}</span>
-                          <span className="text-faint">
-                            {formatDateTime(comment.createdAt)} ({formatRelative(comment.createdAt, now)})
+                          <span className="text-muted">
+                            {USER_ROLE_LABEL[comment.author.role].label}
                           </span>
-                          {!comment.clientVisible && <Badge tone="muted" size="sm">Internal</Badge>}
+                          <span className="text-faint">
+                            {formatDateTime(comment.createdAt)} (
+                            {formatRelative(comment.createdAt, now)})
+                          </span>
+                          {!comment.clientVisible && (
+                            <Badge tone="muted" size="sm">
+                              Internal
+                            </Badge>
+                          )}
                         </p>
                         <p className="text-ink mt-1 whitespace-pre-wrap text-[13.5px] leading-relaxed">
                           {comment.body}
@@ -185,7 +196,12 @@ export default async function FindingDetailPage({
                 </ol>
               )}
               {canComment && (
-                <FindingCommentForm code={code} findingId={finding.id} canChooseVisibility shared={shared} />
+                <FindingCommentForm
+                  code={code}
+                  findingId={finding.id}
+                  canChooseVisibility
+                  shared={shared}
+                />
               )}
             </CardBody>
           </Card>
@@ -206,7 +222,9 @@ export default async function FindingDetailPage({
               <DetailList>
                 <DetailRow label="Page type">{PAGE_TYPE_LABEL[finding.pageType].label}</DetailRow>
                 <DetailRow label="Source">{FINDING_SOURCE_LABEL[finding.source].label}</DetailRow>
-                {finding.source !== 'MANUAL' && <DetailRow label="Rule">{finding.detector}</DetailRow>}
+                {finding.source !== 'MANUAL' && (
+                  <DetailRow label="Rule">{finding.detector}</DetailRow>
+                )}
                 <DetailRow label="First found">{formatDateTime(finding.firstSeenAt)}</DetailRow>
                 <DetailRow label="Last seen">{formatRelative(finding.lastSeenAt, now)}</DetailRow>
                 {finding.occurrences > 1 && (
@@ -217,7 +235,9 @@ export default async function FindingDetailPage({
                     {finding.reviewedBy.name}, {formatRelative(finding.reviewedAt, now)}
                   </DetailRow>
                 )}
-                {!canManage && <DetailRow label="Assignee">{finding.assignee?.name ?? 'Unassigned'}</DetailRow>}
+                {!canManage && (
+                  <DetailRow label="Assignee">{finding.assignee?.name ?? 'Unassigned'}</DetailRow>
+                )}
               </DetailList>
               {(canApprove || canManage) && (
                 <div className="flex flex-wrap gap-2">
@@ -251,13 +271,16 @@ export default async function FindingDetailPage({
                     return (
                       <li key={event.id} className="text-[12.5px] leading-5">
                         <p className="text-ink">
-                          <span className="font-medium">{FIELD_LABEL[event.field] ?? event.field}</span>
+                          <span className="font-medium">
+                            {FIELD_LABEL[event.field] ?? event.field}
+                          </span>
                           {event.fromValue ? ` ${describe(event.fromValue)} →` : ''}{' '}
                           {describe(event.toValue)}
                         </p>
                         {event.note && <p className="text-muted">{event.note}</p>}
                         <p className="text-faint text-[11.5px]">
-                          {event.actor?.name ?? 'Automated check'} · {formatRelative(event.createdAt, now)}
+                          {event.actor?.name ?? 'Automated check'} ·{' '}
+                          {formatRelative(event.createdAt, now)}
                         </p>
                       </li>
                     );

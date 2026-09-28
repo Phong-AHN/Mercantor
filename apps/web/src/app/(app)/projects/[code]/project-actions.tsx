@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   ArrowRight,
+  Ellipsis,
   MailPlus,
   MessageSquarePlus,
   MoveRight,
@@ -19,7 +20,18 @@ import {
   type CommentVisibility,
   type ProjectStage,
 } from '@relay/core';
-import { Alert, Button, Checkbox, Dialog, Field, Select, Textarea } from '@relay/ui';
+import {
+  Alert,
+  Button,
+  buttonStyles,
+  Checkbox,
+  Dialog,
+  Field,
+  MenuButton,
+  Select,
+  Textarea,
+  type MenuItem,
+} from '@relay/ui';
 import { useAction } from '@/components/use-action';
 import { postCommentAction } from '@/features/activity/actions';
 import { submitHandoffAction } from '@/features/approvals/actions';
@@ -38,17 +50,50 @@ export interface ProjectActionsProps {
     submitHandoff: boolean;
   };
   introductionSent: boolean;
+  /**
+   * What still stands between this project and a SHOPLINE handoff, from the
+   * same server check the submit action runs. Empty means it can be submitted.
+   */
+  handoffUnmet?: readonly string[];
 }
 
 /**
- * The action bar. Everything a person is most likely to do next, in the order
- * the project itself suggests: move it on, say something, introduce it, hand it
- * over. Controls the reader has no permission for are not rendered - and the
+ * The action bar: one primary action (move the project on), one secondary
+ * (say something), and the occasional ones - introduce it, hand it over - in a
+ * menu. Controls the reader has no permission for are not rendered, and the
  * server checks again anyway.
  */
 export function ProjectActions(props: ProjectActionsProps) {
   const [open, setOpen] = useState<'stage' | 'update' | 'intro' | 'handoff' | null>(null);
   const close = () => setOpen(null);
+  const unmet = props.handoffUnmet ?? [];
+
+  const moreItems: MenuItem[] = [
+    ...(props.permissions.sendIntroduction && !props.introductionSent
+      ? [
+          {
+            key: 'intro',
+            label: 'Send introduction',
+            description: `Introduce ${props.merchantName} to the AHN team.`,
+            onSelect: () => setOpen('intro'),
+          },
+        ]
+      : []),
+    ...(props.permissions.submitHandoff
+      ? [
+          {
+            key: 'handoff',
+            label: 'Submit to SHOPLINE',
+            disabled: unmet.length > 0,
+            description:
+              unmet.length > 0
+                ? `Not ready: ${unmet.length} requirement${unmet.length === 1 ? '' : 's'} left - ${unmet[0]}`
+                : 'Send the deployment package for SHOPLINE review.',
+            onSelect: () => setOpen('handoff'),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <>
@@ -59,25 +104,21 @@ export function ProjectActions(props: ProjectActionsProps) {
         </Button>
       )}
 
-      {props.permissions.sendIntroduction && !props.introductionSent && (
-        <Button variant="secondary" size="md" onClick={() => setOpen('intro')}>
-          <MailPlus className="size-4" />
-          Send introduction
-        </Button>
-      )}
-
-      {props.permissions.submitHandoff && (
-        <Button variant="secondary" size="md" onClick={() => setOpen('handoff')}>
-          <PackageCheck className="size-4" />
-          Submit to SHOPLINE
-        </Button>
-      )}
-
       {props.permissions.advanceStage && (
         <Button variant="primary" size="md" onClick={() => setOpen('stage')}>
           <MoveRight className="size-4" />
           Move stage
         </Button>
+      )}
+
+      {moreItems.length > 0 && (
+        <MenuButton
+          label="More project actions"
+          items={moreItems}
+          triggerClassName={buttonStyles('secondary', 'md', 'px-2.5')}
+        >
+          <Ellipsis className="size-4" aria-hidden />
+        </MenuButton>
       )}
 
       {open === 'stage' && <StageDialog {...props} onClose={close} />}

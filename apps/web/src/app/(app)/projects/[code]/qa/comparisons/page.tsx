@@ -92,7 +92,9 @@ export default async function ComparisonsPage({ params }: { params: Promise<{ co
                   after={{ src: captureSrc(pair.afterCapture.id), alt: `${pair.label} after` }}
                   afterLabel={pair.afterLabel}
                   aspectRatio={pair.beforeCapture.viewport === 'MOBILE' ? 9 / 16 : 16 / 10}
-                  className={pair.beforeCapture.viewport === 'MOBILE' ? 'mx-auto max-w-xs' : undefined}
+                  className={
+                    pair.beforeCapture.viewport === 'MOBILE' ? 'mx-auto max-w-xs' : undefined
+                  }
                 />
                 <figcaption className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -101,15 +103,24 @@ export default async function ComparisonsPage({ params }: { params: Promise<{ co
                       <Badge tone="neutral" size="sm" variant="outline">
                         {CAPTURE_VIEWPORT_LABEL[pair.beforeCapture.viewport].label}
                       </Badge>
-                      {pair.featured && <Badge tone="accent" size="sm">Leads the card</Badge>}
+                      {pair.featured && (
+                        <Badge tone="accent" size="sm">
+                          Leads the card
+                        </Badge>
+                      )}
                       {pair.clientVisibleAt ? (
-                        <Badge tone="accent" size="sm">Shared</Badge>
+                        <Badge tone="accent" size="sm">
+                          Shared
+                        </Badge>
                       ) : (
-                        <Badge tone="muted" size="sm">Internal</Badge>
+                        <Badge tone="muted" size="sm">
+                          Internal
+                        </Badge>
                       )}
                     </p>
                     <p className="text-muted mt-0.5 text-[12px]">
-                      {formatDate(pair.beforeCapture.capturedAt)} → {formatDate(pair.afterCapture.capturedAt)}
+                      {formatDate(pair.beforeCapture.capturedAt)} →{' '}
+                      {formatDate(pair.afterCapture.capturedAt)}
                       {pair.changeNote ? ` · ${pair.changeNote}` : ''}
                     </p>
                   </div>
@@ -140,8 +151,16 @@ export default async function ComparisonsPage({ params }: { params: Promise<{ co
             }
             actions={
               <>
-                <AutoCaptureAllButton code={code} pageIds={includedPages.map((page) => page.id)} phase="BEFORE" />
-                <AutoCaptureAllButton code={code} pageIds={includedPages.map((page) => page.id)} phase="AFTER" />
+                <AutoCaptureAllButton
+                  code={code}
+                  pageIds={includedPages.map((page) => page.id)}
+                  phase="BEFORE"
+                />
+                <AutoCaptureAllButton
+                  code={code}
+                  pageIds={includedPages.map((page) => page.id)}
+                  phase="AFTER"
+                />
               </>
             }
           />
@@ -165,10 +184,15 @@ export default async function ComparisonsPage({ params }: { params: Promise<{ co
                   {includedPages.map((page) => (
                     <TR key={page.id}>
                       <TD className="max-w-[18rem]">
-                        <span className="text-ink block truncate font-mono text-[12.5px]" title={page.url}>
+                        <span
+                          className="text-ink block truncate font-mono text-[12.5px]"
+                          title={page.url}
+                        >
                           {pathOf(page.url)}
                         </span>
-                        <span className="text-muted text-[12px]">{PAGE_TYPE_LABEL[page.pageType].label}</span>
+                        <span className="text-muted text-[12px]">
+                          {PAGE_TYPE_LABEL[page.pageType].label}
+                        </span>
                       </TD>
                       {(['BEFORE', 'AFTER'] as const).map((phase) => (
                         <TD key={phase}>
@@ -177,7 +201,12 @@ export default async function ComparisonsPage({ params }: { params: Promise<{ co
                               const last = latestCapture.get(`${page.url}|${viewport}|${phase}`);
                               return (
                                 <div key={viewport} className="space-y-0.5">
-                                  <AutoCaptureButton code={code} pageId={page.id} phase={phase} viewport={viewport} />
+                                  <AutoCaptureButton
+                                    code={code}
+                                    pageId={page.id}
+                                    phase={phase}
+                                    viewport={viewport}
+                                  />
                                   <p className="text-faint text-[11px]">
                                     {last ? formatRelative(last.capturedAt, now) : 'none yet'}
                                   </p>
@@ -268,16 +297,25 @@ export default async function ComparisonsPage({ params }: { params: Promise<{ co
                           </a>
                           <div className="mt-1.5 flex items-start justify-between gap-1">
                             <div className="min-w-0 text-[11.5px] leading-4">
-                              <StatusPill descriptor={CAPTURE_PHASE_LABEL[capture.phase]} size="sm" />
+                              <StatusPill
+                                descriptor={CAPTURE_PHASE_LABEL[capture.phase]}
+                                size="sm"
+                              />
                               <p className="text-ink mt-1">{formatDate(capture.capturedAt)}</p>
-                              <p className="text-muted truncate" title={capture.changeNote ?? undefined}>
+                              <p
+                                className="text-muted truncate"
+                                title={capture.changeNote ?? undefined}
+                              >
                                 {capture.changeNote ?? stageLabel(capture.projectStage)}
                               </p>
                               <p className="text-faint">
-                                {capture.width}px{capture.requestedBy ? ` · ${capture.requestedBy.name}` : ''}
+                                {capture.width}px
+                                {capture.requestedBy ? ` · ${capture.requestedBy.name}` : ''}
                               </p>
                             </div>
-                            {canManage && <DeleteCaptureButton code={code} captureId={capture.id} />}
+                            {canManage && (
+                              <DeleteCaptureButton code={code} captureId={capture.id} />
+                            )}
                           </div>
                         </li>
                       ))}

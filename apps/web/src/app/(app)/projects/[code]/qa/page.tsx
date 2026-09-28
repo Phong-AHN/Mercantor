@@ -55,9 +55,20 @@ import { requirePrincipalOrRedirect } from '@/server/session';
 
 export const dynamic = 'force-dynamic';
 
-const TEMPLATE_PATHS = ['/', '/collections/all', '/cart', '/search', '/pages/about', '/policies/refund-policy'];
+const TEMPLATE_PATHS = [
+  '/',
+  '/collections/all',
+  '/cart',
+  '/search',
+  '/pages/about',
+  '/policies/refund-policy',
+];
 
-export default async function SiteQaOverviewPage({ params }: { params: Promise<{ code: string }> }) {
+export default async function SiteQaOverviewPage({
+  params,
+}: {
+  params: Promise<{ code: string }>;
+}) {
   const { code } = await params;
   const principal = await requirePrincipalOrRedirect(`/projects/${code}/qa`);
   const [qa, project, showcase] = await Promise.all([
@@ -125,7 +136,10 @@ export default async function SiteQaOverviewPage({ params }: { params: Promise<{
     summary: profile.summary ?? '',
     serviceTags: profile.serviceTags.join(', '),
     destinationBuildLabel: profile.destinationBuildLabel ?? '',
-    apps: apps.map((app) => app.name).filter(Boolean).join('\n'),
+    apps: apps
+      .map((app) => app.name)
+      .filter(Boolean)
+      .join('\n'),
   };
 
   const bySeverity = Object.fromEntries(
@@ -174,7 +188,9 @@ export default async function SiteQaOverviewPage({ params }: { params: Promise<{
                 label={`${FINDING_SEVERITY_LABEL[severity].label} findings`}
                 value={bySeverity[severity]}
                 detail={bySeverity[severity] === 0 ? 'None open' : 'Open'}
-                tone={bySeverity[severity] === 0 ? 'success' : FINDING_SEVERITY_LABEL[severity].tone}
+                tone={
+                  bySeverity[severity] === 0 ? 'success' : FINDING_SEVERITY_LABEL[severity].tone
+                }
               />
             </Link>
           ))}
@@ -183,7 +199,10 @@ export default async function SiteQaOverviewPage({ params }: { params: Promise<{
       {(unreachable.length > 0 || (canApprove && unshared > 0)) && (
         <div className="space-y-2">
           {unreachable.length > 0 && (
-            <Alert tone="warning" title={`${unreachable.length} page${unreachable.length === 1 ? '' : 's'} could not be checked`}>
+            <Alert
+              tone="warning"
+              title={`${unreachable.length} page${unreachable.length === 1 ? '' : 's'} could not be checked`}
+            >
               {unreachable
                 .slice(0, 5)
                 .map((page) => `${page.url} (${PAGE_STATE_LABEL[page.state].label.toLowerCase()})`)
@@ -191,8 +210,18 @@ export default async function SiteQaOverviewPage({ params }: { params: Promise<{
             </Alert>
           )}
           {canApprove && unshared > 0 && (
-            <Alert tone="info" title={`${unshared} open finding${unshared === 1 ? ' is' : 's are'} internal`}>
-              Review them on the <Link href={`${base}/findings?visible=internal`} className="underline underline-offset-4">findings list</Link> and share the ones the client should see.
+            <Alert
+              tone="info"
+              title={`${unshared} open finding${unshared === 1 ? ' is' : 's are'} internal`}
+            >
+              Review them on the{' '}
+              <Link
+                href={`${base}/findings?visible=internal`}
+                className="underline underline-offset-4"
+              >
+                findings list
+              </Link>{' '}
+              and share the ones the client should see.
             </Alert>
           )}
         </div>
@@ -267,8 +296,11 @@ export default async function SiteQaOverviewPage({ params }: { params: Promise<{
               <details className="mt-3">
                 <summary className="text-muted cursor-pointer text-[12.5px]">
                   Why we think so: {detection.signals.length} signal
-                  {detection.signals.length === 1 ? '' : 's'}, {detection.confidence ?? 0}% confidence
-                  {profile.detectedAt ? `, detected ${formatRelative(profile.detectedAt, now)}` : ''}
+                  {detection.signals.length === 1 ? '' : 's'}, {detection.confidence ?? 0}%
+                  confidence
+                  {profile.detectedAt
+                    ? `, detected ${formatRelative(profile.detectedAt, now)}`
+                    : ''}
                 </summary>
                 <ul className="mt-2 space-y-1">
                   {detection.signals.map((signal, index) => (
@@ -305,11 +337,16 @@ export default async function SiteQaOverviewPage({ params }: { params: Promise<{
           ) : (
             <ul className="divide-line divide-y">
               {qa.metrics.map((metric, index) => (
-                <li key={metric.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                <li
+                  key={metric.id}
+                  className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
+                >
                   <div className="min-w-0">
                     <p className="text-ink text-[13.5px] font-medium">{metric.label}</p>
                     <p className="text-muted text-[12px] tabular-nums">
-                      {metric.beforeValue == null ? '' : `${formatMetricValue(metric.beforeValue, metric.unit)} → `}
+                      {metric.beforeValue == null
+                        ? ''
+                        : `${formatMetricValue(metric.beforeValue, metric.unit)} → `}
                       {formatMetricValue(metric.afterValue, metric.unit)}
                       {metric.measuredAt ? ` · measured ${formatDate(metric.measuredAt)}` : ''}
                       {index >= 3 ? ' · not on the card' : ''}
@@ -326,7 +363,9 @@ export default async function SiteQaOverviewPage({ params }: { params: Promise<{
                           afterValue: metric.afterValue == null ? '' : String(metric.afterValue),
                           unit: metric.unit ?? '',
                           direction: metric.direction,
-                          measuredAt: metric.measuredAt ? metric.measuredAt.toISOString().slice(0, 10) : '',
+                          measuredAt: metric.measuredAt
+                            ? metric.measuredAt.toISOString().slice(0, 10)
+                            : '',
                         }}
                       />
                       <DeleteMetricButton code={code} metricId={metric.id} />
@@ -389,7 +428,9 @@ export default async function SiteQaOverviewPage({ params }: { params: Promise<{
                       >
                         {page.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
                       </a>
-                      {page.title && <span className="text-muted block truncate text-[12px]">{page.title}</span>}
+                      {page.title && (
+                        <span className="text-muted block truncate text-[12px]">{page.title}</span>
+                      )}
                     </TD>
                     <TD>
                       {canManage ? (
@@ -407,7 +448,9 @@ export default async function SiteQaOverviewPage({ params }: { params: Promise<{
                       <span className="inline-flex items-center gap-2">
                         <StatusPill descriptor={PAGE_STATE_LABEL[page.state]} size="sm" />
                         {page.lastHttpStatus && (
-                          <span className="text-faint font-mono text-[11px]">{page.lastHttpStatus}</span>
+                          <span className="text-faint font-mono text-[11px]">
+                            {page.lastHttpStatus}
+                          </span>
                         )}
                       </span>
                     </TD>
@@ -429,7 +472,11 @@ export default async function SiteQaOverviewPage({ params }: { params: Promise<{
                     {canManage && (
                       <TD align="right">
                         <span className="inline-flex items-center gap-2">
-                          <IncludeToggle code={code} pageId={page.id} included={page.includeInScans} />
+                          <IncludeToggle
+                            code={code}
+                            pageId={page.id}
+                            included={page.includeInScans}
+                          />
                           {page.includeInScans && <CheckPageButton code={code} pageId={page.id} />}
                           <RemovePageButton code={code} pageId={page.id} url={page.url} />
                         </span>

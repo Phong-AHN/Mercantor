@@ -33,9 +33,7 @@ export function Stat({
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <p className="text-muted text-[12.5px] font-medium uppercase leading-4 tracking-wide">
-          {label}
-        </p>
+        <p className="text-muted text-[12.5px] font-medium leading-4">{label}</p>
         {icon && (
           <span
             className={cn('grid size-7 shrink-0 place-items-center rounded-full', TONE_SOFT[tone])}
@@ -82,6 +80,8 @@ export function AnswerTile({
   detail,
   tone = 'neutral',
   href,
+  density = 'regular',
+  linkAs: LinkComponent = 'a',
   className,
 }: {
   question: string;
@@ -89,28 +89,53 @@ export function AnswerTile({
   detail?: React.ReactNode;
   tone?: Tone;
   href?: string;
+  /** `compact` keeps a strip of ten readable without taking the first screen. */
+  density?: 'regular' | 'compact';
+  /** Pass the app router's Link so tiles navigate client-side. */
+  linkAs?: React.ElementType;
   className?: string;
 }) {
+  const compact = density === 'compact';
+  const valueText = typeof value === 'string' ? value : undefined;
   const content = (
     <>
       <p className="text-muted text-[11.5px] font-medium leading-4">{question}</p>
-      <p className={cn('mt-1 truncate text-[15px] font-semibold leading-5', TONE_TEXT[tone])}>
+      <p
+        className={cn(
+          'truncate font-semibold',
+          compact ? 'mt-0.5 text-[14px] leading-5' : 'mt-1 text-[15px] leading-5',
+          TONE_TEXT[tone],
+        )}
+        title={valueText}
+      >
         {value}
       </p>
-      {detail && <p className="text-muted mt-1 line-clamp-2 text-[12px] leading-4">{detail}</p>}
+      {detail && (
+        <p
+          className={cn(
+            'text-muted text-[12px] leading-4',
+            compact ? 'mt-0.5 truncate' : 'mt-1 line-clamp-2',
+          )}
+          title={compact && typeof detail === 'string' ? detail : undefined}
+        >
+          {detail}
+        </p>
+      )}
     </>
   );
 
   const shell = cn(
-    'relative block h-full rounded-[var(--radius-md)] border border-line bg-surface-1 p-3.5 text-left transition-colors',
-    href && 'hover:border-line-strong hover:bg-surface-2',
+    'relative block h-full rounded-[var(--radius-md)] border border-line bg-surface-1 text-left transition-colors',
+    compact ? 'px-3 py-2.5' : 'p-3.5',
+    href &&
+      'hover:border-line-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
     className,
   );
 
   return href ? (
-    <a href={href} className={shell}>
+    <LinkComponent href={href} className={shell}>
       {content}
-    </a>
+    </LinkComponent>
   ) : (
     <div className={shell}>{content}</div>
   );

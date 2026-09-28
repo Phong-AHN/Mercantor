@@ -54,7 +54,8 @@ function Delta({
   if (after == null) return null;
   const before = first.id === latest.id ? null : read(first);
   const delta = describeMetric({ label, before, after, unit, direction: 'LOWER_IS_BETTER' });
-  const show = (value: number) => (format ? format(value) : `${Math.round(value)}${unit ? ` ${unit}` : ''}`);
+  const show = (value: number) =>
+    format ? format(value) : `${Math.round(value)}${unit ? ` ${unit}` : ''}`;
   return (
     <MetricDelta
       label={label}
@@ -77,11 +78,11 @@ export default async function PerformancePage({ params }: { params: Promise<{ co
   return (
     <div className="space-y-4">
       <Alert tone="info" title="How these numbers are measured">
-        Each check fetches the page&apos;s HTML from our server with a desktop or mobile browser identity
-        and records server response time, HTML download time, and what the HTML asks the browser to
-        load. It does not run JavaScript, so it undercounts what a real browser loads; use it to spot
-        changes over time. For client-facing numbers, add Lighthouse results as headline numbers on the
-        overview.
+        Each check fetches the page&apos;s HTML from our server with a desktop or mobile browser
+        identity and records server response time, HTML download time, and what the HTML asks the
+        browser to load. It does not run JavaScript, so it undercounts what a real browser loads;
+        use it to spot changes over time. For client-facing numbers, add Lighthouse results as
+        headline numbers on the overview.
       </Alert>
 
       {pages.length === 0 ? (
@@ -110,15 +111,27 @@ export default async function PerformancePage({ params }: { params: Promise<{ co
               actions={
                 canManage ? (
                   <>
-                    <RunPerfButton code={code} pageId={page.id} device="DESKTOP" label="Run desktop" />
-                    <RunPerfButton code={code} pageId={page.id} device="MOBILE" label="Run mobile" />
+                    <RunPerfButton
+                      code={code}
+                      pageId={page.id}
+                      device="DESKTOP"
+                      label="Run desktop"
+                    />
+                    <RunPerfButton
+                      code={code}
+                      pageId={page.id}
+                      device="MOBILE"
+                      label="Run mobile"
+                    />
                   </>
                 ) : null
               }
             />
             <CardBody className="grid gap-6 lg:grid-cols-2">
               {DEVICES.map((device) => {
-                const runs = qa.perf.filter((run) => run.pageId === page.id && run.device === device);
+                const runs = qa.perf.filter(
+                  (run) => run.pageId === page.id && run.device === device,
+                );
                 const ok = runs.filter((run) => !run.error);
                 const latest = ok[0];
                 const first = ok[ok.length - 1];
@@ -138,16 +151,23 @@ export default async function PerformancePage({ params }: { params: Promise<{ co
                           {formatRelative(latest.measuredAt, now)}
                         </span>
                       )}
-                      {regression?.regressed && <Badge tone="danger" size="sm">Regression</Badge>}
+                      {regression?.regressed && (
+                        <Badge tone="danger" size="sm">
+                          Regression
+                        </Badge>
+                      )}
                     </div>
 
                     {lastFailure && (
                       <p className="text-danger-ink text-[12.5px]">
-                        Last run failed {formatRelative(lastFailure.measuredAt, now)}: {lastFailure.error}
+                        Last run failed {formatRelative(lastFailure.measuredAt, now)}:{' '}
+                        {lastFailure.error}
                       </p>
                     )}
                     {regression?.regressed && (
-                      <p className="text-danger-ink text-[12.5px]">{regression.reasons.join('; ')}.</p>
+                      <p className="text-danger-ink text-[12.5px]">
+                        {regression.reasons.join('; ')}.
+                      </p>
                     )}
 
                     {!latest || !first ? (
@@ -155,9 +175,26 @@ export default async function PerformancePage({ params }: { params: Promise<{ co
                     ) : (
                       <>
                         <MetricRow>
-                          <Delta label="Server response" first={first} latest={latest} read={(r) => r.ttfbMs} unit="ms" />
-                          <Delta label="HTML load" first={first} latest={latest} read={(r) => r.loadMs} unit="ms" />
-                          <Delta label="Resources in HTML" first={first} latest={latest} read={(r) => r.requestCount} />
+                          <Delta
+                            label="Server response"
+                            first={first}
+                            latest={latest}
+                            read={(r) => r.ttfbMs}
+                            unit="ms"
+                          />
+                          <Delta
+                            label="HTML load"
+                            first={first}
+                            latest={latest}
+                            read={(r) => r.loadMs}
+                            unit="ms"
+                          />
+                          <Delta
+                            label="Resources in HTML"
+                            first={first}
+                            latest={latest}
+                            read={(r) => r.requestCount}
+                          />
                           <Delta
                             label="Third-party hosts"
                             first={first}
@@ -174,7 +211,8 @@ export default async function PerformancePage({ params }: { params: Promise<{ co
                         </MetricRow>
                         {first.id !== latest.id && (
                           <p className="text-faint text-[11.5px]">
-                            Struck-through values are from the first run, {formatDate(first.measuredAt)}.
+                            Struck-through values are from the first run,{' '}
+                            {formatDate(first.measuredAt)}.
                           </p>
                         )}
                         {trend.length > 1 && (
@@ -193,10 +231,15 @@ export default async function PerformancePage({ params }: { params: Promise<{ co
                           />
                         )}
                         <details>
-                          <summary className="text-muted cursor-pointer text-[12px]">All runs</summary>
+                          <summary className="text-muted cursor-pointer text-[12px]">
+                            All runs
+                          </summary>
                           <ul className="mt-2 space-y-1">
                             {runs.slice(0, 30).map((run) => (
-                              <li key={run.id} className="text-ink-soft flex flex-wrap gap-x-3 text-[12px] tabular-nums">
+                              <li
+                                key={run.id}
+                                className="text-ink-soft flex flex-wrap gap-x-3 text-[12px] tabular-nums"
+                              >
                                 <span className="text-muted">{formatDateTime(run.measuredAt)}</span>
                                 {run.error ? (
                                   <span className="text-danger-ink">{run.error}</span>

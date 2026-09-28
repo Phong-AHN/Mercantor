@@ -54,7 +54,7 @@ export function StageRail({
             const stages = LINEAR_STAGES.filter((stage) => STAGES[stage].phase === phase);
             return (
               <div key={phase} className="min-w-max">
-                <p className="text-faint mb-2 text-[10.5px] font-semibold uppercase tracking-[0.12em]">
+                <p className="text-muted mb-2 text-[11.5px] font-medium">
                   {STAGE_PHASE_LABEL[phase]}
                 </p>
                 <ol className="flex items-start gap-0">

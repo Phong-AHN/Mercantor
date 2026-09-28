@@ -1298,3 +1298,54 @@ storefront hosts is refused.
 **Also fixed:** `/api/captures/[id]` used to redirect to the bucket, which the app's own CSP
 (`img-src 'self'`) blocks inside an `<img>` - so no before/after image would have rendered. It now
 streams the object from this origin (`readObject`).
+
+---
+
+## Project page UX pass (docs/UI_UX_IMPROVEMENT.md, items A-I)
+
+Audited against the doc, then changed the project shell and Overview tab only. No data, permission,
+API or workflow change; every route is the same.
+
+- **Status band** (`[code]/status-band.tsx`) replaces the blocker banner as the first thing under the
+  header, on every tab. It answers the three questions people open a project for: *What happens
+  next?* (the next-step editor, moved here from the Overview card - same action, same fields),
+  *Is anything stuck?* (health pill plus the health reasons as visible text - they used to exist only
+  in the header pill's hover tooltip - and the open blocker with its owner, age, due date, unblock
+  step and a link to Blockers), *Are we on time for launch?* (days to/past target launch, or
+  "Live since"). The left edge is coloured by health. The header no longer repeats the health pill.
+- **Answers**: all ten stay, same order. `AnswerTile` gained `density="compact"` and `linkAs` (the
+  tiles now use Next's `Link`, so no full page reload). Below `xl` they are a swipeable strip with a
+  right-edge fade; at `xl` a 5x2 grid.
+- **Tabs**: six primary (Overview, Conversation, Blockers, Issues, Site QA, Approvals), the rest under
+  **More** (Access, Assets, Scope, Time & SLA, Events, Invoices, SHOPLINE handoff, Settings). When
+  the current page is under More, the button shows its name; an alert under More puts a dot on it.
+  Labels only: `/activity` is now called **Conversation** and `/timeline` **Events** - URLs unchanged,
+  so bookmarks and links still work. The Conversation count is now open questions (comments with
+  status OPEN or IN_PROGRESS, among those the reader can see - the same set as "Needs an answer"),
+  not every comment ever posted. Fixed a pre-existing bug: the active tab used a plain prefix match,
+  so `/timeline` also lit up Time & SLA; it now matches whole path segments.
+- **`MenuButton`** (new, `packages/ui/src/menu.tsx`) is the one menu in the design system, used by More
+  and by the header. Keyboard: Enter/Space/ArrowDown opens on the first item, arrows/Home/End move,
+  Escape closes and returns focus, Tab closes; outside click closes; disabled items stay focusable
+  so their reason is read.
+- **Header**: Log update (secondary), Move stage (primary), and a "..." menu for Send introduction and
+  Submit to SHOPLINE. Submit is shown disabled with the reason when `unmetHandoffRequirements` (the
+  same check the submit action runs) is not empty. `PageHeader`'s action group lost `shrink-0`: on a
+  390 px screen it used to hold one row wider than the screen and push Move stage off the edge.
+- **Overview**: checklists, then Recent events (links to Events, shows last activity), then Stage
+  history in a collapsible section. Right column: Team, Approvals (one status indicator per row, not a
+  dot plus a pill), and a collapsed "More details" (time by team, connected tools, scope summary). The
+  Next step and Dates cards are gone - both were repeated in the band and the answers.
+- **States**: `[code]/loading.tsx` (tab-body skeleton, shell stays put) and `[code]/error.tsx`
+  ("This section did not load - nothing was changed", with Try again). Empty states now say what to do.
+- **Labels**: sentence case, no tracked uppercase, in `Stat`, the stage-rail phase headings and the
+  Overview; table headers and the sidebar group labels were left as they are.
+
+The "Is anything blocking launch?" answer still links to **Issues**. The audit had suggested Blockers,
+but that answer counts only issues with Launch Blocker severity, which are managed on Issues;
+blockers have their own answer ("What are we waiting for?") and the band.
+
+Visual QA was done against the local Docker stack only (`pnpm infra:up` + `db:seed`), at 1440, 768 and
+390 px, light and dark: blocked, at-risk, on-track and completed projects, a very long merchant name
+and next step, no next step and no target date, the More menu by keyboard, the "..." menu, a More tab
+being current, and a missing project.

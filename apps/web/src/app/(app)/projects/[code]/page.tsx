@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ChevronDown } from 'lucide-react';
 import {
   ACTIVITY_TYPE_LABEL,
   APPROVAL_STATUS_LABEL,
@@ -7,10 +8,8 @@ import {
   formatDate,
   formatDuration,
   formatRelative,
-  STAGES,
   type ProjectStage,
 } from '@relay/core';
-import { can } from '@relay/rbac';
 import {
   Avatar,
   Badge,
@@ -18,27 +17,36 @@ import {
   CardBody,
   CardHeader,
   cn,
-  DetailList,
-  DetailRow,
   Empty,
   PersonCell,
   ProgressBar,
-  Section,
   StageRail,
   StatusPill,
   TeamSplitBar,
   Timeline,
   TimelineItem,
-  TONE_DOT,
   Unassigned,
 } from '@relay/ui';
-import { DueDate } from '@/components/domain';
 import { getProject } from '@/features/projects/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
-import { NextActionCard } from './next-action-card';
 
 export const dynamic = 'force-dynamic';
 
+const PROVIDER_LABEL: Record<string, string> = {
+  SLACK: 'Slack',
+  CLICKUP: 'ClickUp',
+  EMAIL: 'Email',
+};
+
+const LINK = 'text-accent-ink text-[12.5px] font-medium underline-offset-4 hover:underline';
+
+/**
+ * The Overview tab. The next step, health and launch date are in the status
+ * band above every tab, and time figures are in the answers - so this page
+ * does not repeat them. It holds what is only here: checklist progress, what
+ * happened recently, who is on the project, the approval set, and the stage
+ * history.
+ */
 export default async function ProjectOverviewPage({
   params,
 }: {
@@ -66,41 +74,7 @@ export default async function ProjectOverviewPage({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-      <div className="space-y-4">
-        <Card>
-          <CardHeader
-            title="Where this project has been"
-            description="Every stage it has visited, with the time spent in each. Re-work shows as a step behind the current one."
-            actions={
-              <Link
-                href={`${base}/time`}
-                className="text-accent-ink text-[12.5px] font-medium underline-offset-4 hover:underline"
-              >
-                Full time breakdown
-              </Link>
-            }
-          />
-          <CardBody>
-            <StageRail
-              current={project.stage}
-              durations={project.snapshot.stageDurations}
-              visited={visitedStages}
-              currentDurationMs={project.snapshot.time.currentStageMs}
-            />
-          </CardBody>
-        </Card>
-
-        <NextActionCard
-          code={project.code}
-          nextAction={project.nextAction}
-          ownerName={project.nextActionOwner?.name ?? null}
-          ownerId={project.nextActionOwner?.id ?? null}
-          ownerTeam={project.nextActionOwnerTeam}
-          dueDate={project.nextActionDueDate?.toISOString() ?? null}
-          canEdit={can(principal, 'project:update')}
-          now={now.toISOString()}
-        />
-
+      <div className="min-w-0 space-y-4">
         <div className="grid gap-3 sm:grid-cols-3">
           <ChecklistCard
             title="Access"
@@ -137,20 +111,21 @@ export default async function ProjectOverviewPage({
 
         <Card>
           <CardHeader
-            title="Recent activity"
-            description="The last few things that happened, in the words of the people who did them."
+            title="Recent events"
+            description={`Last activity ${formatRelative(project.lastActivityAt, now)}. Recorded by the portal as things happen.`}
             actions={
-              <Link
-                href={`${base}/activity`}
-                className="text-accent-ink text-[12.5px] font-medium underline-offset-4 hover:underline"
-              >
-                Open the feed
+              <Link href={`${base}/timeline`} className={LINK}>
+                All events
               </Link>
             }
           />
           <CardBody>
             {project.activities.length === 0 ? (
-              <Empty title="Nothing has happened yet" className="py-8" />
+              <Empty
+                title="Nothing recorded yet"
+                description="Stage moves, blockers, approvals and updates will appear here as they happen. Log an update to start the record."
+                className="py-8"
+              />
             ) : (
               <Timeline>
                 {project.activities.slice(0, 7).map((event, index, list) => (
@@ -171,10 +146,43 @@ export default async function ProjectOverviewPage({
             )}
           </CardBody>
         </Card>
+
+        <Card>
+          <details open className="group">
+            <summary className="border-line hover:bg-surface-2 focus-visible:ring-accent flex cursor-pointer list-none items-start justify-between gap-3 rounded-t-[var(--radius-lg)] border-b px-5 py-4 focus-visible:outline-none focus-visible:ring-2 group-[:not([open])]:rounded-b-[var(--radius-lg)] group-[:not([open])]:border-b-0 [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0">
+                <span className="text-ink block text-[15px] font-semibold leading-6">
+                  Stage history
+                </span>
+                <span className="text-muted mt-0.5 block text-[13px]">
+                  Every stage visited, with the time spent in each. Re-work shows as a step behind
+                  the current one.
+                </span>
+              </span>
+              <ChevronDown
+                className="text-muted mt-1 size-4 shrink-0 transition-transform group-open:rotate-180"
+                aria-hidden
+              />
+            </summary>
+            <CardBody>
+              <StageRail
+                current={project.stage}
+                durations={project.snapshot.stageDurations}
+                visited={visitedStages}
+                currentDurationMs={project.snapshot.time.currentStageMs}
+              />
+              <p className="mt-3">
+                <Link href={`${base}/time`} className={LINK}>
+                  Full time breakdown
+                </Link>
+              </p>
+            </CardBody>
+          </details>
+        </Card>
       </div>
 
       {/* ---- right rail ------------------------------------------------- */}
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <Card>
           <CardHeader title="Who is on this" />
           <CardBody className="space-y-3">
@@ -185,11 +193,9 @@ export default async function ProjectOverviewPage({
             <PersonRow label="SHOPLINE solutions engineer" person={project.people.shoplineSe} />
 
             <div className="border-line border-t pt-3">
-              <p className="text-faint mb-2 text-[11px] font-semibold uppercase tracking-wide">
-                Merchant contacts
-              </p>
+              <h3 className="text-muted mb-2 text-[12px] font-medium">Merchant contacts</h3>
               {project.merchantDetail.contacts.length === 0 ? (
-                <p className="text-faint text-[12.5px]">No contact recorded yet.</p>
+                <p className="text-muted text-[12.5px]">No contact recorded yet.</p>
               ) : (
                 <ul className="space-y-2.5">
                   {project.merchantDetail.contacts.map((contact) => (
@@ -200,7 +206,7 @@ export default async function ProjectOverviewPage({
                           {contact.name}
                           {contact.isPrimary && (
                             <Badge tone="warning" size="sm" className="ml-1.5 align-middle">
-                              primary
+                              Primary
                             </Badge>
                           )}
                         </p>
@@ -223,60 +229,11 @@ export default async function ProjectOverviewPage({
         </Card>
 
         <Card>
-          <CardHeader title="Dates & duration" />
-          <CardBody>
-            <DetailList>
-              <DetailRow label="Started">{formatDate(project.startDate)}</DetailRow>
-              <DetailRow label="Target launch">
-                <DueDate date={project.targetLaunchDate} now={now} />
-              </DetailRow>
-              {project.actualLaunchDate && (
-                <DetailRow label="Went live">{formatDate(project.actualLaunchDate)}</DetailRow>
-              )}
-              <DetailRow label="Project age">
-                <span className="tabular">
-                  {formatDuration(project.snapshot.time.ageMs, { compact: true })}
-                </span>
-              </DetailRow>
-              <DetailRow label={`In ${STAGES[project.stage].shortLabel}`}>
-                <span
-                  className={cn(
-                    'tabular',
-                    project.snapshot.time.currentStageOverTarget && 'text-danger-ink',
-                  )}
-                >
-                  {formatDuration(project.snapshot.time.currentStageMs, { compact: true })}
-                </span>
-              </DetailRow>
-              <DetailRow label="Last activity">
-                {formatRelative(project.lastActivityAt, now)}
-              </DetailRow>
-            </DetailList>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader
-            title="Where the time went"
-            description="Blocked time is charged to whoever owned the blocker."
-          />
-          <CardBody>
-            <TeamSplitBar
-              byTeam={project.snapshot.time.byTeam}
-              format={(ms) => formatDuration(ms, { compact: true })}
-            />
-          </CardBody>
-        </Card>
-
-        <Card>
           <CardHeader
             title="Approvals"
             actions={
-              <Link
-                href={`${base}/approvals`}
-                className="text-accent-ink text-[12.5px] font-medium underline-offset-4 hover:underline"
-              >
-                Manage
+              <Link href={`${base}/approvals`} className={LINK}>
+                Manage approvals
               </Link>
             }
           />
@@ -287,23 +244,11 @@ export default async function ProjectOverviewPage({
                 const status = approval?.status ?? 'NOT_REQUESTED';
                 return (
                   <li key={type} className="flex items-center justify-between gap-3">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span
-                        className={cn(
-                          'size-1.5 shrink-0 rounded-full',
-                          TONE_DOT[APPROVAL_STATUS_LABEL[status].tone],
-                        )}
-                      />
-                      <span className="text-ink-soft truncate text-[12.5px]">
-                        {APPROVAL_TYPE_LABEL[type].label}
-                      </span>
+                    <span className="text-ink-soft min-w-0 truncate text-[12.5px]">
+                      {APPROVAL_TYPE_LABEL[type].label}
                     </span>
                     <span className="shrink-0 text-right">
-                      <StatusPill
-                        descriptor={APPROVAL_STATUS_LABEL[status]}
-                        size="sm"
-                        dot={false}
-                      />
+                      <StatusPill descriptor={APPROVAL_STATUS_LABEL[status]} size="sm" />
                       {approval?.decidedAt && (
                         <span className="text-faint block text-[10.5px]">
                           {formatDate(approval.decidedAt)}
@@ -317,45 +262,77 @@ export default async function ProjectOverviewPage({
           </CardBody>
         </Card>
 
-        {project.integrations.length > 0 && (
-          <Card>
-            <CardHeader title="Connected" description="Where this project also lives." />
-            <CardBody>
-              <ul className="space-y-2">
-                {project.integrations.map((link) => (
-                  <li key={link.id}>
-                    <a
-                      href={link.externalUrl ?? '#'}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="hover:bg-surface-2 flex items-center justify-between gap-2 rounded-[var(--radius-sm)] px-1 py-1.5 transition-colors"
-                    >
-                      <span className="min-w-0">
-                        <span className="text-faint block text-[11px] font-medium uppercase">
-                          {link.provider}
-                        </span>
-                        <span className="text-ink block truncate text-[12.5px]">
-                          {link.displayName ?? link.externalId}
-                        </span>
-                      </span>
-                      <Badge tone={link.isActive ? 'success' : 'muted'} size="sm">
-                        {link.isActive ? 'linked' : 'off'}
-                      </Badge>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </CardBody>
-          </Card>
-        )}
+        <Card>
+          <details className="group">
+            <summary className="hover:bg-surface-2 focus-visible:ring-accent flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-lg)] px-5 py-4 focus-visible:outline-none focus-visible:ring-2 group-open:rounded-b-none [&::-webkit-details-marker]:hidden">
+              <span>
+                <span className="text-ink block text-[15px] font-semibold leading-6">
+                  More details
+                </span>
+                <span className="text-muted block text-[13px]">
+                  Time by team{project.integrations.length > 0 ? ', connected tools' : ''}
+                  {project.scopeSummary ? ', scope summary' : ''}
+                </span>
+              </span>
+              <ChevronDown
+                className="text-muted size-4 shrink-0 transition-transform group-open:rotate-180"
+                aria-hidden
+              />
+            </summary>
+            <div className="border-line space-y-5 border-t px-5 py-4">
+              <section>
+                <h3 className="text-ink text-[13px] font-semibold">Where the time went</h3>
+                <p className="text-muted mb-2 text-[12.5px]">
+                  Blocked time is charged to whoever owned the blocker.{' '}
+                  {formatDuration(project.snapshot.time.ageMs, { compact: true })} in total.
+                </p>
+                <TeamSplitBar
+                  byTeam={project.snapshot.time.byTeam}
+                  format={(ms) => formatDuration(ms, { compact: true })}
+                />
+              </section>
 
-        {project.scopeSummary && (
-          <Section title="Scope summary">
-            <p className="border-line bg-surface-1 text-ink-soft rounded-[var(--radius-md)] border p-4 text-[13px] leading-5">
-              {project.scopeSummary}
-            </p>
-          </Section>
-        )}
+              {project.integrations.length > 0 && (
+                <section>
+                  <h3 className="text-ink mb-1 text-[13px] font-semibold">Connected</h3>
+                  <ul className="space-y-1">
+                    {project.integrations.map((link) => (
+                      <li key={link.id}>
+                        <a
+                          href={link.externalUrl ?? '#'}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="hover:bg-surface-2 flex items-center justify-between gap-2 rounded-[var(--radius-sm)] px-1 py-1.5 transition-colors"
+                        >
+                          <span className="min-w-0">
+                            <span className="text-muted block text-[11.5px] font-medium">
+                              {PROVIDER_LABEL[link.provider] ?? link.provider}
+                            </span>
+                            <span className="text-ink block truncate text-[12.5px]">
+                              {link.displayName ?? link.externalId}
+                            </span>
+                          </span>
+                          <Badge tone={link.isActive ? 'success' : 'muted'} size="sm">
+                            {link.isActive ? 'Linked' : 'Off'}
+                          </Badge>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {project.scopeSummary && (
+                <section>
+                  <h3 className="text-ink mb-1 text-[13px] font-semibold">Scope summary</h3>
+                  <p className="text-ink-soft whitespace-pre-line text-[13px] leading-5">
+                    {project.scopeSummary}
+                  </p>
+                </section>
+              )}
+            </div>
+          </details>
+        </Card>
       </div>
     </div>
   );
@@ -395,7 +372,7 @@ function ChecklistCard({
   return (
     <Link
       href={href}
-      className="border-line bg-surface-1 shadow-card hover:shadow-raised block rounded-[var(--radius-lg)] border p-4 transition-shadow"
+      className="border-line bg-surface-1 shadow-card hover:shadow-raised focus-visible:ring-accent block rounded-[var(--radius-lg)] border p-4 transition-shadow focus-visible:outline-none focus-visible:ring-2"
     >
       <div className="flex items-baseline justify-between">
         <p className="text-ink text-[12.5px] font-medium">{title}</p>
@@ -412,7 +389,11 @@ function ChecklistCard({
         label={`${title}: ${done} of ${total}`}
       />
       <p className={cn('mt-2 text-[11.5px]', blocking > 0 ? 'text-warning-ink' : 'text-muted')}>
-        {blocking > 0 ? `${blocking} ${blockingLabel}` : 'Nothing outstanding'}
+        {total === 0
+          ? 'No items yet'
+          : blocking > 0
+            ? `${blocking} ${blockingLabel}`
+            : 'Nothing outstanding'}
       </p>
     </Link>
   );

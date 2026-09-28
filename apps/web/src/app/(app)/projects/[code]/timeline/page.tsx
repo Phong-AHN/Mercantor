@@ -32,13 +32,17 @@ export default async function ProjectTimelinePage({
   return (
     <Card>
       <CardHeader
-        title="Communication history"
+        title="Events"
         count={project.activities.length}
-        description="Every recorded event on this project, newest first. Written by the portal as things happen - not typed in afterwards."
+        description="Every recorded event on this project, newest first: stage moves, blockers, approvals, updates. Written by the portal as things happen - not typed in afterwards. Discussion lives on the Conversation tab."
       />
       <CardBody>
         {project.activities.length === 0 ? (
-          <Empty title="Nothing recorded yet" className="py-12" />
+          <Empty
+            title="Nothing recorded yet"
+            description="Events appear here as soon as something happens on the project, such as a stage move or a logged update."
+            className="py-12"
+          />
         ) : (
           <div className="space-y-6">
             {[...byDay.entries()].map(([day, events]) => (

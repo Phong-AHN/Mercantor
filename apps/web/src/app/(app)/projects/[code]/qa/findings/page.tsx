@@ -39,7 +39,9 @@ export default async function ProjectFindingsPage({
         base={base}
         raw={raw}
         bySeverity={list.bySeverity}
-        people={internal ? people.all.map((person) => ({ id: person.id, name: person.name })) : undefined}
+        people={
+          internal ? people.all.map((person) => ({ id: person.id, name: person.name })) : undefined
+        }
         showVisibility={internal}
       />
       <Card>

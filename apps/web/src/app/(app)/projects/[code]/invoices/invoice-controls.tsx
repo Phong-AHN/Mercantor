@@ -168,7 +168,8 @@ function InvoiceDialog({
                 ...f,
                 amount,
                 milestone:
-                  pct !== null && (f.milestone.trim() === '' || AUTO_MILESTONE_PATTERN.test(f.milestone))
+                  pct !== null &&
+                  (f.milestone.trim() === '' || AUTO_MILESTONE_PATTERN.test(f.milestone))
                     ? autoMilestoneName(pct)
                     : f.milestone,
               }));
@@ -267,7 +268,10 @@ export function InvoiceControls({
   const remove = useAction(deleteInvoiceAction, { onSuccess: () => setDialog(null) });
 
   const outstanding = invoice.amount - invoice.paid;
-  const paidAfterPct = contractSharePct((invoice.paid + Number(amount || 0)).toString(), contractValue);
+  const paidAfterPct = contractSharePct(
+    (invoice.paid + Number(amount || 0)).toString(),
+    contractValue,
+  );
   const paidAfterHint =
     paidAfterPct === null ? undefined : `Brings the project to ${formatPct(paidAfterPct)} paid`;
 
