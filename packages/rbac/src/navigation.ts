@@ -79,6 +79,20 @@ const GROUPS: readonly NavGroup[] = [
         description: 'Escalations by severity and owner.',
       },
       {
+        href: '/qa',
+        label: 'Site QA',
+        icon: 'ScanSearch',
+        permissions: ['qa:read'],
+        description: 'Storefront before/after, measured results and QA status.',
+      },
+      {
+        href: '/findings',
+        label: 'Findings',
+        icon: 'ListChecks',
+        permissions: ['finding:read'],
+        description: 'Content, link, image and performance findings across projects.',
+      },
+      {
         href: '/approvals',
         label: 'Approvals',
         icon: 'BadgeCheck',
@@ -193,6 +207,13 @@ const MERCHANT_GROUPS: readonly NavGroup[] = [
         permissions: ['approval:read'],
         badge: 'approvals',
         description: 'Designs and builds waiting on you.',
+      },
+      {
+        href: '/portal/qa',
+        label: 'Site review',
+        icon: 'ScanSearch',
+        permissions: ['qa:read'],
+        description: 'Before and after, results, and what we found.',
       },
       {
         href: '/portal/activity',

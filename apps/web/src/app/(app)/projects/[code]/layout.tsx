@@ -1,6 +1,14 @@
 import { notFound } from 'next/navigation';
 import { ExternalLink, Store } from 'lucide-react';
-import { formatDate, formatDuration, isAppError, TEAM_LABEL, type Answer } from '@relay/core';
+import {
+  formatDate,
+  formatDuration,
+  isAppError,
+  OPEN_FINDING_STATUSES,
+  TEAM_LABEL,
+  type Answer,
+} from '@relay/core';
+import { db } from '@relay/db';
 import { can, writableVisibilities } from '@relay/rbac';
 import {
   AnswerTile,
@@ -56,6 +64,14 @@ export default async function ProjectLayout({
     (item) => item.required && item.status !== 'APPROVED',
   ).length;
 
+  const openFindings = can(principal, 'qa:read')
+    ? await db.finding.groupBy({
+        by: ['severity'],
+        where: { projectId: project.id, status: { in: [...OPEN_FINDING_STATUSES] } },
+        _count: { _all: true },
+      })
+    : null;
+
   const base = `/projects/${project.code}`;
   const tabs: TabItem[] = [
     { href: base, label: 'Overview' },
@@ -76,6 +92,16 @@ export default async function ProjectLayout({
       count: openIssues.length,
       alert: openIssues.some((issue) => issue.severity === 'LAUNCH_BLOCKER'),
     },
+    ...(openFindings
+      ? [
+          {
+            href: `${base}/qa`,
+            label: 'Site QA',
+            count: openFindings.reduce((sum, group) => sum + group._count._all, 0),
+            alert: openFindings.some((group) => group.severity === 'CRITICAL'),
+          },
+        ]
+      : []),
     { href: `${base}/approvals`, label: 'Approvals', count: pendingApprovals },
     ...(can(principal, 'invoice:read')
       ? [{ href: `${base}/invoices`, label: 'Invoices', alert: project.snapshot.invoice.overdue }]

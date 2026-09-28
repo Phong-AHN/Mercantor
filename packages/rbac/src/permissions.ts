@@ -42,6 +42,16 @@ export const PERMISSIONS = [
   'issue:create',
   'issue:manage',
 
+  // Site QA: storefront pages, findings, before/after captures, performance
+  'qa:read',
+  'qa:manage',
+  'finding:read',
+  'finding:create',
+  'finding:manage',
+  /** Decides what the merchant sees: a finding, capture pair or showcase is
+   * internal until someone holding this publishes it. */
+  'finding:approve',
+
   // Money
   'invoice:read',
   'invoice:manage',

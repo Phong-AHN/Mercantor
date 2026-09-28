@@ -71,6 +71,9 @@ importers:
       '@relay/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@relay/storefront':
+        specifier: workspace:*
+        version: link:../../packages/storefront
       '@relay/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -254,6 +257,15 @@ importers:
       '@relay/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/storefront:
+    dependencies:
+      '@relay/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
 
   packages/ui:
     dependencies:

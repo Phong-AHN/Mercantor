@@ -29,6 +29,11 @@ const AHN_DELIVERY: Permission[] = [
   'issue:read',
   'issue:create',
   'issue:manage',
+  'qa:read',
+  'qa:manage',
+  'finding:read',
+  'finding:create',
+  'finding:manage',
   'approval:read',
   'approval:request',
   'integration:read',
@@ -54,6 +59,9 @@ const SHOPLINE_BASE: Permission[] = [
   'comment:create',
   'issue:read',
   'issue:create',
+  'qa:read',
+  'finding:read',
+  'finding:create',
   'approval:read',
   'approval:decide_shopline',
   'handoff:decide',
@@ -86,6 +94,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'invoice:read',
     'invoice:manage',
     'approval:decide_internal',
+    'finding:approve',
     'approval:decide_merchant',
     'handoff:submit',
     'introduction:send',
@@ -104,6 +113,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'invoice:read',
     'invoice:manage',
     'approval:decide_internal',
+    'finding:approve',
     // A PM may record a merchant decision that arrived by email or on a call.
     // The approval row keeps who recorded it and who decided it apart.
     'approval:decide_merchant',
@@ -129,6 +139,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'invoice:read',
     'invoice:manage',
     'approval:decide_internal',
+    'finding:approve',
     'approval:decide_merchant',
     'handoff:submit',
     'introduction:send',
@@ -142,6 +153,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'project:assign',
     'merchant:manage',
     'issue:manage',
+    'finding:manage',
     'comment:manage',
     'integration:manage',
     'user:manage',
@@ -153,7 +165,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   SHOPLINE_ACCOUNT_MANAGER: [...SHOPLINE_BASE, 'project:assign', 'comment:manage'],
 
   // Technical counterpart: same visibility, no commercial or assignment rights.
-  SHOPLINE_SOLUTIONS_ENGINEER: [...SHOPLINE_BASE, 'issue:manage'],
+  SHOPLINE_SOLUTIONS_ENGINEER: [...SHOPLINE_BASE, 'issue:manage', 'finding:manage'],
 
   // Optional limited access: upload assets, provide access, review designs,
   // give feedback, approve. Nothing else - and never anything commercial.
@@ -171,6 +183,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'approval:read',
     'approval:decide_merchant',
     'scope:read',
+    // Only ever served what an agency user published: the queries filter on
+    // clientVisibleAt server-side, so this grants the surface, not the data.
+    'qa:read',
+    'finding:read',
   ],
 };
 

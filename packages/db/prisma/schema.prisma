@@ -497,6 +497,15 @@ model User {
   auditLogs                      AuditLog[]
   savedViews                     SavedView[]
   introEmailsSent                IntroductionEmail[]
+  storefrontConfirmations        StorefrontProfile[]       @relation("StorefrontConfirmedBy")
+  crawlsRequested                CrawlRun[]                @relation("CrawlRequester")
+  findingsAssigned               Finding[]                 @relation("FindingAssignee")
+  findingsReviewed               Finding[]                 @relation("FindingReviewer")
+  findingComments                FindingComment[]
+  findingEvents                  FindingEvent[]
+  capturesRequested              PageCapture[]             @relation("CaptureRequester")
+  metricsEntered                 ShowcaseMetric[]          @relation("MetricEnteredBy")
+  designDecisions                DesignDecision[]          @relation("DecisionDecidedBy")
 
   @@index([organizationId])
   @@index([role])
@@ -701,6 +710,16 @@ model Project {
   outbox        OutboxMessage[]
   notifications Notification[]
   auditLogs     AuditLog[]
+
+  storefront      StorefrontProfile?
+  crawlRuns       CrawlRun[]
+  storefrontPages StorefrontPage[]
+  findings        Finding[]
+  captures        PageCapture[]
+  perfTests       PerfTest[]
+  showcaseMetrics ShowcaseMetric[]
+  designDecisions DesignDecision[]
+  comparisons     ComparisonPair[]
 
   @@index([stage])
   @@index([health])
@@ -1285,4 +1304,743 @@ model SavedView {
 
   @@unique([ownerId, name])
   @@index([isShared])
+}
+
+// ---------------------------------------------------------------------------
+// Storefront QA
+//
+// A migration is judged on the storefront that comes out of it, and that
+// judgement has been living in screenshots pasted into Slack and a spreadsheet
+// of typos. These models make it part of the project record: what the
+// storefront is, what a scan found, who decided what to do about it, and what
+// the pages looked like before and after.
+//
+// Two rules run through the whole area:
+//
+//   1. NOTHING AUTOMATED IS CLIENT-VISIBLE UNTIL A PERSON SAYS SO. Scans and
+//      the model propose; `clientVisibleAt` is only ever set by a reviewer.
+//   2. A REPEATED PROBLEM IS ONE FINDING. Scans re-run on a schedule and would
+//      otherwise file the same typo every morning, so every finding carries a
+//      `fingerprint` that is stable across runs.
+// ---------------------------------------------------------------------------
+
+enum StorefrontPlatform {
+  SHOPIFY
+  SHOPLINE
+  WOOCOMMERCE
+  MAGENTO
+  BIGCOMMERCE
+  WIX
+  SQUARESPACE
+  CUSTOM
+  UNKNOWN
+}
+
+/// How much of the theme is the merchant's own work. It decides how much of a
+/// migration can be lifted across and how much has to be rebuilt, so it is the
+/// first thing anyone asks about a new project.
+enum StorefrontBuild {
+  STANDARD_THEME
+  CUSTOMIZED_THEME
+  CUSTOM_STOREFRONT
+  UNKNOWN
+}
+
+/// Detection is a suggestion until somebody who has looked at the store agrees
+/// with it. Three states rather than a boolean, because a corrected value is
+/// worth distinguishing from one that was right first time - that difference is
+/// how the detector gets better.
+enum DetectionState {
+  SUGGESTED
+  CONFIRMED
+  CORRECTED
+}
+
+enum CrawlTrigger {
+  MANUAL
+  SCHEDULED
+  POST_DEPLOY
+}
+
+enum CrawlStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PageType {
+  HOME
+  COLLECTION
+  PRODUCT
+  CART
+  CHECKOUT
+  SEARCH
+  ACCOUNT
+  BLOG
+  ARTICLE
+  POLICY
+  CONTENT
+  OTHER
+}
+
+/// Why a page is or is not in the last scan. `EXCLUDED` is a human decision and
+/// survives re-crawls; everything else is what the crawler found.
+enum PageState {
+  ACCESSIBLE
+  BLOCKED
+  NOT_FOUND
+  ERROR
+  EXCLUDED
+}
+
+enum FindingCategory {
+  SPELLING
+  GRAMMAR
+  BROKEN_LINK
+  MISSING_IMAGE
+  MISSING_ALT
+  META_TITLE
+  META_DESCRIPTION
+  PLACEHOLDER_TEXT
+  CONTENT_INCONSISTENCY
+  MOBILE_LAYOUT
+  RECOMMENDATION
+  CONSOLE_ERROR
+  NETWORK_ERROR
+  PERFORMANCE
+  OTHER
+}
+
+enum FindingSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+/// The workflow the requirements name, in order. `DISMISSED` sits outside the
+/// line: it is an ending, not a step.
+enum FindingStatus {
+  NEW
+  REVIEWED
+  IN_PROGRESS
+  READY_FOR_VERIFICATION
+  RESOLVED
+  DISMISSED
+}
+
+/// Who says so. `AI` is separate from `AUTOMATED` deliberately: a broken link is
+/// a fact a crawler established, a clumsy sentence is a model's opinion, and a
+/// reviewer should be able to tell them apart at a glance.
+enum FindingSource {
+  AUTOMATED
+  AI
+  MANUAL
+}
+
+enum VerificationResult {
+  PASSED
+  FAILED
+  INCONCLUSIVE
+  NOT_POSSIBLE
+}
+
+enum CaptureViewport {
+  DESKTOP
+  MOBILE
+}
+
+/// Which side of the work a capture shows. Stored rather than inferred from
+/// dates: "before" is a decision about the project, and a capture taken late can
+/// still be the before shot of a page nobody had touched yet.
+enum CapturePhase {
+  BEFORE
+  AFTER
+}
+
+enum PerfTemplate {
+  HOME
+  COLLECTION
+  PRODUCT
+  CART
+  CHECKOUT
+}
+
+/// What the portal knows about the storefront itself, and who confirmed it.
+model StorefrontProfile {
+  id        String @id @default(uuid(7)) @db.Uuid
+  projectId String @unique @db.Uuid
+
+  /// The live storefront being worked on. Scans and captures are relative to it.
+  storefrontUrl String
+  /// Where the store is moving to, once there is something to look at.
+  destinationUrl String?
+
+  sourcePlatform      StorefrontPlatform @default(UNKNOWN)
+  destinationPlatform StorefrontPlatform @default(SHOPLINE)
+  build               StorefrontBuild    @default(UNKNOWN)
+  themeName           String?
+  themeVersion        String?
+
+  /// The signals the detector matched on - script hosts, meta generators, cookie
+  /// names, asset paths. Kept so a wrong guess can be explained and the rule
+  /// behind it fixed, rather than re-argued from scratch.
+  detectionSignals Json?
+  detection        DetectionState @default(SUGGESTED)
+  detectedAt       DateTime?      @db.Timestamptz(3)
+  confirmedById    String?        @db.Uuid
+  confirmedAt      DateTime?      @db.Timestamptz(3)
+
+  /// Apps and third-party integrations found on the storefront, each with the
+  /// evidence that found it. Objects, not a list of names: the name alone does
+  /// not tell a developer where it is loaded from.
+  detectedApps Json?
+
+  // ── How the project is presented ────────────────────────────────────────
+  // The reference project page opens with a sentence about the merchant, not a
+  // status field: "634 reviews and a Flavor of Georgia win, introduced by a
+  // bottle slideshow." These carry that.
+
+  /// One line naming what this migration is about.
+  headline String?
+  /// Two or three sentences under it.
+  summary String?
+  /// Which of the three engagement kinds this is. Drives the filters and their
+  /// counts on the project index.
+  engagementType EngagementType?
+  /// "Storefront redesign", "CRO / UX audit", "Data migration" - the chips on
+  /// the card. Free text because the service list changes faster than a deploy.
+  serviceTags String[] @default([])
+  /// What the destination is once built: "Shopline - custom theme",
+  /// "Shopline - storefront design proposed". A sentence, not an enum, because
+  /// it is the state of the work rather than a property of the platform.
+  destinationBuildLabel String?
+
+  /// Set when the project may appear on the shared project index. Null keeps it
+  /// internal however complete it looks - publishing is a decision, not a
+  /// side effect of finishing the work.
+  publishedAt DateTime? @db.Timestamptz(3)
+
+  /// Crawl policy. `maxPages` is a guard rail, not a target - a crawl that would
+  /// walk 40,000 product URLs is almost always a mistake in the include rules
+  /// rather than a store that size.
+  maxPages        Int      @default(300)
+  includePatterns String[] @default([])
+  excludePatterns String[] @default([])
+  /// Minutes between scheduled crawls. Null means on demand only.
+  scanIntervalMinutes Int?
+  lastScheduledAt     DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  confirmedBy User?   @relation("StorefrontConfirmedBy", fields: [confirmedById], references: [id])
+}
+
+/// One pass over the storefront. Rows are kept: "when did this appear?" is
+/// answerable only if every run leaves a record of what it saw.
+model CrawlRun {
+  id        String @id @default(uuid(7)) @db.Uuid
+  projectId String @db.Uuid
+
+  trigger CrawlTrigger @default(MANUAL)
+  status  CrawlStatus  @default(QUEUED)
+
+  requestedById String?   @db.Uuid
+  startedAt     DateTime? @db.Timestamptz(3)
+  finishedAt    DateTime? @db.Timestamptz(3)
+
+  /// Whether a sitemap was found and used. A crawl that fell back to following
+  /// links covers less, and the report should say so rather than imply the store
+  /// has fewer pages than it does.
+  sitemapUrl       String?
+  pagesDiscovered  Int     @default(0)
+  pagesScanned     Int     @default(0)
+  pagesUnreachable Int     @default(0)
+  findingsOpened   Int     @default(0)
+  findingsResolved Int     @default(0)
+
+  /// Why it stopped early, in words somebody can act on.
+  error String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedBy User?      @relation("CrawlRequester", fields: [requestedById], references: [id])
+  scans       PageScan[]
+  findings    Finding[]
+
+  @@index([projectId, createdAt])
+  @@index([status])
+}
+
+/// A URL the storefront has, as opposed to a URL one crawl happened to see.
+/// Survives re-crawls, so inclusion decisions, page-type corrections and finding
+/// history have something stable to hang from.
+model StorefrontPage {
+  id        String @id @default(uuid(7)) @db.Uuid
+  projectId String @db.Uuid
+
+  url String
+  /// Set when the page declares a canonical that differs from its own URL - the
+  /// usual reason one product appears three times in a crawl.
+  canonicalUrl String?
+  pageType     PageType @default(OTHER)
+  /// True once a person has set the type by hand, so the classifier stops
+  /// overwriting it on the next run.
+  pageTypeConfirmed Boolean   @default(false)
+  title             String?
+  state             PageState @default(ACCESSIBLE)
+  lastHttpStatus    Int?
+
+  /// Excluded pages stay in the table and out of every scan. Checkout is the
+  /// standing example: measurable only as far as the platform allows, and not
+  /// somewhere to send a crawler on a schedule.
+  includeInScans Boolean @default(true)
+  excludedReason String?
+
+  firstSeenAt DateTime @default(now()) @db.Timestamptz(3)
+  lastSeenAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scans     PageScan[]
+  findings  Finding[]
+  captures  PageCapture[]
+  perfTests PerfTest[]
+
+  @@unique([projectId, url])
+  @@index([projectId, pageType])
+  @@index([projectId, state])
+}
+
+/// What one crawl saw on one page. The extracted content is kept because the
+/// findings reference it: "the exact text, and where on the page" is only
+/// answerable if the text was stored with the run that flagged it.
+model PageScan {
+  id         String @id @default(uuid(7)) @db.Uuid
+  crawlRunId String @db.Uuid
+  pageId     String @db.Uuid
+
+  httpStatus Int?
+  /// Server response time and full load, in milliseconds. Cheap to record on
+  /// every scan, and enough to spot a page that got slower without running the
+  /// full performance test.
+  ttfbMs Int?
+  loadMs Int?
+
+  title           String?
+  metaDescription String?
+  h1              String?
+  wordCount       Int?
+  /// The visible text the checks ran against, trimmed of navigation and footer
+  /// so the same header does not produce the same finding on every page.
+  extractedText String?
+
+  imageCount       Int @default(0)
+  imagesMissingAlt Int @default(0)
+  internalLinks    Int @default(0)
+  brokenLinks      Int @default(0)
+
+  /// Console errors and failed requests as the browser reported them.
+  consoleErrors  Json?
+  failedRequests Json?
+
+  scannedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  crawlRun CrawlRun       @relation(fields: [crawlRunId], references: [id], onDelete: Cascade)
+  page     StorefrontPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([crawlRunId, pageId])
+  @@index([pageId, scannedAt])
+}
+
+/// Something worth fixing, and the record of what was decided about it.
+model Finding {
+  id        String @id @default(uuid(7)) @db.Uuid
+  projectId String @db.Uuid
+  /// QA-12 within the project, so it can be said out loud on a call.
+  reference String
+
+  pageId String? @db.Uuid
+  /// Kept alongside the relation because a finding outlives the page row when a
+  /// URL disappears, and a report still has to say which URL it was about.
+  url      String
+  pageType PageType @default(OTHER)
+
+  category FindingCategory
+  severity FindingSeverity @default(MEDIUM)
+  source   FindingSource   @default(AUTOMATED)
+  /// Which rule or prompt produced it - `spelling.dictionary`, `links.broken`,
+  /// `ai.content-review`. The unit of "turn this check off".
+  detector String
+
+  title String
+  /// What to do about it, in the imperative. Empty where the fix is obvious from
+  /// the evidence.
+  recommendation String?
+
+  /// The proof. `evidenceText` is the copy exactly as published,
+  /// `evidenceContext` locates it (selector, heading, region), `suggestion` is
+  /// the correction proposed. A finding a reviewer cannot check is noise.
+  evidenceText    String?
+  evidenceContext Json?
+  suggestion      String?
+  /// Screenshot of the problem, as a storage key. Null for text-only findings
+  /// such as a missing meta description.
+  evidenceImageKey String?
+
+  /// 0-100, and only ever set by the AI source. A deterministic rule either
+  /// found a broken link or it did not.
+  confidence Int?
+
+  status FindingStatus @default(NEW)
+  /// Stable across runs: category, page, and a normalised form of the evidence.
+  /// Re-running a scan updates the existing row through this, which is what
+  /// stops a daily crawl filing the same typo thirty times.
+  fingerprint String
+
+  assigneeId   String?   @db.Uuid
+  reviewedById String?   @db.Uuid
+  reviewedAt   DateTime? @db.Timestamptz(3)
+  /// Set by a reviewer, never by a scan. Until it is set, the client sees
+  /// nothing of this finding.
+  clientVisibleAt DateTime? @db.Timestamptz(3)
+
+  /// A finding marked as a false positive stays suppressed for its fingerprint
+  /// until somebody clears the mark, so the same wrong call does not come back
+  /// every morning.
+  falsePositive       Boolean @default(false)
+  falsePositiveReason String?
+
+  firstSeenAt DateTime @default(now()) @db.Timestamptz(3)
+  lastSeenAt  DateTime @default(now()) @db.Timestamptz(3)
+  /// How many scans have seen it. A count of one on a two-week-old finding means
+  /// it was fixed, or was never real.
+  occurrences Int @default(1)
+
+  /// The re-check that ran when the fix was marked ready.
+  verifiedAt         DateTime?           @db.Timestamptz(3)
+  verificationResult VerificationResult?
+  verificationNote   String?
+
+  firstCrawlRunId String? @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  page          StorefrontPage?  @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  assignee      User?            @relation("FindingAssignee", fields: [assigneeId], references: [id])
+  reviewedBy    User?            @relation("FindingReviewer", fields: [reviewedById], references: [id])
+  firstCrawlRun CrawlRun?        @relation(fields: [firstCrawlRunId], references: [id], onDelete: SetNull)
+  comments      FindingComment[]
+  events        FindingEvent[]
+
+  @@unique([projectId, reference])
+  @@unique([projectId, fingerprint])
+  @@index([projectId, status])
+  @@index([projectId, severity])
+  @@index([projectId, category])
+  @@index([assigneeId, status])
+  @@index([clientVisibleAt])
+}
+
+/// Discussion on one finding. Agency-only by default; a comment joins the client
+/// conversation only when it is marked visible.
+model FindingComment {
+  id        String @id @default(uuid(7)) @db.Uuid
+  findingId String @db.Uuid
+  authorId  String @db.Uuid
+
+  body          String
+  clientVisible Boolean @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  finding Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
+
+  @@index([findingId, createdAt])
+}
+
+/// Every change of hands: status, severity, assignee, visibility. The audit the
+/// requirements ask for - "trace when an issue appeared and whether a change
+/// resolved it" - is this table read in order.
+model FindingEvent {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  findingId String  @db.Uuid
+  actorId   String? @db.Uuid
+
+  field     String
+  fromValue String?
+  toValue   String?
+  note      String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  finding Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  actor   User?   @relation(fields: [actorId], references: [id])
+
+  @@index([findingId, createdAt])
+}
+
+/// One screenshot of one page at one width. Never overwritten: the comparison is
+/// only honest if every earlier capture is still there to compare against.
+model PageCapture {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @db.Uuid
+  pageId    String? @db.Uuid
+
+  url      String
+  phase    CapturePhase
+  viewport CaptureViewport
+  /// The rendered width and the full captured height, so a comparison can state
+  /// its conditions rather than implying two shots are alike.
+  width  Int
+  height Int?
+
+  /// Object-storage key. Screenshots are large and numerous; they belong in
+  /// object storage with a key here, not in the database.
+  storageKey String
+  fileSize   Int?
+
+  /// The stage the project was in when this was taken, frozen at capture time. A
+  /// project that has since launched must not relabel its own history.
+  projectStage ProjectStage
+  /// One line on what changed, written by whoever published the work.
+  changeNote String?
+
+  requestedById String?  @db.Uuid
+  capturedAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  page        StorefrontPage? @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  requestedBy User?           @relation("CaptureRequester", fields: [requestedById], references: [id])
+
+  comparisonsAsBefore ComparisonPair[] @relation("ComparisonBefore")
+  comparisonsAsAfter  ComparisonPair[] @relation("ComparisonAfter")
+
+  @@index([projectId, url, viewport, capturedAt])
+  @@index([projectId, phase])
+}
+
+/// One performance measurement of one page template on one device profile.
+/// Stored per page rather than per store: a single score standing for an entire
+/// storefront is the thing this table exists to avoid.
+model PerfTest {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @db.Uuid
+  pageId    String? @db.Uuid
+
+  url      String
+  template PerfTemplate
+  device   CaptureViewport
+
+  /// Throttling and viewport used, so two runs are compared only when they were
+  /// measured the same way.
+  conditions Json?
+
+  ttfbMs           Int?
+  fcpMs            Int?
+  lcpMs            Int?
+  tbtMs            Int?
+  cls              Float?
+  loadMs           Int?
+  speedIndexMs     Int?
+  performanceScore Int?
+
+  pageWeightBytes    Int?
+  requestCount       Int?
+  thirdPartyRequests Int?
+  thirdPartyBytes    Int?
+  /// DISTINCT third-party domains, which is not the same as third-party
+  /// requests and is the figure the project page leads with: "35 → 3
+  /// third-party hosts on the homepage". Forty requests to one analytics domain
+  /// is one host; three requests to three trackers is three.
+  thirdPartyHosts Int?
+
+  /// The full report, for questions this schema did not anticipate.
+  raw Json?
+
+  error String?
+
+  measuredAt DateTime @default(now()) @db.Timestamptz(3)
+
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  page    StorefrontPage? @relation(fields: [pageId], references: [id], onDelete: SetNull)
+
+  metricsBefore ShowcaseMetric[] @relation("MetricBeforeTest")
+  metricsAfter  ShowcaseMetric[] @relation("MetricAfterTest")
+
+  @@index([projectId, template, device, measuredAt])
+  @@index([projectId, measuredAt])
+}
+
+// ---------------------------------------------------------------------------
+// The showcase
+//
+// The QA models above answer "what is wrong with this storefront". These answer
+// the question the project page actually opens with: "what did this migration
+// change, and can we show it?"
+//
+// Modelled on the live reference at shopline.powercommerce.com/projects, where
+// every project leads with three measured numbers as a before → after pair, the
+// stack it moved from, the design decisions behind the rebuild, and a row of
+// before/after captures a person chose and captioned.
+//
+// The rule that shapes all of it: A NUMBER ON THAT PAGE MUST BE TRACEABLE. Each
+// headline metric names where it came from and when it was measured, because
+// "375 → 104 requests" in front of a client is a claim, and a claim nobody can
+// re-derive six months later is a liability.
+// ---------------------------------------------------------------------------
+
+/// What kind of engagement this is. The reference page filters on exactly these
+/// three, and the counts beside each filter come from this field.
+enum EngagementType {
+  GLOW_UP
+  PLATFORM_MIGRATION
+  VERSION_UPGRADE
+}
+
+/// Where a headline number came from. A measured metric can be re-derived from
+/// its `PerfTest` rows; an entered one carries the name of whoever stood behind
+/// it. Both are legitimate - "content pages: 3 → 8" is counted, not measured -
+/// but they are never presented as the same kind of fact.
+enum MetricSource {
+  PERFORMANCE_TEST
+  PAGE_COUNT
+  MANUAL
+}
+
+/// Lower is better for weight and request counts; higher is better for pages
+/// and products. Stored per metric so the arrow and the colour are decided by
+/// the metric, not by a guess at read time.
+enum MetricDirection {
+  LOWER_IS_BETTER
+  HIGHER_IS_BETTER
+  NEUTRAL
+}
+
+enum DesignDecisionStatus {
+  PROPOSED
+  ACCEPTED
+  IMPLEMENTED
+  DECLINED
+}
+
+/// One number on the project card, as a before and an after.
+model ShowcaseMetric {
+  id        String @id @default(uuid(7)) @db.Uuid
+  projectId String @db.Uuid
+
+  /// "Requests to load the homepage". Written for a merchant, not a developer.
+  label     String
+  /// Struck through on the card. Null while the after value is the only one
+  /// there is - a project measured for the first time has no before.
+  beforeValue Float?
+  afterValue  Float?
+  /// "MB", "requests", "hosts", "pages". Empty for a bare count.
+  unit      String?
+  direction MetricDirection @default(LOWER_IS_BETTER)
+
+  source MetricSource @default(PERFORMANCE_TEST)
+  /// Which measurement produced each side, when they were measured rather than
+  /// counted or typed. This is what makes the claim checkable.
+  beforePerfTestId String?   @db.Uuid
+  afterPerfTestId  String?   @db.Uuid
+  measuredAt       DateTime? @db.Timestamptz(3)
+  /// Who stands behind a manually entered number.
+  enteredById String? @db.Uuid
+
+  /// Position on the card. The reference shows three; nothing here enforces
+  /// that, but `displayOrder` decides which three are first.
+  displayOrder Int     @default(0)
+  featured     Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  beforeTest PerfTest? @relation("MetricBeforeTest", fields: [beforePerfTestId], references: [id], onDelete: SetNull)
+  afterTest  PerfTest? @relation("MetricAfterTest", fields: [afterPerfTestId], references: [id], onDelete: SetNull)
+  enteredBy  User?     @relation("MetricEnteredBy", fields: [enteredById], references: [id])
+
+  @@index([projectId, displayOrder])
+}
+
+/// A design call made during the rebuild, and the standard it was checked
+/// against - the "9 design decisions checked against Uplift standards" line.
+/// Kept as rows rather than a paragraph because the client page links each one,
+/// and because a decision that cannot be named cannot be reviewed.
+model DesignDecision {
+  id        String @id @default(uuid(7)) @db.Uuid
+  projectId String @db.Uuid
+
+  title     String
+  /// Why this call was made, in the words the client will read.
+  rationale String?
+  /// The standard it was checked against, e.g. "Uplift 42 - primary action
+  /// above the fold". Free text: the standards library is not ours.
+  standardRef String?
+  /// Which page or template it applies to, where it is not site-wide.
+  appliesTo String?
+
+  status DesignDecisionStatus @default(PROPOSED)
+
+  displayOrder    Int       @default(0)
+  clientVisibleAt DateTime? @db.Timestamptz(3)
+
+  decidedById String?   @db.Uuid
+  decidedAt   DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  decidedBy User?   @relation("DecisionDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([projectId, displayOrder])
+  @@index([projectId, status])
+}
+
+/// Two captures, chosen and captioned as one comparison.
+///
+/// Pairing by URL and date would be automatic and wrong: the reference pairs a
+/// merchant's old homepage with a NEW DESIGN of it, which may not share a URL
+/// at all, and labels it "AFTER · DESIGN" rather than "after". Curation is the
+/// feature, so it gets a row.
+model ComparisonPair {
+  id        String @id @default(uuid(7)) @db.Uuid
+  projectId String @db.Uuid
+
+  beforeCaptureId String @db.Uuid
+  afterCaptureId  String @db.Uuid
+
+  /// "Homepage", "Product page", "Cart". What the pair is of.
+  label String
+  /// The badge on the after image: "AFTER · DESIGN" while it is a mockup,
+  /// "AFTER" once it is live. Stored because the distinction is the difference
+  /// between a proposal and a result.
+  afterLabel String @default("AFTER")
+  /// One or two sentences on what changed and why.
+  changeNote String?
+
+  displayOrder    Int       @default(0)
+  featured        Boolean   @default(false)
+  clientVisibleAt DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  beforeCapture PageCapture @relation("ComparisonBefore", fields: [beforeCaptureId], references: [id], onDelete: Cascade)
+  afterCapture  PageCapture @relation("ComparisonAfter", fields: [afterCaptureId], references: [id], onDelete: Cascade)
+
+  @@unique([beforeCaptureId, afterCaptureId])
+  @@index([projectId, displayOrder])
+  @@index([projectId, featured])
 }

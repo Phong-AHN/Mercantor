@@ -16,3 +16,5 @@ export * from './timeline';
 export * from './dialog';
 export * from './toast';
 export * from './chart';
+export * from './showcase';
+export * from './before-after';

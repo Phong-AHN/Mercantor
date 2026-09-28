@@ -63,6 +63,7 @@ const config: NextConfig = {
     '@relay/integrations',
     '@relay/config',
     '@relay/observability',
+    '@relay/storefront',
   ],
   // These are Node libraries with dynamic requires and native bits. Bundling
   // them breaks pino's transport resolution and BullMQ's optional drivers, so

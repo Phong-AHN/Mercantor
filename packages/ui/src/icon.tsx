@@ -8,11 +8,13 @@ import {
   KeyRound,
   LayoutDashboard,
   LineChart,
+  ListChecks,
   MessagesSquare,
   OctagonAlert,
   PackageCheck,
   Plug,
   Receipt,
+  ScanSearch,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -45,6 +47,8 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   MessagesSquare,
   LineChart,
   ShieldCheck,
+  ScanSearch,
+  ListChecks,
 };
 
 export function NavIcon({ name, className }: { name: string; className?: string }) {

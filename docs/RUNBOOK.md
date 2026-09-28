@@ -1185,3 +1185,77 @@ in a number nobody has memorized. Now fetches the project and titles the tab wit
 layout's own call to it dedupe into one query per request, not two - no extra cost for the fix. Covers
 every tab under a project (Invoices, Settings, Blockers, ...) at once, since none of them override the
 layout's `generateMetadata` with one of their own.
+
+---
+
+## Site QA, phase 1: storefront profile, pages, findings, before/after, performance
+
+A client-facing QA and showcase layer on top of the storefront data model that was already sitting
+uncommitted in the tree (`schema.prisma` StorefrontProfile / StorefrontPage / Finding / PageCapture /
+PerfTest / ShowcaseMetric / ComparisonPair, `packages/storefront`, `BeforeAfter` and the showcase
+components in `packages/ui`). That WIP was adopted as the data layer rather than replaced, so the
+approved plan's own schema (SitePage, PerformanceRun, ...) was **not** built - the adopted models cover
+the same ground. Its two migrations (`20260923000000_storefront_qa`, `20260923010000_showcase`) were
+reviewed as additive only, cross-checked against a read-only `prisma migrate diff` from the live
+database, and applied with `prisma migrate deploy`.
+
+**Manual-first, no new infrastructure.** No crawler, no Playwright in the runtime, no LLM, nothing on
+the (still failing) Railway worker. Everything runs inline in server actions:
+- Pages are added by pasting URLs (`addPagesAction`): normalised by `normaliseUrl` (tracking params
+  and trailing slashes stripped), limited to the storefront/destination host, type suggested by
+  `classifyPageType` and confirmed by picking it in the table.
+- "Check" (`runPageCheckAction`) fetches one page's HTML, extracts title/meta/H1/images/links with
+  regexes (`features/qa/html.ts`), probes up to 25 same-site links and 15 images, and runs
+  `checkPage`. Findings are upserted by `fingerprint`, so a re-check bumps `lastSeenAt` instead of
+  filing duplicates; a READY_FOR_VERIFICATION finding is marked verification PASSED when it no
+  longer fires and FAILED when it still does, but a person still resolves it. Console and network
+  errors need a browser and are simply not produced.
+- "Detect platform" (`detectStorefrontAction`) runs `detectStorefront` + `detectApps` on the live
+  homepage and stores the signals. It never overwrites a CONFIRMED/CORRECTED answer; saving the
+  storefront form is what confirms (or, if you changed anything, corrects) it.
+- Performance (`runPerfTestAction`) is an HTML fetch with a desktop or mobile user agent: server
+  response time, HTML download time, resources referenced in the HTML, third-party hosts, HTML size.
+  Every run stores `conditions.method = "html-fetch-v1"` and the UI only charts runs with that method,
+  so a future Lighthouse run is never plotted against these. Regressions are flagged at read time
+  (`regressionOf`, median of up to five earlier runs). The page says plainly that this undercounts a
+  real browser; client-facing numbers are entered as ShowcaseMetric rows from Lighthouse/WebPageTest.
+- Screenshots are uploaded (PNG/JPEG/WebP, 20 MB) through the same presign -> upload -> sniff flow as
+  attachments. Each upload is a new PageCapture row (that is the history); ComparisonPair curates
+  a before/after pair for the slider. `/api/captures/[id]` serves them; a merchant only gets a capture
+  that belongs to a shared comparison.
+
+**SSRF.** Every server-side fetch goes through `features/qa/fetch-page.ts`: http(s) on default ports
+only, page fetches limited to the project's storefront/destination hosts (redirect hops included),
+DNS resolved and private/loopback/link-local/CGNAT addresses refused, 10 s timeout, 5 MB cap. The
+accepted residual risk is DNS rebinding between the check and the fetch.
+
+**Findings workflow.** NEW -> REVIEWED -> IN_PROGRESS -> READY_FOR_VERIFICATION -> RESOLVED, plus
+DISMISSED; the allowed moves live in `findingTransition` (`packages/core/src/qa.ts`) and are shared by
+the buttons and the server. Resolving needs a verification note, dismissing needs a reason. Every
+change writes a FindingEvent. A false positive is dismissed and remembered (its fingerprint stays, so
+the same check never reopens it) and can never be shared.
+
+**Who sees what.** New permissions: `qa:read`, `qa:manage`, `finding:read`, `finding:create`,
+`finding:manage`, `finding:approve`. AHN delivery roles get read/manage/create/manage; approve (share
+with the client, publish the showcase) is AHN admin, PM and designer only; SHOPLINE can read and
+report but only SHOPLINE admin and SE can triage; merchants get `qa:read` + `finding:read`, and the
+queries (`features/qa/queries.ts`) are the single place that narrows them to shared findings
+(`clientVisibleAt` set, not a false positive), shared comparisons, and client-visible comments. The
+portal page (`/portal/qa`) shows nothing until the showcase is published. Comments on findings are
+their own model (FindingComment): a merchant's comment is always visible to both sides; an agency
+comment on a shared finding defaults to visible and can be kept internal.
+
+**Pages.** Project tab "Site QA" (`/projects/[code]/qa`: overview with the showcase card, storefront
+detection, headline numbers and page list; `/findings` + detail; `/comparisons`; `/performance`),
+portfolio `/qa` (the reference-style gallery with engagement and stage filters) and `/findings`
+(cross-project, filterable by project, URL/title, category, severity, status, assignee, date and
+client visibility), and portal `/portal/qa` + finding detail.
+
+**OpenUI** was asked for but not used: it is a framework for LLM-generated chat UI (OpenUI Lang),
+this repo has no `@openuidev/*` packages, and these are ordinary data screens, so they are built with
+the existing `@relay/ui` design system like the rest of the app.
+
+**Not built (phase 2):** automated discovery/sitemap crawling, Playwright screenshots, AI spelling and
+grammar findings with confidence, scheduled and post-deploy scans, browser-grade performance metrics
+and checkout measurement, a public share link, and DesignDecision screens (the model exists, unused).
+These need a Chromium-capable worker, which in turn needs the Railway deploy fixed.
