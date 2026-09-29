@@ -69,6 +69,9 @@ const schema = z.object({
   CLICKUP_API_TOKEN: z.string().optional(),
   CLICKUP_TEAM_ID: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
+  /** Site QA spelling and grammar check. Unset or empty = the check is off. Server-only. */
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().optional(),
   EMAIL_FROM: z.string().default('AHN Migration Portal <portal@ahnmedia.example>'),
 
   // Platform-level OAuth apps (D-053) - one registration for the whole

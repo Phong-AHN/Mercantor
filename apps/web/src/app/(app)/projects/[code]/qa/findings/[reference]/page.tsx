@@ -14,6 +14,7 @@ import {
 } from '@relay/core';
 import { can } from '@relay/rbac';
 import {
+  Alert,
   Badge,
   Card,
   CardBody,
@@ -105,6 +106,16 @@ export default async function FindingDetailPage({
                 {finding.url}
                 <ExternalLink className="size-3 shrink-0" />
               </a>
+
+              {finding.source === 'AI' && (
+                <Alert tone="info" dense>
+                  Suggested by AI (Gemini)
+                  {finding.confidence != null ? `, ${finding.confidence}% confident` : ''}. Check it
+                  on the live page before marking it reviewed or sharing it with the client - brand
+                  names and intentional wording can be flagged by mistake. If it is wrong, mark it
+                  as a false positive and it will not be suggested again.
+                </Alert>
+              )}
 
               {finding.evidenceText && (
                 <section>

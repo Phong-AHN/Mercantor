@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
+import { env } from '@relay/config';
 import {
   DETECTION_STATE_LABEL,
   FINDING_SEVERITIES,
@@ -54,6 +55,9 @@ import { getSiteQa, listShowcase } from '@/features/qa/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
 
 export const dynamic = 'force-dynamic';
+// "Check" runs in this page's function: fetching the page, probing its links
+// and images, then the Gemini spelling pass can take well over the default.
+export const maxDuration = 60;
 
 const TEMPLATE_PATHS = [
   '/',
@@ -77,6 +81,8 @@ export default async function SiteQaOverviewPage({
     listShowcase(principal, code),
   ]);
   const canManage = can(principal, 'qa:manage');
+  // Only whether it is on - the key itself never leaves the server.
+  const spellingEnabled = Boolean(env().GEMINI_API_KEY?.trim());
   const canApprove = can(principal, 'finding:approve');
   const now = clock.now();
   const base = `/projects/${code}/qa`;
@@ -383,9 +389,16 @@ export default async function SiteQaOverviewPage({
           title="Pages"
           count={qa.pages.length}
           description={
-            qa.lastRun
-              ? `Last check ${formatRelative(qa.lastRun.createdAt, now)}. Checks read titles, descriptions, headings, alt text, placeholder copy, and the status of up to 25 links and 15 images per page.`
-              : 'Checks read titles, descriptions, headings, alt text, placeholder copy, and link and image status.'
+            <>
+              {qa.lastRun ? `Last check ${formatRelative(qa.lastRun.createdAt, now)}. ` : ''}
+              Checks read titles, descriptions, headings, alt text, placeholder copy, and the status
+              of up to 25 links and 15 images per page.{' '}
+              {spellingEnabled
+                ? 'Spelling and grammar are checked by AI (Gemini); its suggestions arrive as New for review.'
+                : canManage
+                  ? 'Spelling and grammar are not checked: no Gemini API key is configured on the server.'
+                  : null}
+            </>
           }
           actions={
             canManage ? (

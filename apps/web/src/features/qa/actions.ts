@@ -21,7 +21,9 @@ import {
   isSameSite,
   normaliseUrl,
   perfTemplateFor,
+  type CheckFinding,
 } from '@relay/storefront';
+import { env } from '@relay/config';
 import { actionOk, defineAction } from '@/server/action';
 import { audit } from '@/server/record';
 import { resolveProject, revalidateProject } from '@/features/projects/mutations';
@@ -34,6 +36,7 @@ import {
 } from './fetch-page';
 import { assetUrls, extractDocument, measureHtml } from './html';
 import { PERF_METHOD } from './perf';
+import { pageTextForProofreading, proofreadPage, type ProofreadFinding } from './proofread';
 
 const PAGE_TYPE_VALUES = [
   'HOME',
@@ -564,7 +567,25 @@ export const runPageCheckAction = defineAction({
       });
     }
 
-    const results = state === 'ACCESSIBLE' ? checkPage(doc) : [];
+    // Rule-based checks first; then spelling and grammar from Gemini, when a
+    // key is configured. A Gemini failure never loses the rule-based results.
+    const config = env();
+    const proofread =
+      state === 'ACCESSIBLE'
+        ? await proofreadPage(doc, { apiKey: config.GEMINI_API_KEY, model: config.GEMINI_MODEL })
+        : { findings: [] as ProofreadFinding[], skipped: undefined };
+    const pageText = pageTextForProofreading(doc);
+    const results: Array<
+      CheckFinding & { source?: 'AI'; confidence?: number; fingerprintText?: string }
+    > = [
+      ...(state === 'ACCESSIBLE' ? checkPage(doc) : []),
+      // An AI finding's identity is the wrong text itself, not the copy around
+      // it, so a re-check matches it even when nearby text changed.
+      ...proofread.findings.map((finding) => ({
+        ...finding,
+        fingerprintText: finding.evidenceContext.text,
+      })),
+    ];
     const now = clock.now();
 
     const summary = await transaction(async (tx) => {
@@ -606,7 +627,7 @@ export const runPageCheckAction = defineAction({
           category: result.category,
           detector: result.detector,
           url: page.url,
-          evidenceText: result.evidenceText,
+          evidenceText: result.fingerprintText ?? result.evidenceText,
         });
         if (seen.has(print)) continue;
         seen.add(print);
@@ -625,9 +646,7 @@ export const runPageCheckAction = defineAction({
               lastSeenAt: now,
               occurrences: { increment: 1 },
               ...(reopened ? { status: 'IN_PROGRESS' } : {}),
-              ...(failedVerification
-                ? { verificationResult: 'FAILED', verifiedAt: now }
-                : {}),
+              ...(failedVerification ? { verificationResult: 'FAILED', verifiedAt: now } : {}),
             },
           });
           if (reopened || failedVerification) {
@@ -655,16 +674,15 @@ export const runPageCheckAction = defineAction({
             pageType: page.pageType,
             category: result.category,
             severity: result.severity,
-            source: 'AUTOMATED',
+            source: result.source ?? 'AUTOMATED',
             detector: result.detector,
             title: result.title.slice(0, 300),
             recommendation: result.recommendation ?? null,
             evidenceText: result.evidenceText?.slice(0, 2000) ?? null,
             evidenceContext: (result.evidenceContext ?? undefined) as
-              | Prisma.InputJsonValue
-              | undefined,
+              Prisma.InputJsonValue | undefined,
             suggestion: result.suggestion ?? null,
-            confidence: 100,
+            confidence: result.confidence ?? 100,
             fingerprint: print,
             firstCrawlRunId: run.id,
           },
@@ -699,6 +717,44 @@ export const runPageCheckAction = defineAction({
         });
       }
 
+      // AI findings waiting for verification are decided by the page, not the
+      // model: fixed when the wrong text is gone, still present otherwise.
+      // (A model that happens not to repeat itself proves nothing.)
+      let aiVerified = 0;
+      if (state === 'ACCESSIBLE') {
+        const pending = await tx.finding.findMany({
+          where: {
+            projectId: project.id,
+            pageId: page.id,
+            source: 'AI',
+            status: 'READY_FOR_VERIFICATION',
+            fingerprint: { notIn: [...seen] },
+          },
+          select: { id: true, evidenceContext: true },
+        });
+        for (const finding of pending) {
+          const wrong = (finding.evidenceContext as { text?: unknown } | null)?.text;
+          if (typeof wrong !== 'string' || !wrong) continue;
+          const stillThere = pageText.includes(wrong);
+          await tx.finding.update({
+            where: { id: finding.id },
+            data: { verificationResult: stillThere ? 'FAILED' : 'PASSED', verifiedAt: now },
+          });
+          await tx.findingEvent.create({
+            data: {
+              findingId: finding.id,
+              actorId: ctx.principal.id,
+              field: 'verification',
+              toValue: stillThere ? 'FAILED' : 'PASSED',
+              note: stillThere
+                ? 'The flagged text is still on the page.'
+                : 'The flagged text is no longer on the page.',
+            },
+          });
+          if (!stillThere) aiVerified += 1;
+        }
+      }
+
       await tx.crawlRun.update({
         where: { id: run.id },
         data: {
@@ -710,7 +766,7 @@ export const runPageCheckAction = defineAction({
         },
       });
 
-      return { opened, verified: cleared.length };
+      return { opened, verified: cleared.length + aiVerified };
     });
 
     revalidateQa(input.code);
@@ -718,8 +774,14 @@ export const runPageCheckAction = defineAction({
       return actionOk(summary, `The page returned ${fetched.status}; no checks were run.`);
     }
     const parts = [`${summary.opened} new finding${summary.opened === 1 ? '' : 's'}`];
-    if (summary.verified > 0) parts.push(`${summary.verified} fix${summary.verified === 1 ? '' : 'es'} verified`);
-    return actionOk(summary, `Checked. ${parts.join(', ')}.`);
+    if (summary.verified > 0)
+      parts.push(`${summary.verified} fix${summary.verified === 1 ? '' : 'es'} verified`);
+    const spelling = proofread.skipped
+      ? ` Spelling check did not run: ${proofread.skipped}.`
+      : proofread.findings.length > 0
+        ? ` ${proofread.findings.length} spelling or grammar suggestion${proofread.findings.length === 1 ? '' : 's'} to review.`
+        : ' No spelling or grammar problems found.';
+    return actionOk(summary, `Checked. ${parts.join(', ')}.${spelling}`);
   },
 });
 

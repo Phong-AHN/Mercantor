@@ -1395,3 +1395,34 @@ marks, a legend for every multi-series chart, hover titles as extra detail only.
 let long names size the column) and `ProjectLink` could not truncate (it was `inline-flex` without
 `max-w-full`) - which also fixes the overflow on Approvals and Settings. My work, Merchants, Access
 and Assets still overflow at 390px and are part of the pending system-wide UI plan.
+
+---
+
+## Spelling and grammar check (Google Gemini)
+
+Site QA's per-page **Check** now also proofreads the page with Gemini when `GEMINI_API_KEY` is set
+(server-only; unset or empty = off, and the Pages card says so to managers). Storefronts are English,
+so the prompt targets English copy and returns an empty list for anything else.
+
+- **What is sent:** only the page's visible copy that the rule-based checks already extract - title,
+  meta description, H1, and body text without header/nav/footer - capped at 15,000 characters, to
+  `generativelanguage.googleapis.com` (`features/qa/proofread.ts`). The key goes in the
+  `x-goog-api-key` header, never the URL. Model: `GEMINI_MODEL`, default `gemini-3.5-flash-lite`
+  (Google is retiring 2.5 for new users; override without a deploy if the name changes).
+- **Use a billing-enabled (paid) API key in production.** On Google's free tier, submitted content may
+  be used to improve Google's products; client storefront copy should not go there.
+- **Trust rules** (`parseProofreadResponse`, unit-tested): a suggestion is kept only if the flagged text
+  appears word for word on the page, it actually changes something, and confidence >= 60; at most 25
+  per page. Kept suggestions become findings with `source: AI`, status **New**, the model's confidence,
+  the evidence in context and the suggested correction - never shared with the client automatically.
+- **Re-checks:** an AI finding's fingerprint is the flagged text itself, so the same mistake is matched
+  on the next check and a false positive stays dismissed. A finding "ready for verification" is
+  verified by the page, not the model: PASSED when the flagged text is gone, FAILED when it is still
+  there.
+- **Failure never loses the rule-based results:** timeouts (25s), rejected keys, rate limits and
+  unreadable answers just add "Spelling check did not run: ..." to the result message.
+- The Site QA overview page now allows 60s per server action (`maxDuration`), since a check fetches
+  the page, probes up to 40 links/images and then calls Gemini.
+
+**To turn it on:** add `GEMINI_API_KEY` to the server environment (Vercel project settings for
+production, `.env` locally). No migration, no other change.

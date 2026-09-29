@@ -181,6 +181,16 @@ export function FindingsList({
                     Shared
                   </Badge>
                 )}
+                {showVisibility && row.source === 'AI' && (
+                  <Badge
+                    tone="accent"
+                    size="sm"
+                    variant="outline"
+                    title="Suggested by AI - check it on the page before sharing"
+                  >
+                    AI{row.confidence != null ? ` · ${row.confidence}%` : ''}
+                  </Badge>
+                )}
                 {row.verificationResult === 'PASSED' && row.status === 'READY_FOR_VERIFICATION' && (
                   <Badge tone="success" size="sm">
                     Fix verified
@@ -202,7 +212,9 @@ export function FindingsList({
                 <p className="text-muted mt-0.5 line-clamp-1 text-[12.5px]">“{row.evidenceText}”</p>
               )}
               <p className="text-faint mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px]">
-                {showProject && <span className="text-ink-soft font-medium">{row.project.merchant.name}</span>}
+                {showProject && (
+                  <span className="text-ink-soft font-medium">{row.project.merchant.name}</span>
+                )}
                 <span className="max-w-[28rem] truncate font-mono">
                   {row.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
                 </span>

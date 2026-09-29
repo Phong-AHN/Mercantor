@@ -80,7 +80,14 @@ export const getSiteQa = cache(async (principal: Principal, code: string) => {
     }),
     db.finding.findMany({
       where: { projectId: project.id, ...findingAudience(principal) },
-      select: { id: true, status: true, severity: true, category: true, pageId: true, clientVisibleAt: true },
+      select: {
+        id: true,
+        status: true,
+        severity: true,
+        category: true,
+        pageId: true,
+        clientVisibleAt: true,
+      },
     }),
     db.comparisonPair.findMany({
       where: { projectId: project.id, ...comparisonAudience(principal) },
@@ -196,7 +203,12 @@ export async function listFindings(principal: Principal, filters: FindingFilters
         ? { clientVisibleAt: { not: null } }
         : { clientVisibleAt: null }),
     ...(filters.from || filters.to
-      ? { firstSeenAt: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) } }
+      ? {
+          firstSeenAt: {
+            ...(filters.from ? { gte: filters.from } : {}),
+            ...(filters.to ? { lte: filters.to } : {}),
+          },
+        }
       : {}),
     ...(filters.q
       ? {
@@ -230,6 +242,7 @@ export async function listFindings(principal: Principal, filters: FindingFilters
         clientVisibleAt: true,
         falsePositive: true,
         verificationResult: true,
+        confidence: true,
         assignee: { select: { id: true, name: true } },
         project: { select: { code: true, merchant: { select: { name: true } } } },
         _count: { select: { comments: true } },
@@ -310,7 +323,9 @@ export async function listShowcase(principal: Principal, code?: string) {
       },
       _count: {
         select: {
-          findings: { where: { ...findingAudience(principal), status: { in: [...OPEN_FINDING_STATUSES] } } },
+          findings: {
+            where: { ...findingAudience(principal), status: { in: [...OPEN_FINDING_STATUSES] } },
+          },
         },
       },
     },
