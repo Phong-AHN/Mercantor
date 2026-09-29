@@ -34,6 +34,7 @@ import { captureSourceUrl } from './capture-plan';
 import { CAPTURE_MAX_BYTES, CAPTURE_TYPES } from './capture-types';
 import { allowedHostsFor, FetchRefused } from './fetch-page';
 import { CaptureFailed, captureScreenshot } from './screenshot';
+import { passwordFor } from './storefront-auth';
 
 function revalidateCaptures(code: string): void {
   revalidateProject(code);
@@ -222,7 +223,12 @@ export const autoCaptureAction = defineAction({
     const [profile, page] = await Promise.all([
       db.storefrontProfile.findUnique({
         where: { projectId: project.id },
-        select: { storefrontUrl: true, destinationUrl: true },
+        select: {
+          storefrontUrl: true,
+          destinationUrl: true,
+          storefrontPasswordEnc: true,
+          destinationPasswordEnc: true,
+        },
       }),
       db.storefrontPage.findFirst({
         where: { id: input.pageId, projectId: project.id },
@@ -238,6 +244,7 @@ export const autoCaptureAction = defineAction({
       shot = await captureScreenshot(sourceUrl, {
         allowedHosts: allowedHostsFor([profile.storefrontUrl, profile.destinationUrl]),
         viewport: input.viewport,
+        password: passwordFor(sourceUrl, profile),
       });
     } catch (error) {
       if (error instanceof CaptureFailed || error instanceof FetchRefused) {

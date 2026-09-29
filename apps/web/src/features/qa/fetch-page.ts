@@ -1,5 +1,6 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { isPasswordPage, parsePasswordForm } from './password-page';
 
 /**
  * The one place this server fetches a URL somebody typed in.
@@ -146,14 +147,84 @@ export async function assertFetchable(
   }
 }
 
+/** The page is behind a storefront password that is missing or was not accepted. */
+export class PasswordRequired extends FetchRefused {}
+
+type CookieJar = Map<string, string>;
+
+function remember(jar: CookieJar, response: Response): void {
+  for (const cookie of response.headers.getSetCookie()) {
+    const pair = cookie.split(';')[0] ?? '';
+    const index = pair.indexOf('=');
+    if (index > 0) jar.set(pair.slice(0, index).trim(), pair.slice(index + 1).trim());
+  }
+}
+
+function cookieHeader(jar: CookieJar): Record<string, string> {
+  return jar.size === 0
+    ? {}
+    : { cookie: [...jar].map(([name, value]) => `${name}=${value}`).join('; ') };
+}
+
 /**
  * Fetch one storefront page. Throws `FetchRefused` when the URL is not one
  * this server will fetch; network failures and timeouts reject with the
  * underlying error, which callers record as the run's `error`.
+ *
+ * When the page turns out to be the storefront's password page and a
+ * `password` is given, the form is submitted once (to the same allowed
+ * hosts), the session cookie kept, and the page fetched again. Timings then
+ * describe the page itself, not the login.
  */
 export async function fetchStorefrontPage(
   rawUrl: string,
+  options: { allowedHosts: readonly string[]; device: Device; password?: string },
+): Promise<FetchedPage> {
+  const jar: CookieJar = new Map();
+  let page = await fetchFollowing(rawUrl, options, jar);
+  if (!isPasswordPage(page.finalUrl, page.html)) return page;
+
+  if (!options.password) {
+    throw new PasswordRequired(
+      'This storefront is password protected. Add its password in Site QA → Storefront.',
+    );
+  }
+  const form = parsePasswordForm(page.html, page.finalUrl);
+  if (!form) throw new PasswordRequired('The storefront password page could not be read.');
+
+  const action = new URL(form.action);
+  await assertFetchable(action, options.allowedHosts);
+  const body = new URLSearchParams({ ...form.fields, [form.passwordField]: options.password });
+  const login = await fetch(
+    form.method === 'GET' ? `${action.origin}${action.pathname}?${body}` : action,
+    {
+      method: form.method,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      headers: {
+        'user-agent': USER_AGENTS[options.device],
+        ...(form.method === 'POST' ? { 'content-type': 'application/x-www-form-urlencoded' } : {}),
+        ...cookieHeader(jar),
+      },
+      ...(form.method === 'POST' ? { body: body.toString() } : {}),
+    },
+  );
+  remember(jar, login);
+  await login.body?.cancel();
+
+  page = await fetchFollowing(rawUrl, options, jar);
+  if (isPasswordPage(page.finalUrl, page.html)) {
+    throw new PasswordRequired(
+      'The storefront password was not accepted. Check it in Site QA → Storefront.',
+    );
+  }
+  return page;
+}
+
+async function fetchFollowing(
+  rawUrl: string,
   options: { allowedHosts: readonly string[]; device: Device },
+  jar: CookieJar,
 ): Promise<FetchedPage> {
   const started = performance.now();
   let url = new URL(rawUrl);
@@ -167,8 +238,10 @@ export async function fetchStorefrontPage(
         'user-agent': USER_AGENTS[options.device],
         accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
         'accept-language': 'en;q=0.9',
+        ...cookieHeader(jar),
       },
     });
+    remember(jar, response);
     const ttfbMs = Math.round(performance.now() - started);
 
     const location = response.headers.get('location');

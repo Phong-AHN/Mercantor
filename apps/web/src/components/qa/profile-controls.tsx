@@ -15,7 +15,7 @@ import {
   type StorefrontBuild,
   type StorefrontPlatform,
 } from '@relay/core';
-import { Alert, Button, cn, Dialog, Field, Input, Select, Textarea } from '@relay/ui';
+import { Alert, Button, Checkbox, cn, Dialog, Field, Input, Select, Textarea } from '@relay/ui';
 import { useAction } from '@/components/use-action';
 import {
   detectStorefrontAction,
@@ -72,6 +72,14 @@ export interface ProfileFormValues {
   serviceTags: string;
   destinationBuildLabel: string;
   apps: string;
+  /** Write-only: always starts empty; the saved password is never sent to the browser. */
+  storefrontPassword: string;
+  destinationPassword: string;
+  clearStorefrontPassword: boolean;
+  clearDestinationPassword: boolean;
+  /** Whether one is saved - the only thing the page knows about it. */
+  hasStorefrontPassword: boolean;
+  hasDestinationPassword: boolean;
 }
 
 export function ProfileButton({
@@ -168,6 +176,70 @@ export function ProfileButton({
               />
             </Field>
           </div>
+
+          <fieldset className="border-line space-y-3 rounded-[var(--radius-md)] border p-3">
+            <legend className="text-ink px-1 text-[13px] font-semibold">
+              Storefront passwords
+            </legend>
+            <p className="text-muted -mt-1 text-[12.5px]">
+              Only for stores behind a password page (an unlaunched store or a preview). Checks,
+              speed tests and screenshots use it to get past that page. Stored encrypted and never
+              shown again.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(
+                [
+                  [
+                    'storefrontPassword',
+                    'clearStorefrontPassword',
+                    'hasStorefrontPassword',
+                    'Current storefront password',
+                  ],
+                  [
+                    'destinationPassword',
+                    'clearDestinationPassword',
+                    'hasDestinationPassword',
+                    'New storefront password',
+                  ],
+                ] as const
+              ).map(([field, clearField, hasField, fieldLabel]) => (
+                <Field
+                  key={field}
+                  label={fieldLabel}
+                  htmlFor={field}
+                  hint={
+                    form[hasField]
+                      ? form[clearField]
+                        ? 'The saved password will be removed.'
+                        : 'A password is saved. Type a new one to replace it.'
+                      : 'Leave empty if the store is not password protected.'
+                  }
+                  error={action.fieldErrors[field] ?? null}
+                >
+                  <Input
+                    id={field}
+                    type="password"
+                    autoComplete="new-password"
+                    value={form[field]}
+                    disabled={form[clearField]}
+                    onChange={(e) => set(field, e.target.value)}
+                    placeholder={form[hasField] ? '••••••••  (saved)' : ''}
+                  />
+                  {form[hasField] && (
+                    <Checkbox
+                      id={`${clearField}-box`}
+                      className="mt-1"
+                      label="Remove the saved password"
+                      checked={form[clearField]}
+                      onChange={(e) =>
+                        setForm({ ...form, [clearField]: e.target.checked, [field]: '' })
+                      }
+                    />
+                  )}
+                </Field>
+              ))}
+            </div>
+          </fieldset>
 
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="Current platform" htmlFor="sourcePlatform">
@@ -269,7 +341,11 @@ export function ProfileButton({
                   ))}
                 </Select>
               </Field>
-              <Field label="Service tags" htmlFor="serviceTags" hint="Comma separated, e.g. Design, Build">
+              <Field
+                label="Service tags"
+                htmlFor="serviceTags"
+                hint="Comma separated, e.g. Design, Build"
+              >
                 <Input
                   id="serviceTags"
                   value={form.serviceTags}
@@ -303,7 +379,12 @@ export function ProfileButton({
 export function DetectButton({ code }: { code: string }) {
   const action = useAction(detectStorefrontAction);
   return (
-    <Button variant="secondary" size="sm" loading={action.pending} onClick={() => action.run({ code })}>
+    <Button
+      variant="secondary"
+      size="sm"
+      loading={action.pending}
+      onClick={() => action.run({ code })}
+    >
       <ScanSearch className="size-3.5" />
       Detect platform
     </Button>

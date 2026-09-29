@@ -69,10 +69,31 @@ export const getSiteQa = cache(async (principal: Principal, code: string) => {
   const project = await resolveProject(principal, code);
   const merchant = isConfinedToOwnProjects(principal);
 
-  const [profile, pages, findings, comparisons, metrics, perf, lastRun] = await Promise.all([
+  // The encrypted storefront passwords are never loaded here - not even to
+  // strip them afterwards, because React's development build forwards awaited
+  // server values to the browser for its DevTools. Whether one is saved comes
+  // from counts, which only ever carry a number.
+  const [
+    profileRow,
+    storefrontPasswordCount,
+    destinationPasswordCount,
+    pages,
+    findings,
+    comparisons,
+    metrics,
+    perf,
+    lastRun,
+  ] = await Promise.all([
     db.storefrontProfile.findUnique({
       where: { projectId: project.id },
+      omit: { storefrontPasswordEnc: true, destinationPasswordEnc: true },
       include: { confirmedBy: { select: { name: true } } },
+    }),
+    db.storefrontProfile.count({
+      where: { projectId: project.id, storefrontPasswordEnc: { not: null } },
+    }),
+    db.storefrontProfile.count({
+      where: { projectId: project.id, destinationPasswordEnc: { not: null } },
     }),
     db.storefrontPage.findMany({
       where: { projectId: project.id },
@@ -113,6 +134,14 @@ export const getSiteQa = cache(async (principal: Principal, code: string) => {
       select: { createdAt: true, status: true, error: true },
     }),
   ]);
+
+  const profile = profileRow
+    ? {
+        ...profileRow,
+        hasStorefrontPassword: storefrontPasswordCount > 0,
+        hasDestinationPassword: destinationPasswordCount > 0,
+      }
+    : null;
 
   const captures = merchant
     ? []
@@ -307,7 +336,8 @@ export async function listShowcase(principal: Principal, code?: string) {
       stage: true,
       migrationType: true,
       merchant: { select: { name: true } },
-      storefront: true,
+      // Never the encrypted storefront passwords.
+      storefront: { omit: { storefrontPasswordEnc: true, destinationPasswordEnc: true } },
       comparisons: {
         where: comparisonAudience(principal),
         orderBy: [{ featured: 'desc' }, { displayOrder: 'asc' }, { createdAt: 'asc' }],

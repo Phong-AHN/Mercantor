@@ -4,6 +4,7 @@ import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import type { CaptureViewport } from '@relay/core';
 import { MAX_CAPTURE_HEIGHT, VIEWPORTS } from './capture-plan';
 import { assertFetchable, FetchRefused, isBlockedSubresource, USER_AGENTS } from './fetch-page';
+import { isPasswordPage } from './password-page';
 
 /**
  * Full-page screenshots with a real browser, inside the web app's own
@@ -64,7 +65,8 @@ async function dismissOverlays(page: Page): Promise<void> {
       const style = window.getComputedStyle(element);
       if (style.position !== 'fixed' || style.display === 'none') continue;
       const rect = element.getBoundingClientRect();
-      if (rect.width * rect.height >= area * 0.4) element.style.setProperty('display', 'none', 'important');
+      if (rect.width * rect.height >= area * 0.4)
+        element.style.setProperty('display', 'none', 'important');
     }
     // Modals lock scrolling; unlocked, the page lays out at full length again.
     for (const root of [document.documentElement, document.body]) {
@@ -84,7 +86,7 @@ export interface Screenshot {
 
 export async function captureScreenshot(
   sourceUrl: string,
-  options: { allowedHosts: readonly string[]; viewport: CaptureViewport },
+  options: { allowedHosts: readonly string[]; viewport: CaptureViewport; password?: string },
 ): Promise<Screenshot> {
   // The page itself gets the full check, DNS included; everything it then
   // loads gets the cheap per-request check below.
@@ -114,32 +116,62 @@ export async function captureScreenshot(
       void (blocked ? request.abort('blockedbyclient') : request.continue());
     });
 
-    let status = 0;
-    try {
-      const response = await page.goto(sourceUrl, {
-        waitUntil: 'networkidle2',
-        timeout: NAVIGATION_TIMEOUT_MS,
-      });
-      status = response?.status() ?? 0;
-    } catch (error) {
-      // A storefront whose chat widget never stops polling is still loaded;
-      // anything else (DNS, TLS, refused, blocked redirect) is a failure.
-      if (!(error instanceof Error && error.name === 'TimeoutError')) {
+    const navigate = async (): Promise<number> => {
+      try {
+        const response = await page.goto(sourceUrl, {
+          waitUntil: 'networkidle2',
+          timeout: NAVIGATION_TIMEOUT_MS,
+        });
+        return response?.status() ?? 0;
+      } catch (error) {
+        // A storefront whose chat widget never stops polling is still loaded;
+        // anything else (DNS, TLS, refused, blocked redirect) is a failure.
+        if (!(error instanceof Error && error.name === 'TimeoutError')) {
+          throw new CaptureFailed(
+            leftStorefront
+              ? 'The page redirected off the storefront, so it was not captured.'
+              : 'The page did not load.',
+          );
+        }
+        return 0;
+      }
+    };
+    const onPasswordPage = async () => isPasswordPage(page.url(), await page.content());
+
+    let status = await navigate();
+    // Checked before the status: some password pages answer 401.
+    if (await onPasswordPage()) {
+      if (!options.password) {
         throw new CaptureFailed(
-          leftStorefront
-            ? 'The page redirected off the storefront, so it was not captured.'
-            : 'The page did not load.',
+          'This storefront is password protected. Add its password in Site QA → Storefront, or upload a capture by hand.',
+        );
+      }
+      // The storefront form first - a hidden account-login drawer can hold
+      // an earlier password field that typing into would never submit.
+      const field =
+        (await page.$('form[action*="password"] input[type="password"]')) ??
+        (await page.$(
+          'input[name="form_type"][value="storefront_password"] ~ input[type="password"]',
+        )) ??
+        (await page.$('input[type="password"]'));
+      if (!field) throw new CaptureFailed('The storefront password page could not be read.');
+      await field.type(options.password);
+      await Promise.all([
+        page
+          .waitForNavigation({ waitUntil: 'networkidle2', timeout: NAVIGATION_TIMEOUT_MS })
+          .catch(() => undefined),
+        field.press('Enter'),
+      ]);
+      status = await navigate();
+      if (await onPasswordPage()) {
+        throw new CaptureFailed(
+          'The storefront password was not accepted. Check it in Site QA → Storefront.',
         );
       }
     }
 
     if (status >= 400) throw new CaptureFailed(`The page returned ${status}.`);
     const finalUrl = page.url();
-    if (/^\/password\/?$/.test(new URL(finalUrl).pathname)) {
-      throw new CaptureFailed(
-        'The storefront is password protected. Remove the password, or upload a capture by hand.',
-      );
-    }
 
     // Frozen motion, so a carousel mid-slide or a fading hero is not what
     // gets compared.

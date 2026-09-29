@@ -103,6 +103,12 @@ export default async function SiteQaOverviewPage({
       serviceTags: '',
       destinationBuildLabel: '',
       apps: '',
+      storefrontPassword: '',
+      destinationPassword: '',
+      clearStorefrontPassword: false,
+      clearDestinationPassword: false,
+      hasStorefrontPassword: false,
+      hasDestinationPassword: false,
     };
     return (
       <Card>
@@ -146,6 +152,12 @@ export default async function SiteQaOverviewPage({
       .map((app) => app.name)
       .filter(Boolean)
       .join('\n'),
+    storefrontPassword: '',
+    destinationPassword: '',
+    clearStorefrontPassword: false,
+    clearDestinationPassword: false,
+    hasStorefrontPassword: profile.hasStorefrontPassword,
+    hasDestinationPassword: profile.hasDestinationPassword,
   };
 
   const bySeverity = Object.fromEntries(
@@ -285,6 +297,19 @@ export default async function SiteQaOverviewPage({
                   </span>
                 )}
               </DetailRow>
+              {canManage && (
+                <DetailRow label="Password page">
+                  {profile.hasStorefrontPassword || profile.hasDestinationPassword
+                    ? [
+                        profile.hasStorefrontPassword ? 'current store' : null,
+                        profile.hasDestinationPassword ? 'new store' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' and ')
+                        .replace(/^./, (letter) => letter.toUpperCase()) + ' password saved'
+                    : 'No password saved'}
+                </DetailRow>
+              )}
               <DetailRow label="Moving to">
                 {profile.destinationBuildLabel ??
                   STOREFRONT_PLATFORM_LABEL[profile.destinationPlatform].label}

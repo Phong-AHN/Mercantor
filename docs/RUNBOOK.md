@@ -1426,3 +1426,36 @@ so the prompt targets English copy and returns an empty list for anything else.
 
 **To turn it on:** add `GEMINI_API_KEY` to the server environment (Vercel project settings for
 production, `.env` locally). No migration, no other change.
+
+---
+
+## Storefront passwords for Site QA
+
+**DEPLOY ORDER.** Adds `StorefrontProfile.storefrontPasswordEnc` and `destinationPasswordEnc`
+(migration `20260929010000_storefront_passwords`, additive, nullable). The Site QA queries reference
+them, so **apply it to production before deploying**. Applied to the local database only.
+
+Unlaunched Shopify/Shopline stores (and Shopline preview stores) sit behind a `/password` page. Site
+QA → Storefront → Edit now has two write-only fields: the password for the current storefront and for
+the new storefront (`qa:manage`).
+
+- **Storage:** AES-256-GCM with `CREDENTIAL_ENCRYPTION_KEY` (`encryptSecret`, the same helper as
+  integration credentials). Empty field = keep; a "Remove the saved password" checkbox clears it. The
+  audit log records "changed"/"removed", never the value. Rotating `CREDENTIAL_ENCRYPTION_KEY` makes
+  saved passwords undecryptable - they are then treated as missing and must be re-entered.
+- **Never sent to a browser, not even encrypted:** the Site QA query omits the columns and learns
+  "saved or not" from two `count` queries. This matters in development too: React 19's dev build
+  forwards awaited server values to the browser for DevTools, which is how a full profile row (with
+  ciphertext) was seen in the dev payload before this was changed. Verified: no page contains the
+  columns in dev.
+- **Use (`features/qa/fetch-page.ts`, `password-page.ts`):** a fetch keeps cookies across redirects;
+  if it lands on a password page it reads the storefront password form (preferring one posting to
+  `/password` or with `form_type=storefront_password` over a theme's account-login drawer), submits it
+  to the same allowed host, keeps the session cookie and fetches the page again. Missing or rejected
+  password -> `PasswordRequired` with a message pointing at Site QA -> Storefront; the page is marked
+  BLOCKED, not ERROR. The headless browser for automated captures types the password into the same
+  form and reloads. Used by page checks (incl. spelling), speed tests, platform detection and
+  automated screenshots; the password for each URL is chosen by host (current vs new storefront).
+- **Tested** with a mocked storefront (redirect -> form -> cookie -> page, wrong password, no
+  password) and in the local UI (save, card shows "saved", field empty on reopen, DB holds only
+  ciphertext). Not yet tried against a real password-protected Shopline preview.

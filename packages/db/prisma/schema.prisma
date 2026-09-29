@@ -1481,6 +1481,10 @@ model StorefrontProfile {
   storefrontUrl String
   /// Where the store is moving to, once there is something to look at.
   destinationUrl String?
+  /// Storefront password-page passwords, AES-256-GCM via encryptSecret. Read only
+  /// server-side to pass a password page; never selected into a page or sent to a browser.
+  storefrontPasswordEnc  String?
+  destinationPasswordEnc String?
 
   sourcePlatform      StorefrontPlatform @default(UNKNOWN)
   destinationPlatform StorefrontPlatform @default(SHOPLINE)

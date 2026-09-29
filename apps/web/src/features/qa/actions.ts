@@ -31,11 +31,13 @@ import {
   allowedHostsFor,
   fetchStorefrontPage,
   FetchRefused,
+  PasswordRequired,
   probeUrl,
   type Device,
 } from './fetch-page';
 import { assetUrls, extractDocument, measureHtml } from './html';
 import { PERF_METHOD } from './perf';
+import { encryptStorefrontPassword, passwordFor } from './storefront-auth';
 import { pageTextForProofreading, proofreadPage, type ProofreadFinding } from './proofread';
 
 const PAGE_TYPE_VALUES = [
@@ -110,10 +112,27 @@ export const saveStorefrontProfileAction = defineAction({
     serviceTags: z.string().trim().max(500).optional(),
     destinationBuildLabel: z.string().trim().max(120).optional(),
     apps: z.string().trim().max(2000).optional(),
+    // Write-only. Empty = keep what is saved; not trimmed, a password may
+    // legitimately start or end with a space.
+    storefrontPassword: z.string().max(200).optional(),
+    destinationPassword: z.string().max(200).optional(),
+    clearStorefrontPassword: z.boolean().optional(),
+    clearDestinationPassword: z.boolean().optional(),
   }),
   async handler(input, ctx) {
     const project = await resolveProject(ctx.principal, input.code);
     const storefrontUrl = requireUrl(input.storefrontUrl, 'storefrontUrl');
+    // Only the ciphertext is ever written; `undefined` leaves the column alone.
+    const passwordUpdate = (value: string | undefined, clear: boolean | undefined) =>
+      clear ? null : value ? encryptStorefrontPassword(value) : undefined;
+    const storefrontPasswordEnc = passwordUpdate(
+      input.storefrontPassword,
+      input.clearStorefrontPassword,
+    );
+    const destinationPasswordEnc = passwordUpdate(
+      input.destinationPassword,
+      input.clearDestinationPassword,
+    );
     const destinationUrl = input.destinationUrl
       ? requireUrl(input.destinationUrl, 'destinationUrl')
       : null;
@@ -164,6 +183,8 @@ export const saveStorefrontProfileAction = defineAction({
         ...(detectedApps !== undefined
           ? { detectedApps: detectedApps as unknown as Prisma.InputJsonValue }
           : {}),
+        ...(storefrontPasswordEnc !== undefined ? { storefrontPasswordEnc } : {}),
+        ...(destinationPasswordEnc !== undefined ? { destinationPasswordEnc } : {}),
       };
 
       const saved = await tx.storefrontProfile.upsert({
@@ -187,7 +208,17 @@ export const saveStorefrontProfileAction = defineAction({
               themeName: before.themeName,
             }
           : null,
-        after: { storefrontUrl, ...identity },
+        // Whether a password changed is recorded; the password never is.
+        after: {
+          storefrontUrl,
+          ...identity,
+          ...(storefrontPasswordEnc !== undefined
+            ? { storefrontPassword: storefrontPasswordEnc ? 'changed' : 'removed' }
+            : {}),
+          ...(destinationPasswordEnc !== undefined
+            ? { destinationPassword: destinationPasswordEnc ? 'changed' : 'removed' }
+            : {}),
+        },
         ip: ctx.ip,
       });
     });
@@ -214,6 +245,7 @@ export const detectStorefrontAction = defineAction({
     try {
       page = await fetchStorefrontPage(profile.storefrontUrl, {
         allowedHosts: allowedHostsFor([profile.storefrontUrl]),
+        password: passwordFor(profile.storefrontUrl, profile),
         device: 'DESKTOP',
       });
     } catch (error) {
@@ -514,6 +546,7 @@ export const runPageCheckAction = defineAction({
     try {
       fetched = await fetchStorefrontPage(page.url, {
         allowedHosts: allowedHostsFor([profile.storefrontUrl, profile.destinationUrl]),
+        password: passwordFor(page.url, profile),
         device: 'DESKTOP',
       });
     } catch (error) {
@@ -526,7 +559,11 @@ export const runPageCheckAction = defineAction({
         }),
         db.storefrontPage.update({
           where: { id: page.id },
-          data: { state: 'ERROR', lastSeenAt: clock.now() },
+          // Behind a storefront password: blocked, not broken.
+          data: {
+            state: error instanceof PasswordRequired ? 'BLOCKED' : 'ERROR',
+            lastSeenAt: clock.now(),
+          },
         }),
       ]);
       revalidateQa(input.code);
@@ -828,6 +865,7 @@ export const runPerfTestAction = defineAction({
     try {
       const fetched = await fetchStorefrontPage(page.url, {
         allowedHosts: allowedHostsFor([profile.storefrontUrl, profile.destinationUrl]),
+        password: passwordFor(page.url, profile),
         device,
       });
       const measured = measureHtml(fetched.html, fetched.finalUrl, fetched.bytes);
