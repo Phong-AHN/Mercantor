@@ -17,6 +17,25 @@ const PASSWORD_PAGE = `<!doctype html><html><body>
   <button type="submit">Enter</button>
 </form></body></html>`;
 
+// Trimmed from a real Shopline password page (Collective Hub): the form sits
+// in a closed <details> modal and posts to an /api/ endpoint, and the page
+// also carries a newsletter form.
+const SHOPLINE = 'https://collective-hub.myshopline.com';
+const SHOPLINE_PASSWORD_PAGE = `<!doctype html><html><body class="password-page">
+<header><theme-password-modal class="password-modal" data-theme-modal=""><details>
+  <summary class="password-modal__trigger" role="button">Login with password</summary>
+  <div class="modal__content">
+    <form method="post" action="${SHOPLINE}/api/site/form/check/password" accept-charset="UTF-8" class="password-modal__form" return_to="/"><input type="hidden" name="form_type" value="storefront_password"><input type="hidden" name="returnTo" value="/">
+      <div class="password-modal__field field">
+        <input type="password" name="password" id="Password" class="field__input" autocomplete="current-password" placeholder="Password">
+      </div>
+      <button name="commit" class="button button--fill">Enter the store</button>
+    </form>
+  </div>
+</details></theme-password-modal></header>
+<form method="post" action="${SHOPLINE}/api/user/front/form/subscribe"><input type="hidden" name="returnTo" value="/password?positioned_id=x"><input type="hidden" name="form_type" value="customer"><input type="email" name="contact[email]" required=""></form>
+</body></html>`;
+
 describe('parsePasswordForm', () => {
   it('picks the storefront password form over an account-login form that comes first', () => {
     const form = parsePasswordForm(PASSWORD_PAGE, `${SHOP}/password`);
@@ -26,6 +45,20 @@ describe('parsePasswordForm', () => {
       fields: { form_type: 'storefront_password', utf8: '✓' },
       passwordField: 'password',
     });
+  });
+
+  it("reads Shopline's password form inside its closed login modal, not the newsletter form", () => {
+    const form = parsePasswordForm(SHOPLINE_PASSWORD_PAGE, `${SHOPLINE}/password?redirect_url=%2F`);
+    expect(form).toEqual({
+      action: `${SHOPLINE}/api/site/form/check/password`,
+      method: 'POST',
+      fields: { form_type: 'storefront_password', returnTo: '/' },
+      passwordField: 'password',
+    });
+    expect(isPasswordPage(`${SHOPLINE}/password?redirect_url=%2F`, SHOPLINE_PASSWORD_PAGE)).toBe(
+      true,
+    );
+    expect(isPasswordPage(`${SHOPLINE}/`, SHOPLINE_PASSWORD_PAGE)).toBe(true);
   });
 
   it('returns null when there is no password field', () => {
@@ -118,6 +151,47 @@ describe('fetchStorefrontPage behind a password page', () => {
     expect(new Headers(calls.at(-1)!.init.headers).get('cookie')).toContain(
       'storefront_digest=ok123',
     );
+  });
+
+  it('logs in to a Shopline storefront through its /api/ password endpoint', async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: URL | string, init: RequestInit = {}) => {
+        const url = new URL(String(input));
+        calls.push({ url: url.toString(), init });
+        const cookie = new Headers(init.headers).get('cookie') ?? '';
+        if (init.method === 'POST' && url.pathname === '/api/site/form/check/password') {
+          const body = new URLSearchParams(String(init.body));
+          const headers = new Headers({ location: body.get('returnTo') ?? '/' });
+          if (body.get('password') === 'hunter2') {
+            headers.append('set-cookie', 'password_token=ok123; path=/; HttpOnly');
+          }
+          return new Response(null, { status: 302, headers });
+        }
+        if (url.pathname === '/password') return new Response(SHOPLINE_PASSWORD_PAGE);
+        if (!cookie.includes('password_token=ok123')) {
+          return new Response(null, {
+            status: 302,
+            headers: { location: '/password?redirect_url=%2F' },
+          });
+        }
+        return new Response('<html><title>Collective Hub</title><body>Products</body></html>');
+      }),
+    );
+
+    const page = await fetchStorefrontPage(`${SHOPLINE}/`, {
+      allowedHosts: ['collective-hub.myshopline.com'],
+      device: 'DESKTOP',
+      password: 'hunter2',
+    });
+    expect(page.html).toContain('Products');
+    const post = calls.find((call) => call.init.method === 'POST')!;
+    expect(post.url).toBe(`${SHOPLINE}/api/site/form/check/password`);
+    expect(new URLSearchParams(String(post.init.body)).get('form_type')).toBe(
+      'storefront_password',
+    );
+    expect(new Headers(post.init.headers).get('origin')).toBe(SHOPLINE);
   });
 
   it('says the password is missing when none is saved', async () => {

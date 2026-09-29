@@ -201,8 +201,12 @@ export async function fetchStorefrontPage(
       method: form.method,
       redirect: 'manual',
       signal: AbortSignal.timeout(TIMEOUT_MS),
+      // Origin and referer as a browser submitting the form would send them:
+      // Shopline's form endpoint lives under /api/ and may check both.
       headers: {
         'user-agent': USER_AGENTS[options.device],
+        origin: new URL(page.finalUrl).origin,
+        referer: page.finalUrl,
         ...(form.method === 'POST' ? { 'content-type': 'application/x-www-form-urlencoded' } : {}),
         ...cookieHeader(jar),
       },

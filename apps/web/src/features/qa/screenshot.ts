@@ -1,6 +1,6 @@
 import 'server-only';
 import Chromium from '@sparticuz/chromium';
-import puppeteer, { type Browser, type Page } from 'puppeteer-core';
+import puppeteer, { type Browser, type ElementHandle, type Page } from 'puppeteer-core';
 import type { CaptureViewport } from '@relay/core';
 import { MAX_CAPTURE_HEIGHT, VIEWPORTS } from './capture-plan';
 import { assertFetchable, FetchRefused, isBlockedSubresource, USER_AGENTS } from './fetch-page';
@@ -75,6 +75,75 @@ async function dismissOverlays(page: Page): Promise<void> {
   });
 }
 
+/**
+ * The storefront password field, made typeable.
+ *
+ * The storefront form is preferred - a hidden account-login drawer can hold
+ * an earlier password field that typing into would never submit. Shopline's
+ * password theme keeps that form in a closed `<details>` modal behind a
+ * "Login with password" button, so the field is invisible until the modal
+ * opens; its summary is clicked (the theme's own handler opens and mounts
+ * it), and the field is looked up again once visible, since the theme may
+ * move the modal.
+ */
+async function revealPasswordField(page: Page): Promise<ElementHandle<HTMLInputElement> | null> {
+  const find = async (): Promise<ElementHandle<HTMLInputElement> | null> => {
+    const handle = await page.evaluateHandle(() => {
+      const isStorefront = (input: HTMLInputElement) => {
+        const form = input.form;
+        if (!form) return false;
+        if (form.querySelector('input[name="form_type"][value="storefront_password"]')) return true;
+        try {
+          return /\/password\/?$/i.test(new URL(form.action, location.href).pathname);
+        } catch {
+          return false;
+        }
+      };
+      const isVisible = (input: HTMLInputElement) => input.getClientRects().length > 0;
+      const inputs = [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')];
+      const storefront = inputs.filter(isStorefront);
+      return (
+        storefront.find(isVisible) ??
+        storefront[0] ??
+        inputs.find(isVisible) ??
+        inputs[0] ??
+        null
+      );
+    });
+    const element = handle.asElement() as ElementHandle<HTMLInputElement> | null;
+    if (!element) await handle.dispose();
+    return element;
+  };
+
+  const field = await find();
+  if (!field || (await field.isVisible())) return field;
+
+  const opened = await field.evaluate((input) => {
+    const details = input.closest('details');
+    const summary = details?.querySelector<HTMLElement>(':scope > summary');
+    if (!details) return false;
+    if (!details.open) summary?.click();
+    return true;
+  });
+  if (!opened) return field;
+  const visible = await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')].some(
+          (input) => input.getClientRects().length > 0,
+        ),
+      { timeout: 5_000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  // A theme whose summary does not open its modal: open the details directly.
+  if (!visible) {
+    await field.evaluate((input) => input.closest('details')?.setAttribute('open', ''));
+  }
+  await field.dispose();
+  return find();
+}
+
 export interface Screenshot {
   bytes: Uint8Array;
   /** Image pixels, i.e. CSS pixels × device scale factor. */
@@ -146,14 +215,7 @@ export async function captureScreenshot(
           'This storefront is password protected. Add its password in Site QA → Storefront, or upload a capture by hand.',
         );
       }
-      // The storefront form first - a hidden account-login drawer can hold
-      // an earlier password field that typing into would never submit.
-      const field =
-        (await page.$('form[action*="password"] input[type="password"]')) ??
-        (await page.$(
-          'input[name="form_type"][value="storefront_password"] ~ input[type="password"]',
-        )) ??
-        (await page.$('input[type="password"]'));
+      const field = await revealPasswordField(page);
       if (!field) throw new CaptureFailed('The storefront password page could not be read.');
       await field.type(options.password);
       await Promise.all([
