@@ -1349,3 +1349,49 @@ Visual QA was done against the local Docker stack only (`pnpm infra:up` + `db:se
 390 px, light and dark: blocked, at-risk, on-track and completed projects, a very long merchant name
 and next step, no next step and no target date, the More menu by keyboard, the "..." menu, a More tab
 being current, and a missing project.
+
+---
+
+## Project hero, cover images and charts
+
+**DEPLOY ORDER - read first.** This adds two nullable columns to `Project` (`coverImageKey`,
+`coverImageUpdatedAt`, migration `20260929000000_project_cover_image`). `getProject` selects them, so
+**the migration must be applied to production before this code is deployed**, or every project page
+fails. It was applied to the local database only. Additive and nullable: no backfill, no lock risk.
+
+**Hero.** Every project page now opens with a ~220px hero (360px on a phone) replacing the old page
+header: code, start date and age, the merchant name, stage and migration type, platform -> SHOPLINE,
+store id, website, a stage-progress track ("Step 9 of 17"), target launch (with "N days late"), the
+team, and the header actions. The status band stays directly below it as the place to act from.
+The background is, in order: an uploaded cover, else the latest desktop **homepage** capture from Site
+QA (the AFTER capture once one exists, for readers with `qa:read`), else a plain surface with the
+merchant's initials - never a stock or invented image. Over an image the text is white on a fixed dark
+scrim (same in both themes, flat 80% on phones) so contrast does not depend on the picture.
+
+**Cover upload** (`project:update`, in the hero): `app/api/projects/[code]/cover/route.ts` - GET streams
+it (project scope checked), POST uploads, DELETE removes. A route handler, not a server action,
+because an image exceeds the server-action body limit and the CSP (`connect-src 'self'`) blocks a
+direct browser upload to the bucket. The browser resizes to <= 1920px WebP first; the server sniffs the
+bytes (PNG/JPEG/WebP only, <= 5 MB), stores via `putObject`, audits, and deletes the previous object.
+Route handlers get no built-in origin check, so POST/DELETE refuse a mismatched `Origin`.
+
+**CSP change:** `img-src` now also allows `blob:`. Without it the browser could not open a picked
+image to resize it - which also silently broke the existing manual screenshot upload in Site QA
+(it reads image dimensions the same way). Blob URLs are minted by the page itself.
+
+**Charts** (`packages/ui/src/distribution.tsx`: `BarList`, `DonutChart`, `StageProgress`; `SegmentedBar` /
+`TeamSplitBar` improved): thin marks, a 2px gap between touching segments, values as text beside the
+marks, a legend for every multi-series chart, hover titles as extra detail only.
+- Overview: new "Where the time went" card - time by team, and time per stage against its target (over
+  target shown in the warning tone *and* the word "over"). The old copy in "More details" was removed.
+- Dashboard: stage distribution as bar lists (rows still link to the filtered list), health as a donut
+  (legend rows link to the filter), ageing as status-toned bars; copy rewritten in plain language.
+- Chart colours for teams are new tokens (`--chart-ahn/-shopline/-merchant/-other`): the team colours in
+  light mode, one step darker in dark mode, validated with the dataviz checker in the order AHN,
+  Merchant, SHOPLINE - the two blues are never adjacent (side by side they fail the normal-vision
+  floor). Avatars and other team-coloured UI keep the original team tokens.
+
+**Also fixed:** the dashboard scrolled sideways at every width (grid columns without `minmax(0, ...)`
+let long names size the column) and `ProjectLink` could not truncate (it was `inline-flex` without
+`max-w-full`) - which also fixes the overflow on Approvals and Settings. My work, Merchants, Access
+and Assets still overflow at 390px and are part of the pending system-wide UI plan.

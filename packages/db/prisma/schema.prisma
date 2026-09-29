@@ -633,6 +633,10 @@ model Project {
   stage         ProjectStage  @default(INTRODUCTION)
   migrationType MigrationType @default(ONE_TO_ONE)
   scopeSummary  String?
+  /// Storage key of an uploaded cover image for the project hero. Served only
+  /// through /api/projects/[code]/cover, never as a raw bucket URL.
+  coverImageKey       String?
+  coverImageUpdatedAt DateTime? @db.Timestamptz(3)
 
   ahnProjectManagerId String? @db.Uuid
   ahnDeveloperId      String? @db.Uuid

@@ -1,23 +1,16 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ExternalLink, Store } from 'lucide-react';
-import {
-  formatDate,
-  formatDuration,
-  isAppError,
-  OPEN_FINDING_STATUSES,
-  type Answer,
-} from '@relay/core';
+import { isAppError, OPEN_FINDING_STATUSES, type Answer } from '@relay/core';
 import { db } from '@relay/db';
 import { can, writableVisibilities } from '@relay/rbac';
-import { AnswerTile, Badge, Breadcrumbs, Mono, PageHeader } from '@relay/ui';
-import { MigrationTypePill, StagePill } from '@/components/domain';
+import { AnswerTile, Breadcrumbs } from '@relay/ui';
 import { answerHref, answersForProject } from '@/features/projects/answers';
 import { unmetHandoffRequirements } from '@/features/projects/mutations';
 import { getProject } from '@/features/projects/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
 import { ProjectActions } from './project-actions';
 import { ProjectTabs, type ProjectTab } from './project-tabs';
+import { ProjectHero } from './project-hero';
 import { StatusBand } from './status-band';
 
 /**
@@ -75,6 +68,27 @@ export default async function ProjectLayout({
 
   const canSubmitHandoff = can(principal, 'handoff:submit');
   const handoffUnmet = canSubmitHandoff ? await unmetHandoffRequirements(project.id) : [];
+
+  // Cover upload first; otherwise the most recent desktop homepage capture
+  // (the new site's once there is one), for readers who can see Site QA.
+  const heroCapture = can(principal, 'qa:read')
+    ? await db.pageCapture
+        .findMany({
+          where: { projectId: project.id, viewport: 'DESKTOP', page: { pageType: 'HOME' } },
+          orderBy: { capturedAt: 'desc' },
+          take: 10,
+          select: { id: true, phase: true },
+        })
+        .then((rows) => rows.find((row) => row.phase === 'AFTER') ?? rows[0] ?? null)
+    : null;
+  const heroImage = project.hasCoverImage
+    ? {
+        src: `/api/projects/${encodeURIComponent(project.code)}/cover?v=${project.coverImageUpdatedAt?.getTime() ?? 0}`,
+        source: 'cover' as const,
+      }
+    : heroCapture
+      ? { src: `/api/captures/${heroCapture.id}`, source: 'capture' as const }
+      : null;
 
   const base = `/projects/${project.code}`;
   // Routes are unchanged; only the labels of Activity/Timeline changed, so
@@ -168,48 +182,31 @@ export default async function ProjectLayout({
         items={[{ label: 'Projects', href: '/projects' }, { label: project.merchant.name }]}
       />
 
-      <PageHeader
-        eyebrow={
-          <>
-            <Mono>{project.code}</Mono>
-            <span className="text-faint">&middot;</span>
-            <span>Started {formatDate(project.startDate)}</span>
-            <span className="text-faint">&middot;</span>
-            <span className="tabular">
-              {formatDuration(project.snapshot.time.ageMs, { compact: true })} old
-            </span>
-          </>
-        }
-        title={project.merchant.name}
-        meta={
-          <>
-            {/* Health lives in the status band below, with its reason written out. */}
-            <StagePill stage={project.stage} showPhase />
-            <MigrationTypePill type={project.migrationType} />
-            {project.merchantDetail.currentPlatform && (
-              <Badge tone="muted" size="md">
-                from {project.merchantDetail.currentPlatform}
-              </Badge>
-            )}
-            {project.merchantDetail.shoplineStoreId && (
-              <span className="text-muted inline-flex items-center gap-1.5 text-[12px]">
-                <Store className="size-3.5" />
-                {project.merchantDetail.shoplineStoreId}
-              </span>
-            )}
-            {project.merchant.website && (
-              <a
-                href={project.merchant.website}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="text-accent-ink inline-flex items-center gap-1 text-[12px] underline-offset-4 hover:underline"
-              >
-                {project.merchant.website.replace(/^https?:\/\//, '')}
-                <ExternalLink className="size-3" />
-              </a>
-            )}
-          </>
-        }
+      <ProjectHero
+        code={project.code}
+        name={project.merchant.name}
+        stage={project.stage}
+        visitedStages={project.snapshot.visitedStages}
+        migrationType={project.migrationType}
+        startDate={project.startDate}
+        ageMs={project.snapshot.time.ageMs}
+        currentPlatform={project.merchantDetail.currentPlatform}
+        shoplineStoreId={project.merchantDetail.shoplineStoreId}
+        website={project.merchant.website}
+        targetLaunchDate={project.targetLaunchDate}
+        actualLaunchDate={project.actualLaunchDate}
+        daysToTarget={project.snapshot.time.daysToTarget}
+        people={[
+          project.people.ahnPm,
+          project.people.ahnDev,
+          project.people.ahnDesigner,
+          project.people.shoplineAm,
+          project.people.shoplineSe,
+        ].filter((person): person is NonNullable<typeof person> => person !== null)}
+        image={heroImage}
+        hasCover={project.hasCoverImage}
+        hasCapture={heroCapture !== null}
+        canEditCover={can(principal, 'project:update')}
         actions={
           <ProjectActions
             code={project.code}

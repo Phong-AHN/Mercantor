@@ -328,6 +328,8 @@ export const getProject = cache(async (principal: Principal, code: string) => {
     select: {
       ...listSelect,
       scopeSummary: true,
+      coverImageKey: true,
+      coverImageUpdatedAt: true,
       deploymentNotes: true,
       actualLaunchDate: true,
       merchant: {
@@ -544,6 +546,9 @@ export const getProject = cache(async (principal: Principal, code: string) => {
   return {
     ...listItem,
     scopeSummary: project.scopeSummary,
+    // The key itself stays server-side; pages only need to know a cover exists.
+    hasCoverImage: project.coverImageKey !== null,
+    coverImageUpdatedAt: project.coverImageUpdatedAt,
     deploymentNotes: project.deploymentNotes,
     actualLaunchDate: project.actualLaunchDate,
     merchantDetail: project.merchant,

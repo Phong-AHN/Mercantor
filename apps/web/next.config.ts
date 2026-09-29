@@ -136,7 +136,10 @@ const config: NextConfig = {
             "default-src 'self'",
             `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'production' ? '' : " 'unsafe-eval'"}`,
             "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data:",
+            // blob: lets the page preview or resize an image the user just
+            // picked (cover upload, screenshot dimensions) - blob URLs are
+            // minted by this page itself, never loaded from another origin.
+            "img-src 'self' data: blob:",
             "font-src 'self' data:",
             "connect-src 'self'",
             "object-src 'none'",

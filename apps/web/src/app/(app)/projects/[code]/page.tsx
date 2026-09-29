@@ -8,11 +8,14 @@ import {
   formatDate,
   formatDuration,
   formatRelative,
+  STAGES,
   type ProjectStage,
 } from '@relay/core';
 import {
   Avatar,
   Badge,
+  BarList,
+  type BarListItem,
   Card,
   CardBody,
   CardHeader,
@@ -72,6 +75,20 @@ export default async function ProjectOverviewPage({
 
   const visitedStages = [...new Set(project.snapshot.visitedStages)] as ProjectStage[];
 
+  // Stages in track order (a sequence, so order carries meaning), each against
+  // its target. Over target is a status, so it takes the warning tone - with
+  // the word "over" beside it, never colour alone.
+  const stageTimes: BarListItem[] = project.snapshot.time.byStage
+    .filter((entry) => entry.totalMs > 0)
+    .map((entry) => ({
+      key: entry.stage,
+      label: STAGES[entry.stage].label,
+      value: entry.totalMs,
+      target: entry.targetMs,
+      tone: entry.overTarget ? ('warning' as const) : ('accent' as const),
+      display: `${formatDuration(entry.totalMs, { compact: true })}${entry.overTarget ? ' over' : ''}`,
+    }));
+
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <div className="min-w-0 space-y-4">
@@ -108,6 +125,54 @@ export default async function ProjectOverviewPage({
             blockingLabel="change request(s) open"
           />
         </div>
+
+        <Card>
+          <CardHeader
+            title="Where the time went"
+            description={`${formatDuration(project.snapshot.time.ageMs, { compact: true })} so far. Blocked time is charged to whoever owned the blocker.`}
+            actions={
+              <Link href={`${base}/time`} className={LINK}>
+                Time & SLA
+              </Link>
+            }
+          />
+          <CardBody className="grid gap-x-10 gap-y-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+            <section aria-labelledby="time-by-team">
+              <h3 id="time-by-team" className="text-ink mb-3 text-[13px] font-semibold">
+                By team
+              </h3>
+              <TeamSplitBar
+                byTeam={project.snapshot.time.byTeam}
+                format={(ms) => formatDuration(ms, { compact: true })}
+                height="lg"
+              />
+            </section>
+            <section aria-labelledby="time-by-stage">
+              <h3 id="time-by-stage" className="text-ink mb-3 text-[13px] font-semibold">
+                By stage, against its target
+              </h3>
+              {stageTimes.length === 0 ? (
+                <p className="text-muted text-[13px]">No stage has been timed yet.</p>
+              ) : (
+                <>
+                  <BarList
+                    items={stageTimes}
+                    format={(ms) => formatDuration(ms, { compact: true })}
+                  />
+                  <p className="text-muted mt-3 flex items-center gap-2 text-[12px]">
+                    <span className="bg-ink-soft inline-block h-3 w-px" aria-hidden />
+                    Target
+                    <span
+                      className="bg-warning ml-3 inline-block h-2 w-4 rounded-full"
+                      aria-hidden
+                    />
+                    Over target
+                  </p>
+                </>
+              )}
+            </section>
+          </CardBody>
+        </Card>
 
         <Card>
           <CardHeader
@@ -262,77 +327,71 @@ export default async function ProjectOverviewPage({
           </CardBody>
         </Card>
 
-        <Card>
-          <details className="group">
-            <summary className="hover:bg-surface-2 focus-visible:ring-accent flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-lg)] px-5 py-4 focus-visible:outline-none focus-visible:ring-2 group-open:rounded-b-none [&::-webkit-details-marker]:hidden">
-              <span>
-                <span className="text-ink block text-[15px] font-semibold leading-6">
-                  More details
+        {(project.integrations.length > 0 || project.scopeSummary) && (
+          <Card>
+            <details className="group">
+              <summary className="hover:bg-surface-2 focus-visible:ring-accent flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-lg)] px-5 py-4 focus-visible:outline-none focus-visible:ring-2 group-open:rounded-b-none [&::-webkit-details-marker]:hidden">
+                <span>
+                  <span className="text-ink block text-[15px] font-semibold leading-6">
+                    More details
+                  </span>
+                  <span className="text-muted block text-[13px]">
+                    {[
+                      project.integrations.length > 0 ? 'Connected tools' : null,
+                      project.scopeSummary ? 'scope summary' : null,
+                    ]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </span>
                 </span>
-                <span className="text-muted block text-[13px]">
-                  Time by team{project.integrations.length > 0 ? ', connected tools' : ''}
-                  {project.scopeSummary ? ', scope summary' : ''}
-                </span>
-              </span>
-              <ChevronDown
-                className="text-muted size-4 shrink-0 transition-transform group-open:rotate-180"
-                aria-hidden
-              />
-            </summary>
-            <div className="border-line space-y-5 border-t px-5 py-4">
-              <section>
-                <h3 className="text-ink text-[13px] font-semibold">Where the time went</h3>
-                <p className="text-muted mb-2 text-[12.5px]">
-                  Blocked time is charged to whoever owned the blocker.{' '}
-                  {formatDuration(project.snapshot.time.ageMs, { compact: true })} in total.
-                </p>
-                <TeamSplitBar
-                  byTeam={project.snapshot.time.byTeam}
-                  format={(ms) => formatDuration(ms, { compact: true })}
+                <ChevronDown
+                  className="text-muted size-4 shrink-0 transition-transform group-open:rotate-180"
+                  aria-hidden
                 />
-              </section>
-
-              {project.integrations.length > 0 && (
-                <section>
-                  <h3 className="text-ink mb-1 text-[13px] font-semibold">Connected</h3>
-                  <ul className="space-y-1">
-                    {project.integrations.map((link) => (
-                      <li key={link.id}>
-                        <a
-                          href={link.externalUrl ?? '#'}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="hover:bg-surface-2 flex items-center justify-between gap-2 rounded-[var(--radius-sm)] px-1 py-1.5 transition-colors"
-                        >
-                          <span className="min-w-0">
-                            <span className="text-muted block text-[11.5px] font-medium">
-                              {PROVIDER_LABEL[link.provider] ?? link.provider}
+              </summary>
+              <div className="border-line space-y-5 border-t px-5 py-4">
+                {project.integrations.length > 0 && (
+                  <section>
+                    <h3 className="text-ink mb-1 text-[13px] font-semibold">Connected</h3>
+                    <ul className="space-y-1">
+                      {project.integrations.map((link) => (
+                        <li key={link.id}>
+                          <a
+                            href={link.externalUrl ?? '#'}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="hover:bg-surface-2 flex items-center justify-between gap-2 rounded-[var(--radius-sm)] px-1 py-1.5 transition-colors"
+                          >
+                            <span className="min-w-0">
+                              <span className="text-muted block text-[11.5px] font-medium">
+                                {PROVIDER_LABEL[link.provider] ?? link.provider}
+                              </span>
+                              <span className="text-ink block truncate text-[12.5px]">
+                                {link.displayName ?? link.externalId}
+                              </span>
                             </span>
-                            <span className="text-ink block truncate text-[12.5px]">
-                              {link.displayName ?? link.externalId}
-                            </span>
-                          </span>
-                          <Badge tone={link.isActive ? 'success' : 'muted'} size="sm">
-                            {link.isActive ? 'Linked' : 'Off'}
-                          </Badge>
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
+                            <Badge tone={link.isActive ? 'success' : 'muted'} size="sm">
+                              {link.isActive ? 'Linked' : 'Off'}
+                            </Badge>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
 
-              {project.scopeSummary && (
-                <section>
-                  <h3 className="text-ink mb-1 text-[13px] font-semibold">Scope summary</h3>
-                  <p className="text-ink-soft whitespace-pre-line text-[13px] leading-5">
-                    {project.scopeSummary}
-                  </p>
-                </section>
-              )}
-            </div>
-          </details>
-        </Card>
+                {project.scopeSummary && (
+                  <section>
+                    <h3 className="text-ink mb-1 text-[13px] font-semibold">Scope summary</h3>
+                    <p className="text-ink-soft whitespace-pre-line text-[13px] leading-5">
+                      {project.scopeSummary}
+                    </p>
+                  </section>
+                )}
+              </div>
+            </details>
+          </Card>
+        )}
       </div>
     </div>
   );

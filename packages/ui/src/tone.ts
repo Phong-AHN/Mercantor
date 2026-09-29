@@ -93,6 +93,14 @@ export const TEAM_BAR: Record<Team, string> = {
   OTHER: 'bg-team-other',
 };
 
+/** Chart marks for teams: validated light/dark steps, see tokens.css. */
+export const TEAM_CHART: Record<Team, string> = {
+  AHN: 'bg-chart-ahn',
+  SHOPLINE: 'bg-chart-shopline',
+  MERCHANT: 'bg-chart-merchant',
+  OTHER: 'bg-chart-other',
+};
+
 export const TEAM_TEXT: Record<Team, string> = {
   AHN: 'text-team-ahn',
   SHOPLINE: 'text-team-shopline',

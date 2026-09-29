@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { TEAM_LABEL, type Team, type Tone } from '@relay/core';
 import { cn } from './cn';
-import { TEAM_BAR, TONE_BAR } from './tone';
+import { TEAM_CHART, TONE_BAR } from './tone';
 
 export function ProgressBar({
   value,
@@ -63,12 +63,17 @@ export function SegmentedBar({
   className?: string;
 }) {
   const total = segments.reduce((sum, segment) => sum + Math.max(0, segment.value), 0);
+  const percent = (value: number) => (total > 0 ? Math.round((value / total) * 100) : 0);
 
   return (
     <div className={className}>
+      {/* Touching segments are separated by a 2px gap, never a drawn border. */}
       <div
+        role="img"
+        aria-label={segments.map((s) => `${s.label} ${percent(s.value)}%`).join(', ')}
         className={cn(
-          'bg-surface-3 flex w-full overflow-hidden rounded-full',
+          'flex w-full gap-0.5 overflow-hidden rounded-full',
+          total === 0 && 'bg-surface-3',
           height === 'sm' ? 'h-1.5' : height === 'lg' ? 'h-3' : 'h-2',
         )}
       >
@@ -78,9 +83,12 @@ export function SegmentedBar({
             .map((segment) => (
               <div
                 key={segment.key}
-                className={cn('h-full transition-[width] duration-500', segment.className)}
+                className={cn(
+                  'h-full min-w-0.5 transition-[width] duration-500',
+                  segment.className,
+                )}
                 style={{ width: `${(segment.value / total) * 100}%` }}
-                title={`${segment.label}: ${Math.round((segment.value / total) * 100)}%`}
+                title={`${segment.label}: ${percent(segment.value)}%`}
               />
             ))}
       </div>
@@ -119,7 +127,7 @@ export function TeamSplitBar({
     key: team,
     value: byTeam[team],
     label: format ? `${TEAM_LABEL[team].label} ${format(byTeam[team])}` : TEAM_LABEL[team].label,
-    className: TEAM_BAR[team],
+    className: TEAM_CHART[team],
   }));
   return (
     <SegmentedBar

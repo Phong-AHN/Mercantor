@@ -68,6 +68,10 @@
   --color-team-shopline: var(--team-shopline);
   --color-team-merchant: var(--team-merchant);
   --color-team-other: var(--team-other);
+  --color-chart-ahn: var(--chart-ahn);
+  --color-chart-shopline: var(--chart-shopline);
+  --color-chart-merchant: var(--chart-merchant);
+  --color-chart-other: var(--chart-other);
 
   --shadow-card: var(--elevation-1);
   --shadow-raised: var(--elevation-2);
@@ -116,6 +120,13 @@
   --team-shopline: oklch(0.617 0.147 245);
   --team-merchant: oklch(0.72 0.16 68);
   --team-other: oklch(0.68 0.017 265);
+  /* Chart marks for the four teams. Light = the team colours. Validated with
+     the dataviz checker in the order AHN, Merchant, SHOPLINE (never put the
+     two blues side by side); grey is the neutral "unassigned" slot. */
+  --chart-ahn: var(--team-ahn);
+  --chart-shopline: var(--team-shopline);
+  --chart-merchant: var(--team-merchant);
+  --chart-other: var(--team-other);
 
   --elevation-1: 0 1px 2px oklch(0.216 0.021 265 / 0.05), 0 1px 3px oklch(0.216 0.021 265 / 0.04);
   --elevation-2:
@@ -173,6 +184,12 @@
   --team-shopline: oklch(0.715 0.135 243);
   --team-merchant: oklch(0.8 0.148 76);
   --team-other: oklch(0.66 0.02 265);
+  /* One step darker than the dark team colours, so marks sit in the dark
+     chart lightness band (0.48-0.67) and still clear 3:1 on surface-1. */
+  --chart-ahn: oklch(0.645 0.175 279);
+  --chart-shopline: oklch(0.64 0.14 243);
+  --chart-merchant: oklch(0.66 0.15 74);
+  --chart-other: oklch(0.55 0.02 265);
 
   --elevation-1: 0 1px 2px oklch(0 0 0 / 0.4), 0 1px 3px oklch(0 0 0 / 0.3);
   --elevation-2: 0 2px 4px oklch(0 0 0 / 0.4), 0 10px 24px -8px oklch(0 0 0 / 0.5);

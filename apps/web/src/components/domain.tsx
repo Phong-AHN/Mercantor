@@ -122,13 +122,17 @@ export function ProjectLink({
   );
 
   if (!linked) {
-    return <div className={cn('group inline-flex min-w-0 flex-col', className)}>{content}</div>;
+    return (
+      <div className={cn('group inline-flex min-w-0 max-w-full flex-col', className)}>
+        {content}
+      </div>
+    );
   }
 
   return (
     <Link
       href={`/projects/${code}`}
-      className={cn('group inline-flex min-w-0 flex-col', className)}
+      className={cn('group inline-flex min-w-0 max-w-full flex-col', className)}
     >
       {content}
     </Link>

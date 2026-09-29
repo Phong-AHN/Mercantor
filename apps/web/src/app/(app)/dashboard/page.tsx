@@ -27,20 +27,19 @@ import { can } from '@relay/rbac';
 import {
   Alert,
   Avatar,
+  BarList,
   buttonStyles,
+  DonutChart,
   Card,
   CardBody,
   CardHeader,
-  cn,
   DetailList,
   DetailRow,
   Empty,
   PageHeader,
   PermissionDenied,
-  ProgressBar,
   Stat,
   TeamSplitBar,
-  TONE_DOT,
 } from '@relay/ui';
 import { AgingPill, HealthPill, ProjectLink, StagePill } from '@/components/domain';
 import { getPortfolioSummary } from '@/features/dashboard/queries';
@@ -113,7 +112,7 @@ export default async function DashboardPage() {
       />
 
       {/* --- headline numbers ------------------------------------------- */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Stat
           label="Active"
           value={summary.active}
@@ -187,7 +186,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* --- where everything is + health -------------------------------- */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader
             title="Where everything is"
@@ -208,40 +207,29 @@ export default async function DashboardPage() {
               );
               const phaseTotal = entries.reduce((sum, entry) => sum + entry.count, 0);
               return (
-                <div key={phase}>
+                <section key={phase} aria-label={`${STAGE_PHASE_LABEL[phase]} phase`}>
                   <div className="mb-2 flex items-baseline justify-between">
-                    <p className="text-faint text-[11px] font-semibold uppercase tracking-[0.12em]">
+                    <h3 className="text-ink text-[13px] font-semibold">
                       {STAGE_PHASE_LABEL[phase]}
+                    </h3>
+                    <p className="text-muted text-[12px] tabular-nums">
+                      {phaseTotal} project{phaseTotal === 1 ? '' : 's'}
                     </p>
-                    <p className="tabular text-muted text-[12px]">{phaseTotal}</p>
                   </div>
-                  <ul className="space-y-1">
-                    {entries.map((entry) => (
-                      <li key={entry.stage}>
-                        <Link
-                          href={`/projects?stage=${entry.stage}`}
-                          className="hover:bg-surface-2 flex items-center gap-3 rounded-[var(--radius-sm)] px-2 py-1.5 transition-colors"
-                        >
-                          <span className="text-ink-soft w-36 shrink-0 truncate text-[12.5px]">
-                            {STAGES[entry.stage].label}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <ProgressBar
-                              value={entry.count}
-                              max={maxStageCount}
-                              size="sm"
-                              tone={entry.count === 0 ? 'muted' : 'accent'}
-                              label={`${entry.count} projects in ${STAGES[entry.stage].label}`}
-                            />
-                          </span>
-                          <span className="tabular text-ink w-6 shrink-0 text-right text-[12.5px] font-medium">
-                            {entry.count || <span className="text-faint">0</span>}
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                  {/* One series, one hue: bar length is the count. Every row links
+                      to the project list filtered to that stage. */}
+                  <BarList
+                    linkAs={Link}
+                    labelWidth="9rem"
+                    max={maxStageCount}
+                    items={entries.map((entry) => ({
+                      key: entry.stage,
+                      label: STAGES[entry.stage].label,
+                      value: entry.count,
+                      href: `/projects?stage=${entry.stage}`,
+                    }))}
+                  />
+                </section>
               );
             })}
 
@@ -258,64 +246,42 @@ export default async function DashboardPage() {
 
         <div className="space-y-4">
           <Card>
-            <CardHeader title="Health" description="Derived, never typed in." />
-            <CardBody className="space-y-3">
-              {HEALTHS.map((health) => {
-                const count = summary.byHealth[health];
-                const pct = summary.active > 0 ? (count / summary.active) * 100 : 0;
-                return (
-                  <Link
-                    key={health}
-                    href={`/projects?health=${health}`}
-                    className="hover:bg-surface-2 block rounded-[var(--radius-sm)] p-1 transition-colors"
-                  >
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className="text-ink-soft flex items-center gap-2 text-[13px]">
-                        <span
-                          className={cn('size-2 rounded-full', TONE_DOT[HEALTH_LABEL[health].tone])}
-                        />
-                        {HEALTH_LABEL[health].label}
-                      </span>
-                      <span className="tabular text-ink text-[13px] font-semibold">{count}</span>
-                    </div>
-                    <ProgressBar
-                      value={pct}
-                      size="sm"
-                      tone={HEALTH_LABEL[health].tone}
-                      label={`${HEALTH_LABEL[health].label}: ${count}`}
-                    />
-                  </Link>
-                );
-              })}
+            <CardHeader
+              title="Health"
+              description="Worked out from blockers, stage time and launch dates."
+            />
+            <CardBody>
+              {/* Part to whole of active projects; health is a status, so the
+                  arcs take status tones - each named with its count beside it. */}
+              <DonutChart
+                caption="Active projects by health"
+                linkAs={Link}
+                segments={HEALTHS.map((health) => ({
+                  key: health,
+                  label: HEALTH_LABEL[health].label,
+                  value: summary.byHealth[health],
+                  tone: HEALTH_LABEL[health].tone,
+                  href: `/projects?health=${health}`,
+                }))}
+              />
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader title="Ageing" description="Configurable bands, applied to project age." />
+            <CardHeader title="Ageing" description="How long active projects have been running." />
             <CardBody>
-              <ul className="space-y-2">
-                {BANDS.map((band) => (
-                  <li key={band} className="flex items-center justify-between gap-3">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span
-                        className={cn(
-                          'size-2 shrink-0 rounded-full',
-                          TONE_DOT[AGING_BAND_LABEL[band].tone],
-                        )}
-                      />
-                      <span className="text-ink-soft truncate text-[13px]">
-                        {AGING_BAND_LABEL[band].label}
-                      </span>
-                      <span className="text-faint shrink-0 text-[11px]">
-                        {AGING_BAND_LABEL[band].hint}
-                      </span>
-                    </span>
-                    <span className="tabular text-ink text-[13px] font-semibold">
-                      {summary.byAging[band]}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              {/* Ordered bands that already mean status (on track to critical), so
+                  each bar keeps its band's tone, with the band and count in text. */}
+              <BarList
+                labelWidth="9.5rem"
+                items={BANDS.map((band) => ({
+                  key: band,
+                  label: AGING_BAND_LABEL[band].label,
+                  hint: AGING_BAND_LABEL[band].hint,
+                  value: summary.byAging[band],
+                  tone: AGING_BAND_LABEL[band].tone,
+                }))}
+              />
             </CardBody>
           </Card>
         </div>
@@ -328,7 +294,7 @@ export default async function DashboardPage() {
           description="Elapsed time across active projects, charged to whoever the clock was running against."
           icon={<Clock className="size-4" />}
         />
-        <CardBody className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <CardBody className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div>
             <TeamSplitBar
               byTeam={summary.timeByTeam}
@@ -388,7 +354,7 @@ export default async function DashboardPage() {
       </Card>
 
       {/* --- blockers ----------------------------------------------------- */}
-      <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
             title="Open blockers"
