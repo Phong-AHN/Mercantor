@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@relay/db';
 import { NotFoundError, toAppError } from '@relay/core';
 import { readableVisibilities } from '@relay/rbac';
-import { presignDownload } from '@relay/storage';
+import { presignDownload, readObject } from '@relay/storage';
 import { resolveProject } from '@/features/projects/mutations';
 import { requirePrincipal } from '@/server/session';
 
@@ -22,8 +22,17 @@ import { requirePrincipal } from '@/server/session';
  * (pasted elsewhere, browser history, a server log), regardless of who
  * could read the comment it hangs off. Same predicate D-009 already uses
  * for the comment thread itself, applied here too.
+ *
+ * `?inline=1` serves an image's bytes from this origin instead of
+ * redirecting, so a comment can show it as a thumbnail: the app's CSP is
+ * `img-src 'self'`, and an `<img>` cannot follow a redirect to the bucket.
+ * Only the raster image types qualify - their stored type was checked
+ * against the real bytes on upload - and everything else still redirects,
+ * so no other file type is ever rendered by the browser on this origin.
  */
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+const INLINE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const principal = await requirePrincipal();
     const { id } = await context.params;
@@ -34,6 +43,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         kind: true,
         label: true,
         storageKey: true,
+        mimeType: true,
         project: { select: { code: true } },
         comment: { select: { visibility: true } },
       },
@@ -49,6 +59,23 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     }
 
     await resolveProject(principal, attachment.project.code);
+
+    const inline = new URL(request.url).searchParams.get('inline') === '1';
+    if (inline && attachment.mimeType && INLINE_TYPES.has(attachment.mimeType)) {
+      const object = await readObject(attachment.storageKey);
+      if (!object) throw new NotFoundError('That file does not exist.');
+      return new Response(object.body, {
+        headers: {
+          'Content-Type': attachment.mimeType,
+          ...(object.sizeBytes ? { 'Content-Length': String(object.sizeBytes) } : {}),
+          'Content-Disposition': 'inline',
+          'X-Content-Type-Options': 'nosniff',
+          // A storage key is never reused for different bytes, so the
+          // image under this id never changes.
+          'Cache-Control': 'private, max-age=86400, immutable',
+        },
+      });
+    }
 
     const url = await presignDownload(attachment.storageKey, attachment.label);
     return NextResponse.redirect(url);

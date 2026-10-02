@@ -47,7 +47,10 @@ function initials(name: string): string {
     .join('');
 }
 
-function progressSteps(stage: ProjectStage, visited: readonly ProjectStage[]): StageProgressStep[] {
+export function progressSteps(
+  stage: ProjectStage,
+  visited: readonly ProjectStage[],
+): StageProgressStep[] {
   // An off-track stage (on hold) has no place on the rail; show the furthest
   // linear stage the project reached instead.
   const reached =

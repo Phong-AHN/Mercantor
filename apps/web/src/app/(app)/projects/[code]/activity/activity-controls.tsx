@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { AtSign, CircleCheck, Hash, Pencil, Send } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { AtSign, CircleCheck, Hash, ImagePlus, Pencil, Send } from 'lucide-react';
 import {
   COMMENT_CATEGORIES,
   COMMENT_CATEGORY_LABEL,
@@ -21,14 +22,25 @@ import {
   Input,
   Select,
   Textarea,
+  useToast,
 } from '@relay/ui';
 import { useAction } from '@/components/use-action';
+import { confirmUploadAction } from '@/features/attachments/actions';
 import {
   postCommentAction,
   recordSlackMessageAction,
   resolveCommentAction,
   updateCommentAction,
 } from '@/features/activity/actions';
+import {
+  acceptImages,
+  COMMENT_IMAGE_TYPES,
+  MAX_COMMENT_IMAGES,
+  PendingImageStrip,
+  uploadImages,
+  type PendingImage,
+  type UploadedImage,
+} from './comment-images';
 
 interface Person {
   id: string;
@@ -43,6 +55,11 @@ interface Person {
  * `parentId` turns it into a reply, and `compact` sheds the controls a reply
  * does not need (category, Slack) so a thread does not feel like filling out
  * the same form twice.
+ *
+ * With `canAttachImages`, images can go on the update too - picked, pasted
+ * (a screenshot straight from the clipboard) or dropped. They are uploaded
+ * before the update is posted, so a failed upload never leaves a posted
+ * update missing the picture it describes, and linked to it right after.
  */
 export function CommentComposer({
   code,
@@ -51,6 +68,7 @@ export function CommentComposer({
   parentId,
   compact = false,
   autoFocus = false,
+  canAttachImages = false,
   onPosted,
 }: {
   code: string;
@@ -59,6 +77,7 @@ export function CommentComposer({
   parentId?: string;
   compact?: boolean;
   autoFocus?: boolean;
+  canAttachImages?: boolean;
   onPosted?: () => void;
 }) {
   const [body, setBody] = useState('');
@@ -70,29 +89,150 @@ export function CommentComposer({
   const [alsoSlack, setAlsoSlack] = useState(false);
   const [mentions, setMentions] = useState<string[]>([]);
   const [showMentions, setShowMentions] = useState(false);
+  const [images, setImages] = useState<PendingImage[]>([]);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+  const toast = useToast();
 
-  const action = useAction(postCommentAction, {
-    onSuccess: () => {
-      setBody('');
-      setMentions([]);
-      setNeedsAnswer(false);
-      onPosted?.();
-    },
-  });
+  // The toast and the refresh wait until the images are linked too, or the
+  // update would appear first without them.
+  const action = useAction(postCommentAction, { toastOnSuccess: false, refresh: false });
+
+  // Previews are blob: URLs; they go with the composer.
+  const imagesRef = useRef(images);
+  useEffect(() => {
+    imagesRef.current = images;
+  }, [images]);
+  useEffect(
+    () => () => imagesRef.current.forEach((image) => URL.revokeObjectURL(image.preview)),
+    [],
+  );
 
   const internal = visibility === 'INTERNAL_AHN';
+  const busy = action.pending || uploading;
+
+  function addImages(files: readonly File[]) {
+    if (!canAttachImages || busy) return;
+    const { accepted, error } = acceptImages(files, images.length);
+    setImageError(error);
+    if (accepted.length > 0) setImages((current) => [...current, ...accepted]);
+  }
+
+  function removeImage(id: string) {
+    setImageError(null);
+    const gone = images.find((image) => image.id === id);
+    if (gone) URL.revokeObjectURL(gone.preview);
+    setImages((current) => current.filter((image) => image.id !== id));
+  }
+
+  async function post() {
+    setImageError(null);
+    let uploaded: UploadedImage[] = [];
+    if (images.length > 0) {
+      setUploading(true);
+      try {
+        uploaded = await uploadImages(code, images);
+      } catch (error) {
+        setImageError(
+          error instanceof Error ? error.message : 'An image did not upload. Try again.',
+        );
+        return;
+      } finally {
+        setUploading(false);
+      }
+    }
+
+    const result = await action.run({
+      code,
+      body,
+      category,
+      visibility,
+      status: needsAnswer ? 'OPEN' : 'NONE',
+      parentId,
+      mentions,
+      alsoSlack: alsoSlack && !internal,
+    });
+    if (!result.ok) return;
+
+    let failed = 0;
+    if (uploaded.length > 0) {
+      setUploading(true);
+      for (const image of uploaded) {
+        const confirmed = await confirmUploadAction({
+          code,
+          key: image.key,
+          label: image.label,
+          contentType: image.mimeType,
+          commentId: result.data.id,
+        }).catch(() => null);
+        if (!confirmed?.ok) failed += 1;
+      }
+      setUploading(false);
+    }
+
+    images.forEach((image) => URL.revokeObjectURL(image.preview));
+    setImages([]);
+    setBody('');
+    setMentions([]);
+    setNeedsAnswer(false);
+    if (failed > 0) {
+      toast.error(
+        'Update posted, but not every image was attached',
+        `${failed} of ${uploaded.length} could not be verified. Attach them again from the update.`,
+      );
+    } else {
+      toast.success('Update posted.');
+    }
+    router.refresh();
+    onPosted?.();
+  }
 
   const body_ = (
-    <CardBody className={cn('space-y-3', compact && 'p-3')}>
+    <CardBody
+      className={cn(
+        'space-y-3',
+        compact && 'p-3',
+        dragging && 'outline-accent outline-dashed outline-2 -outline-offset-2',
+      )}
+      onDragOver={(event) => {
+        if (!canAttachImages || !event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(event) => {
+        if (!canAttachImages || event.dataTransfer.files.length === 0) return;
+        event.preventDefault();
+        setDragging(false);
+        addImages([...event.dataTransfer.files]);
+      }}
+    >
       {action.error && (
         <Alert tone="danger" dense>
           {action.error}
+        </Alert>
+      )}
+      {imageError && (
+        <Alert tone="danger" dense>
+          {imageError}
         </Alert>
       )}
 
       <Textarea
         value={body}
         onChange={(event) => setBody(event.target.value)}
+        onPaste={(event) => {
+          const files = [...event.clipboardData.files];
+          if (!canAttachImages || files.length === 0) return;
+          // A pasted screenshot becomes an attachment, not text.
+          event.preventDefault();
+          addImages(files);
+        }}
         rows={compact ? 2 : 3}
         placeholder={
           compact ? 'Write a reply.' : 'Post an update, ask a question, or record feedback.'
@@ -101,6 +241,8 @@ export function CommentComposer({
         autoFocus={autoFocus}
         className={cn(internal && 'border-danger/40 bg-danger-soft/30')}
       />
+
+      <PendingImageStrip images={images} onRemove={removeImage} disabled={busy} />
 
       {mentions.length > 0 && (
         <p className="text-muted flex flex-wrap items-center gap-1.5 text-[12px]">
@@ -157,6 +299,32 @@ export function CommentComposer({
           </Button>
         )}
 
+        {canAttachImages && (
+          <>
+            <Button
+              variant="subtle"
+              size="sm"
+              disabled={busy || images.length >= MAX_COMMENT_IMAGES}
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach images - you can also paste or drop them here"
+            >
+              <ImagePlus className="size-3.5" />
+              Image
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={COMMENT_IMAGE_TYPES.join(',')}
+              multiple
+              hidden
+              onChange={(event) => {
+                addImages([...(event.target.files ?? [])]);
+                event.target.value = '';
+              }}
+            />
+          </>
+        )}
+
         <div className="ml-auto flex items-center gap-3">
           {!compact && (
             <Checkbox
@@ -177,20 +345,9 @@ export function CommentComposer({
           <Button
             variant="primary"
             size="sm"
-            loading={action.pending}
+            loading={busy}
             disabled={body.trim().length === 0}
-            onClick={() =>
-              action.run({
-                code,
-                body,
-                category,
-                visibility,
-                status: needsAnswer ? 'OPEN' : 'NONE',
-                parentId,
-                mentions,
-                alsoSlack: alsoSlack && !internal,
-              })
-            }
+            onClick={() => void post()}
           >
             <Send className="size-3.5" />
             {compact ? 'Reply' : 'Post'}

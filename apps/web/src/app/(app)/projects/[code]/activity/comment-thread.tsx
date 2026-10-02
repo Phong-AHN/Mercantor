@@ -13,6 +13,7 @@ import {
 import { Avatar, Badge, cn, Empty, StatusPill } from '@relay/ui';
 import { FileUploadButton } from '@/app/(app)/projects/[code]/access/access-controls';
 import { CommentComposer, EditCommentButton, ResolveButton } from './activity-controls';
+import { CommentImageGallery, isCommentImage } from './comment-images';
 
 const SOURCE_LABEL: Record<string, string> = {
   PORTAL: 'in the portal',
@@ -35,7 +36,13 @@ export interface ThreadComment {
   parentId: string | null;
   author: { id: string; name: string; role: string };
   mentions: { user: { id: string; name: string } }[];
-  attachments: { id: string; kind: 'FILE' | 'LINK'; label: string; url: string }[];
+  attachments: {
+    id: string;
+    kind: 'FILE' | 'LINK';
+    label: string;
+    url: string;
+    mimeType: string | null;
+  }[];
 }
 
 interface Person {
@@ -155,6 +162,9 @@ function CommentRow({
 }) {
   const replies = repliesByParent.get(comment.id) ?? [];
   const [replying, setReplying] = useState(false);
+  // Images show as pictures; every other file stays a link to download.
+  const images = comment.attachments.filter(isCommentImage);
+  const files = comment.attachments.filter((attachment) => !isCommentImage(attachment));
 
   return (
     <div className="flex gap-3">
@@ -225,9 +235,11 @@ function CommentRow({
           </a>
         )}
 
-        {comment.attachments.length > 0 && (
+        <CommentImageGallery images={images} />
+
+        {files.length > 0 && (
           <ul className="mt-2 flex flex-wrap gap-2">
-            {comment.attachments.map((attachment) => (
+            {files.map((attachment) => (
               <li key={attachment.id}>
                 <a
                   href={attachment.url}
@@ -272,6 +284,7 @@ function CommentRow({
               parentId={comment.id}
               compact
               autoFocus
+              canAttachImages={canUploadFiles}
               onPosted={() => setReplying(false)}
             />
           </div>

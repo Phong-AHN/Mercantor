@@ -72,7 +72,7 @@ export const postCommentAction = defineAction({
       });
     }
 
-    const outboxIds = await transaction(async (tx) => {
+    const { commentId, outboxIds } = await transaction(async (tx) => {
       if (input.parentId) {
         const parent = await tx.comment.findFirst({
           where: { id: input.parentId, projectId: project.id },
@@ -162,20 +162,24 @@ export const postCommentAction = defineAction({
 
       // An internal AHN note must never leave AHN, whatever the box says.
       if (input.alsoSlack && visibility !== 'INTERNAL_AHN') {
-        return fanOut(tx, {
-          projectId: project.id,
-          projectCode: project.code,
-          title: `${ctx.principal.name} on ${project.merchantName}`,
-          body: input.body.slice(0, 900),
-          tone: input.status === 'OPEN' ? 'warning' : 'info',
-        });
+        return {
+          commentId: comment.id,
+          outboxIds: await fanOut(tx, {
+            projectId: project.id,
+            projectCode: project.code,
+            title: `${ctx.principal.name} on ${project.merchantName}`,
+            body: input.body.slice(0, 900),
+            tone: input.status === 'OPEN' ? 'warning' : 'info',
+          }),
+        };
       }
-      return [];
+      return { commentId: comment.id, outboxIds: [] };
     });
 
     await nudgeWorker(outboxIds);
     revalidateProject(input.code);
-    return actionOk(undefined, 'Update posted.');
+    // The id lets the composer attach the images picked alongside the text.
+    return actionOk({ id: commentId }, 'Update posted.');
   },
 });
 

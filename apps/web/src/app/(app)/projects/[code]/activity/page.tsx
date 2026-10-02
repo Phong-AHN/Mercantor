@@ -48,6 +48,7 @@ export default async function ProjectActivityPage({
             code={project.code}
             visibilities={composeVisibilities}
             people={people.all}
+            canAttachImages={canUploadFiles}
           />
         )}
 

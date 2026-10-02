@@ -25,7 +25,14 @@ export default async function PortalActivityPage() {
 
   return (
     <div className="space-y-4">
-      <CommentComposer code={project.code} visibilities={visibilities} people={[]} />
+      {canComment && (
+        <CommentComposer
+          code={project.code}
+          visibilities={visibilities}
+          people={[]}
+          canAttachImages={canUploadFiles}
+        />
+      )}
 
       <Card>
         <CardHeader

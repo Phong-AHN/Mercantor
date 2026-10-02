@@ -1,18 +1,25 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CircleCheck, Clock, KeyRound, FolderOpen } from 'lucide-react';
+import {
+  ArrowRight,
+  CircleAlert,
+  CircleCheck,
+  Clock,
+  FolderOpen,
+  ImageOff,
+  KeyRound,
+  Stamp,
+} from 'lucide-react';
 import {
   ACTIVITY_TYPE_LABEL,
+  clock,
   formatDate,
   formatDuration,
   formatRelative,
   isAppError,
-  LINEAR_STAGES,
-  STAGES,
   TEAM_LABEL,
 } from '@relay/core';
 import {
-  Alert,
   Avatar,
   Card,
   CardBody,
@@ -22,23 +29,25 @@ import {
   DetailRow,
   Empty,
   NotFoundState,
-  PageHeader,
   ProgressBar,
-  Stat,
   Timeline,
   TimelineItem,
 } from '@relay/ui';
-import { StagePill } from '@/components/domain';
+import { ShowcaseCard } from '@/components/qa/showcase-card';
 import { getPortalProject } from '@/features/portal/queries';
+import { captureSrc, listShowcase } from '@/features/qa/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import { PortalHero } from './portal-hero';
 
 export const metadata: Metadata = { title: 'Your migration' };
 export const dynamic = 'force-dynamic';
 
 /**
  * The merchant's overview. Deliberately narrower than the internal one: where
- * it is, what is needed from them, and who to ask. No portfolio, no money, no
- * internal notes - those rows are never fetched for this principal.
+ * it is, what is needed from them, what their new store looks like, and who
+ * to ask. No portfolio, no money, no internal notes - those rows are never
+ * fetched for this principal, and the before/after only ever shows
+ * comparisons someone shared with them (`listShowcase` filters on that).
  */
 export default async function PortalOverviewPage() {
   const principal = await requirePrincipalOrRedirect('/portal');
@@ -58,9 +67,23 @@ export default async function PortalOverviewPage() {
     throw error;
   }
 
+  const [showcase] = await listShowcase(principal, project.code);
+  const sharedPair = showcase?.comparisons[0] ?? null;
   const now = project.snapshot.time.now;
-  const stageOrder = STAGES[project.stage].order ?? 0;
-  const progress = (stageOrder / LINEAR_STAGES.length) * 100;
+
+  // The cover first; otherwise the new storefront from a shared comparison,
+  // desktop preferred - never a capture nobody has shared with the merchant.
+  const sharedAfter =
+    showcase?.comparisons.find((pair) => pair.afterCapture.viewport === 'DESKTOP')?.afterCapture ??
+    sharedPair?.afterCapture ??
+    null;
+  const heroImage = project.hasCoverImage
+    ? {
+        src: `/api/projects/${encodeURIComponent(project.code)}/cover?v=${project.coverImageUpdatedAt?.getTime() ?? 0}`,
+      }
+    : sharedAfter
+      ? { src: captureSrc(sharedAfter.id) }
+      : null;
 
   const accessOutstanding = project.accessItems.filter((item) => item.status !== 'VERIFIED');
   const assetsOutstanding = project.assetItems.filter(
@@ -73,105 +96,164 @@ export default async function PortalOverviewPage() {
     (approval) => approval.type === 'MERCHANT_FINAL' && approval.status === 'PENDING',
   );
 
-  const waitingOnYou =
-    merchantBlockers.length +
-    accessOutstanding.length +
-    assetsOutstanding.length +
-    pendingApprovals.length;
+  const todo: TodoItem[] = [
+    ...merchantBlockers.map((blocker) => ({
+      key: blocker.id,
+      icon: <CircleAlert className="size-4" />,
+      title: blocker.title,
+      detail: blocker.nextAction ?? 'Your team is waiting on you for this.',
+      href: '/portal/activity',
+      cta: 'Reply to the team',
+    })),
+    ...(pendingApprovals.length > 0
+      ? [
+          {
+            key: 'approval',
+            icon: <Stamp className="size-4" />,
+            title: 'Your final approval',
+            detail: 'Review your new store and sign it off so it can go live.',
+            href: '/portal/approvals',
+            cta: 'Review and approve',
+          },
+        ]
+      : []),
+    ...(accessOutstanding.length > 0
+      ? [
+          {
+            key: 'access',
+            icon: <KeyRound className="size-4" />,
+            title: `${accessOutstanding.length} access item${accessOutstanding.length === 1 ? '' : 's'} still needed`,
+            detail: accessOutstanding
+              .slice(0, 3)
+              .map((item) => item.label)
+              .join(', '),
+            href: '/portal/access',
+            cta: 'Give access',
+          },
+        ]
+      : []),
+    ...(assetsOutstanding.length > 0
+      ? [
+          {
+            key: 'assets',
+            icon: <FolderOpen className="size-4" />,
+            title: `${assetsOutstanding.length} file${assetsOutstanding.length === 1 ? '' : 's'} still needed`,
+            detail: assetsOutstanding
+              .slice(0, 3)
+              .map((item) => item.label)
+              .join(', '),
+            href: '/portal/assets',
+            cta: 'Upload files',
+          },
+        ]
+      : []),
+  ];
 
-  // "With you" always wins - a merchant mainly needs to know whether the
-  // ball is in their own court, regardless of which other team also owns
-  // this step alongside them.
-  const nextStepOwnedByMerchant = project.nextActionOwnerTeam.includes('MERCHANT');
-  const nextStepOwnerLabel = nextStepOwnedByMerchant
-    ? 'With you'
+  const nextStepWithYou = project.nextActionOwnerTeam.includes('MERCHANT');
+  const nextStepOwner = nextStepWithYou
+    ? 'you'
     : project.nextActionOwnerTeam.length > 0
-      ? `With ${project.nextActionOwnerTeam.map((team) => TEAM_LABEL[team].label).join(' & ')}`
-      : 'Not set';
+      ? project.nextActionOwnerTeam.map((team) => TEAM_LABEL[team].label).join(' & ')
+      : null;
+
+  const team = [
+    { label: 'Project manager', person: project.people.ahnPm },
+    { label: 'Developer', person: project.people.ahnDev },
+    { label: 'Designer', person: project.people.ahnDesigner },
+    { label: 'SHOPLINE account manager', person: project.people.shoplineAm },
+  ];
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        eyebrow={<span>Migrating to SHOPLINE with AHN Media</span>}
-        title={project.merchant.name}
-        description={STAGES[project.stage].description}
-        meta={
-          <>
-            <StagePill stage={project.stage} showPhase />
-            <span className="text-muted text-[12px]">
-              Step {stageOrder} of {LINEAR_STAGES.length}
-            </span>
-            {project.targetLaunchDate && (
-              <span className="text-muted text-[12px]">
-                Target launch {formatDate(project.targetLaunchDate)}
-              </span>
-            )}
-          </>
-        }
+    <div className="space-y-6">
+      <PortalHero
+        name={project.merchant.name}
+        stage={project.stage}
+        visitedStages={project.snapshot.visitedStages}
+        currentPlatform={project.merchantDetail.currentPlatform}
+        website={project.merchantDetail.website}
+        targetLaunchDate={project.targetLaunchDate}
+        actualLaunchDate={project.actualLaunchDate}
+        daysToTarget={project.snapshot.time.daysToTarget}
+        people={team.flatMap(({ person }) => (person ? [person] : []))}
+        image={heroImage}
       />
 
-      {waitingOnYou > 0 ? (
-        <Alert
-          tone="warning"
-          title={`${waitingOnYou} thing${waitingOnYou === 1 ? '' : 's'} need${waitingOnYou === 1 ? 's' : ''} you`}
-        >
-          <ul className="mt-1 list-disc space-y-0.5 pl-4">
-            {merchantBlockers.map((blocker) => (
-              <li key={blocker.id}>
-                {blocker.title}
-                {blocker.nextAction ? ` - ${blocker.nextAction}` : ''}
+      <section aria-labelledby="todo-heading" className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="todo-heading" className="text-ink text-[16px] font-semibold tracking-tight">
+            {todo.length > 0 ? 'What we need from you' : 'Nothing is waiting on you'}
+          </h2>
+          {project.nextAction && (
+            <p className="text-muted flex items-center gap-1.5 text-[12.5px]">
+              <Clock className="size-3.5" aria-hidden />
+              Next: {project.nextAction}
+              {nextStepOwner && <span className="text-faint"> · with {nextStepOwner}</span>}
+            </p>
+          )}
+        </div>
+        {todo.length > 0 ? (
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {todo.map((item) => (
+              <li key={item.key}>
+                <TodoCard item={item} />
               </li>
             ))}
-            {accessOutstanding.length > 0 && (
-              <li>
-                <Link href="/portal/access" className="underline underline-offset-4">
-                  {accessOutstanding.length} access item(s) still needed
-                </Link>
-              </li>
-            )}
-            {assetsOutstanding.length > 0 && (
-              <li>
-                <Link href="/portal/assets" className="underline underline-offset-4">
-                  {assetsOutstanding.length} required asset(s) still needed
-                </Link>
-              </li>
-            )}
-            {pendingApprovals.length > 0 && (
-              <li>
-                <Link href="/portal/approvals" className="underline underline-offset-4">
-                  Final approval is waiting on you
-                </Link>
-              </li>
-            )}
           </ul>
-        </Alert>
-      ) : (
-        <Alert tone="success" title="Nothing is waiting on you">
-          AHN has everything they need right now. We will let you know as soon as that changes.
-        </Alert>
-      )}
+        ) : (
+          <div className="border-success/30 bg-success-soft/50 flex items-start gap-3 rounded-[var(--radius-lg)] border p-4">
+            <span className="bg-success-soft text-success-ink grid size-9 shrink-0 place-items-center rounded-full">
+              <CircleCheck className="size-4.5" />
+            </span>
+            <div>
+              <p className="text-ink text-[13.5px] font-medium">You are all caught up</p>
+              <p className="text-muted mt-0.5 text-[12.5px] leading-5">
+                AHN has everything they need right now. We will let you know as soon as that
+                changes.
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
 
-      <Card>
-        <CardBody className="space-y-3">
-          <div className="flex items-baseline justify-between">
-            <p className="text-ink text-[13px] font-medium">Migration progress</p>
-            <p className="tabular text-muted text-[12.5px]">{Math.round(progress)}%</p>
+      <section aria-labelledby="store-heading" className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="store-heading" className="text-ink text-[16px] font-semibold tracking-tight">
+            Your new store
+          </h2>
+          {showcase && (
+            <Link
+              href="/portal/qa"
+              className="text-accent-ink inline-flex items-center gap-1 text-[12.5px] font-medium underline-offset-4 hover:underline"
+            >
+              See the full site review
+              <ArrowRight className="size-3.5" />
+            </Link>
+          )}
+        </div>
+        {showcase && sharedPair ? (
+          <ShowcaseCard
+            project={showcase}
+            href="/portal/qa"
+            findingsHref="/portal/qa#findings"
+            now={clock.now()}
+            size="hero"
+          />
+        ) : (
+          <div className="border-line bg-surface-1 grid gap-5 rounded-[var(--radius-lg)] border border-dashed p-5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-center">
+            <div className="bg-surface-2 text-faint grid aspect-[16/10] place-items-center rounded-[var(--radius-md)]">
+              <ImageOff className="size-6" aria-hidden />
+            </div>
+            <div>
+              <p className="text-ink text-[13.5px] font-medium">Your before and after is on its way</p>
+              <p className="text-muted mt-1 max-w-prose text-[12.5px] leading-5">
+                As your new SHOPLINE store takes shape, your AHN team will share side-by-side
+                comparisons of your current site and the new one here, with the results they
+                measured.
+              </p>
+            </div>
           </div>
-          <ProgressBar value={progress} tone="accent" label="Migration progress" />
-          <div className="text-muted flex flex-wrap items-center gap-x-6 gap-y-1 text-[12px]">
-            <span>Started {formatDate(project.startDate)}</span>
-            <span className="tabular">
-              Running {formatDuration(project.snapshot.time.ageMs, { compact: true })}
-            </span>
-            <span>
-              Currently in {STAGES[project.stage].label} for{' '}
-              <span className="tabular">
-                {formatDuration(project.snapshot.time.currentStageMs, { compact: true })}
-              </span>
-            </span>
-          </div>
-        </CardBody>
-      </Card>
+        )}
+      </section>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <PortalTile
@@ -185,25 +267,33 @@ export default async function PortalOverviewPage() {
         <PortalTile
           href="/portal/assets"
           icon={<FolderOpen className="size-4" />}
-          label="Assets"
+          label="Files and assets"
           done={project.assetItems.filter((item) => item.status === 'APPROVED').length}
           total={project.assetItems.length}
           outstanding={assetsOutstanding.length}
         />
-        <Stat
-          label="Next step"
-          value={nextStepOwnerLabel}
-          detail={project.nextAction ?? 'No next step recorded'}
-          tone={nextStepOwnedByMerchant ? 'warning' : 'success'}
-          icon={<Clock className="size-3.5" />}
-        />
+        <div className="border-line bg-surface-1 shadow-card rounded-[var(--radius-lg)] border p-4">
+          <p className="text-ink flex items-center gap-2 text-[12.5px] font-medium">
+            <span className="text-muted">
+              <Clock className="size-4" />
+            </span>
+            Time so far
+          </p>
+          <p className="text-ink tabular mt-2 text-[20px] font-semibold leading-7 tracking-tight">
+            {formatDuration(project.snapshot.time.ageMs, { compact: true })}
+          </p>
+          <p className="text-muted mt-0.5 text-[11.5px]">
+            Since {formatDate(project.startDate)} ·{' '}
+            {formatDuration(project.snapshot.time.currentStageMs, { compact: true })} in this step
+          </p>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
-            title="What has happened"
-            description="Updates from AHN and SHOPLINE on your migration."
+            title="Latest updates"
+            description="What AHN and SHOPLINE have done on your migration."
             actions={
               <Link
                 href="/portal/activity"
@@ -218,7 +308,7 @@ export default async function PortalOverviewPage() {
               <Empty title="Nothing to report yet" className="py-8" />
             ) : (
               <Timeline>
-                {project.activities.slice(0, 8).map((event, index, list) => (
+                {project.activities.slice(0, 6).map((event, index, list) => (
                   <TimelineItem
                     key={event.id}
                     tone={ACTIVITY_TYPE_LABEL[event.type].tone}
@@ -226,7 +316,7 @@ export default async function PortalOverviewPage() {
                     meta={formatRelative(event.occurredAt, now)}
                     connector={index < list.length - 1}
                   >
-                    {event.detail && <p>{event.detail}</p>}
+                    {event.detail && <p className="line-clamp-2">{event.detail}</p>}
                   </TimelineItem>
                 ))}
               </Timeline>
@@ -236,26 +326,40 @@ export default async function PortalOverviewPage() {
 
         <div className="space-y-4">
           <Card>
-            <CardHeader title="Who to ask" />
-            <CardBody className="space-y-3">
-              {[
-                { label: 'AHN project manager', person: project.people.ahnPm },
-                { label: 'AHN developer', person: project.people.ahnDev },
-                { label: 'AHN designer', person: project.people.ahnDesigner },
-                { label: 'SHOPLINE account manager', person: project.people.shoplineAm },
-              ].map(({ label, person }) => (
-                <div key={label} className="flex items-center justify-between gap-3">
-                  <span className="text-muted text-[12px]">{label}</span>
-                  {person ? (
-                    <span className="flex items-center gap-2">
-                      <Avatar name={person.name} team={person.team} size="sm" />
-                      <span className="text-ink text-[12.5px] font-medium">{person.name}</span>
-                    </span>
-                  ) : (
-                    <span className="text-faint text-[12.5px]">Not assigned</span>
-                  )}
-                </div>
-              ))}
+            <CardHeader
+              title="Your team"
+              description="Ask any of them - in the conversation, or however you usually reach them."
+            />
+            <CardBody>
+              <ul className="space-y-3">
+                {team.map(({ label, person }) => (
+                  <li key={label} className="flex items-center gap-3">
+                    {person ? (
+                      <Avatar name={person.name} team={person.team} size="md" />
+                    ) : (
+                      <span className="border-line bg-surface-2 size-8 shrink-0 rounded-full border border-dashed" />
+                    )}
+                    <div className="min-w-0">
+                      <p
+                        className={cn(
+                          'truncate text-[13px] font-medium',
+                          person ? 'text-ink' : 'text-faint',
+                        )}
+                      >
+                        {person?.name ?? 'Not assigned yet'}
+                      </p>
+                      <p className="text-muted text-[11.5px]">{label}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/portal/activity"
+                className="border-line text-ink hover:bg-surface-2 mt-4 flex items-center justify-center gap-1.5 rounded-[var(--radius-md)] border px-3 py-2 text-[12.5px] font-medium transition-colors"
+              >
+                Send the team a message
+                <ArrowRight className="size-3.5" />
+              </Link>
             </CardBody>
           </Card>
 
@@ -294,6 +398,38 @@ export default async function PortalOverviewPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+interface TodoItem {
+  key: string;
+  icon: React.ReactNode;
+  title: string;
+  detail: string;
+  href: string;
+  cta: string;
+}
+
+function TodoCard({ item }: { item: TodoItem }) {
+  return (
+    <Link
+      href={item.href}
+      className="border-warning/40 bg-surface-1 shadow-card hover:shadow-raised group flex h-full items-start gap-3 rounded-[var(--radius-lg)] border p-4 transition-shadow"
+    >
+      <span className="bg-warning-soft text-warning-ink grid size-9 shrink-0 place-items-center rounded-full">
+        {item.icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-ink text-[13.5px] font-medium leading-5">{item.title}</p>
+        {item.detail && (
+          <p className="text-muted mt-0.5 line-clamp-2 text-[12.5px] leading-5">{item.detail}</p>
+        )}
+        <p className="text-accent-ink mt-2 inline-flex items-center gap-1 text-[12.5px] font-medium">
+          {item.cta}
+          <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+        </p>
+      </div>
+    </Link>
   );
 }
 

@@ -123,6 +123,35 @@ describe('GET /api/attachments/[id]', () => {
     expect(response.status).toBe(404);
   });
 
+  it('applies the same visibility check to an inline image as to a download', async () => {
+    await signInAs(merchant);
+    const response = await GET(
+      new Request(`http://test.local/api/attachments/${internalAttachmentId}?inline=1`),
+      { params: Promise.resolve({ id: internalAttachmentId }) },
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it('never serves a non-image inline - it still redirects to the download', async () => {
+    await signInAs(pm);
+    const pdf = await db.attachment.create({
+      data: {
+        projectId,
+        kind: 'FILE',
+        label: 'brief.pdf',
+        url: '/api/attachments/placeholder',
+        storageKey: `test/no-comment/brief.pdf`,
+        mimeType: 'application/pdf',
+      },
+      select: { id: true },
+    });
+    const response = await GET(
+      new Request(`http://test.local/api/attachments/${pdf.id}?inline=1`),
+      { params: Promise.resolve({ id: pdf.id }) },
+    );
+    expect(response.status).toBe(307);
+  });
+
   it('a file with no comment attached is unaffected - normal project scoping still applies', async () => {
     await signInAs(am);
     const response = await GET(

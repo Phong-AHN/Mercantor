@@ -436,7 +436,7 @@ export const getProject = cache(async (principal: Principal, code: string) => {
           parentId: true,
           author: { select: { id: true, name: true, role: true } },
           mentions: { select: { user: { select: { id: true, name: true } } } },
-          attachments: { select: { id: true, kind: true, label: true, url: true } },
+          attachments: { select: { id: true, kind: true, label: true, url: true, mimeType: true } },
         },
         orderBy: { createdAt: 'desc' },
         take: 100,
