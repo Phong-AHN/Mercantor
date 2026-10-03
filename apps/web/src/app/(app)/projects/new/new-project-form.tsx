@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
 import {
+  clock,
   MIGRATION_TYPE_LABEL,
   MIGRATION_TYPES,
   PROJECT_STAGES,
@@ -43,6 +44,14 @@ function personOptionLabel(person: Person): string {
   return `${USER_ROLE_LABEL[person.role].label} - ${person.name}`;
 }
 
+/** The earliest target the server accepts: the project starts now, so not today. */
+function tomorrow(): string {
+  const date = clock.now();
+  date.setDate(date.getDate() + 1);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 export function NewProjectForm({
   ahn,
   shopline,
@@ -75,6 +84,11 @@ export function NewProjectForm({
     shoplineSeId: '',
     clickUpTrackedStages: [] as ProjectStage[],
   });
+
+  // Set after mount: "tomorrow" is the browser's date, which the server
+  // rendering this form in UTC may not share.
+  const [minTarget, setMinTarget] = useState<string>();
+  useEffect(() => setMinTarget(tomorrow()), []);
 
   const action = useAction(createProjectAction, {
     onSuccess: (data) => router.push(`/projects/${data.code}`),
@@ -238,10 +252,12 @@ export function NewProjectForm({
               label="Target launch date"
               htmlFor="targetLaunchDate"
               hint="Drives the ahead/behind figures everywhere."
+              error={action.fieldErrors.targetLaunchDate ?? null}
             >
               <Input
                 id="targetLaunchDate"
                 type="date"
+                min={minTarget}
                 value={form.targetLaunchDate}
                 onChange={(event) => set('targetLaunchDate')(event.target.value)}
               />

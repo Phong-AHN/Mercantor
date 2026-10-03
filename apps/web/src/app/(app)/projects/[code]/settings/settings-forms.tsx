@@ -121,6 +121,7 @@ export function ProjectDetailsForm({
             <Input
               id="targetLaunchDate"
               type="date"
+              min={form.startDate || undefined}
               value={form.targetLaunchDate}
               onChange={(event) => setForm({ ...form, targetLaunchDate: event.target.value })}
             />

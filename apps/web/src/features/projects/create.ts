@@ -15,7 +15,7 @@ import { projectCode } from '@relay/core/server';
 import { db, transaction } from '@relay/db';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, notify, recordActivity } from '@/server/record';
-import { parseDate, revalidateProject } from './mutations';
+import { assertTargetAfterStart, parseDate, revalidateProject } from './mutations';
 
 /**
  * Creating a project seeds the three checklists from the templates, so
@@ -70,6 +70,8 @@ export const createProjectAction = defineAction({
 
     const now = clock.now();
     const targetLaunchDate = parseDate(input.targetLaunchDate, 'targetLaunchDate');
+    // The project starts now, so a target of today or earlier is already behind it.
+    assertTargetAfterStart(now, targetLaunchDate, 'Pick a target launch date after today.');
 
     const code = await transaction(async (tx) => {
       // The sequence is derived from the row count rather than a database

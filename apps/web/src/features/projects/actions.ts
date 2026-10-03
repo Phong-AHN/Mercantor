@@ -21,6 +21,7 @@ import { logger } from '@relay/observability';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, notify, recordActivity } from '@/server/record';
 import {
+  assertTargetAfterStart,
   autoRequestApprovals,
   fanOut,
   moveStage,
@@ -398,6 +399,11 @@ export const updateProjectAction = defineAction({
           contractTotalMinor: true,
         },
       });
+      // Either date may change alone, so check the pair as it will be saved.
+      assertTargetAfterStart(
+        startDate ?? before.startDate,
+        input.targetLaunchDate === undefined ? before.targetLaunchDate : targetLaunchDate,
+      );
 
       await tx.project.update({
         where: { id: project.id },

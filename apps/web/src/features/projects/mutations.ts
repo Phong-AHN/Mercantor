@@ -564,6 +564,22 @@ export function parseDate(value: string | undefined, field: string): Date | null
   return parsed;
 }
 
+/**
+ * The `Project_target_after_start` check, said in words before the database
+ * says it as a 23514 nobody can act on. A date input yields midnight UTC, so
+ * a target compared with a start that is "now" (a new project) fails even on
+ * today's date - hence "after", not "on or after", in the message.
+ */
+export function assertTargetAfterStart(
+  startDate: Date,
+  targetLaunchDate: Date | null,
+  message = 'The target launch date must be after the start date.',
+): void {
+  if (targetLaunchDate && targetLaunchDate.getTime() < startDate.getTime()) {
+    throw new ValidationError(message, { targetLaunchDate: [message] });
+  }
+}
+
 /** Every project mutation invalidates the same three surfaces. */
 export function revalidateProject(code: string): void {
   revalidatePath(`/projects/${code}`, 'layout');
