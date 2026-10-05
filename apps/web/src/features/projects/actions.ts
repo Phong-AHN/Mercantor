@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import {
   checkTransition,
@@ -438,6 +439,124 @@ export const updateProjectAction = defineAction({
 
     revalidateProject(input.code);
     return actionOk(undefined, 'Project updated.');
+  },
+});
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .transform((value) => value || null);
+
+/**
+ * The merchant's basic details and primary contact - the name every page
+ * shows as the project's title, and the rest of what was typed once on
+ * "New project". Empty optional fields clear the value. The row is the
+ * merchant's, not the project's, so a merchant with more than one project
+ * sees the change on all of them.
+ */
+export const updateMerchantAction = defineAction({
+  name: 'project.update_merchant',
+  permission: 'merchant:manage',
+  input: z.object({
+    code: z.string().min(1),
+    name: z.string().trim().min(2, 'Enter the merchant name.').max(200),
+    website: z
+      .string()
+      .trim()
+      .url('Enter a valid website URL, starting with https://.')
+      .optional()
+      .or(z.literal(''))
+      .transform((value) => value || null),
+    shoplineStoreId: optionalText(60),
+    currentPlatform: optionalText(80),
+    country: optionalText(80),
+    industry: optionalText(80),
+    notes: optionalText(4000),
+    contact: z.object({
+      name: z.string().trim().min(2, 'Enter the contact name.').max(120),
+      email: z.string().trim().email('Enter a valid email address.'),
+      phone: optionalText(40),
+      title: optionalText(80),
+    }),
+  }),
+  async handler(input, ctx) {
+    const project = await resolveProject(ctx.principal, input.code);
+
+    await transaction(async (tx) => {
+      const { merchant } = await tx.project.findUniqueOrThrow({
+        where: { id: project.id },
+        select: {
+          merchant: {
+            select: {
+              id: true,
+              name: true,
+              website: true,
+              shoplineStoreId: true,
+              currentPlatform: true,
+              country: true,
+              industry: true,
+              notes: true,
+              contacts: {
+                where: { isPrimary: true },
+                select: { id: true, name: true, email: true, phone: true, title: true },
+                take: 1,
+              },
+            },
+          },
+        },
+      });
+      const { contacts, ...before } = merchant;
+      const primary = contacts[0] ?? null;
+
+      await tx.merchant.update({
+        where: { id: merchant.id },
+        data: {
+          name: input.name,
+          website: input.website,
+          shoplineStoreId: input.shoplineStoreId,
+          currentPlatform: input.currentPlatform,
+          country: input.country,
+          industry: input.industry,
+          notes: input.notes,
+        },
+      });
+
+      const contact = { ...input.contact, email: input.contact.email.toLowerCase() };
+      if (primary) {
+        await tx.merchantContact.update({ where: { id: primary.id }, data: contact });
+      } else {
+        await tx.merchantContact.create({
+          data: { ...contact, merchantId: merchant.id, isPrimary: true },
+        });
+      }
+
+      await recordActivity(tx, {
+        projectId: project.id,
+        type: 'PROJECT_UPDATED',
+        actorId: ctx.principal.id,
+        summary:
+          before.name === input.name
+            ? 'Merchant details updated.'
+            : `Merchant renamed from ${before.name} to ${input.name}.`,
+      });
+      await audit(tx, {
+        principal: ctx.principal,
+        projectId: project.id,
+        action: 'project.update_merchant',
+        entityType: 'Merchant',
+        entityId: merchant.id,
+        before: { ...before, contact: primary },
+        after: { ...input, contact },
+        ip: ctx.ip,
+      });
+    });
+
+    revalidateProject(input.code);
+    revalidatePath('/merchants');
+    return actionOk(undefined, 'Merchant details saved.');
   },
 });
 

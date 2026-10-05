@@ -1,11 +1,17 @@
 import { INTRO_EMAIL_STATUS_LABEL, formatDateTime } from '@relay/core';
 import { integrationsFor } from '@relay/integrations';
+import { db } from '@relay/db';
 import { can } from '@relay/rbac';
 import { Card, CardHeader, Empty, PermissionDenied, StatusPill } from '@relay/ui';
 import { getProject, listAssignableUsers } from '@/features/projects/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
 import { IntegrationsPanel } from './integration-forms';
-import { AssignmentForm, MerchantAccessForm, ProjectDetailsForm } from './settings-forms';
+import {
+  AssignmentForm,
+  MerchantAccessForm,
+  MerchantDetailsForm,
+  ProjectDetailsForm,
+} from './settings-forms';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,8 +54,42 @@ export default async function ProjectSettingsPage({
     }
   }
 
+  const canManageMerchant = can(principal, 'merchant:manage');
+  const merchant = project.merchantDetail;
+  const primaryContact =
+    merchant.contacts.find((contact) => contact.isPrimary) ?? merchant.contacts[0] ?? null;
+  // Only a count, to warn that the edit reaches the merchant's other projects;
+  // nothing about those projects is shown.
+  const otherProjects = canManageMerchant
+    ? await db.project.count({
+        where: { merchantId: merchant.id, id: { not: project.id }, deletedAt: null },
+      })
+    : 0;
+
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      {canManageMerchant && (
+        <MerchantDetailsForm
+          code={project.code}
+          sharedWithOtherProjects={otherProjects > 0}
+          merchant={{
+            name: merchant.name,
+            website: merchant.website,
+            shoplineStoreId: merchant.shoplineStoreId,
+            currentPlatform: merchant.currentPlatform,
+            country: merchant.country,
+            industry: merchant.industry,
+            notes: merchant.notes,
+            contact: primaryContact && {
+              name: primaryContact.name,
+              email: primaryContact.email,
+              phone: primaryContact.phone,
+              title: primaryContact.title,
+            },
+          }}
+        />
+      )}
+
       <ProjectDetailsForm
         code={project.code}
         startDate={project.startDate.toISOString()}

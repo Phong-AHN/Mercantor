@@ -27,6 +27,7 @@ import { useAction } from '@/components/use-action';
 import {
   assignPeopleAction,
   inviteMerchantAction,
+  updateMerchantAction,
   updateProjectAction,
 } from '@/features/projects/actions';
 
@@ -41,6 +42,196 @@ interface Person {
  * reads unambiguously. */
 function personOptionLabel(person: Person): string {
   return `${USER_ROLE_LABEL[person.role].label} - ${person.name}`;
+}
+
+export interface MerchantDetails {
+  name: string;
+  website: string | null;
+  shoplineStoreId: string | null;
+  currentPlatform: string | null;
+  country: string | null;
+  industry: string | null;
+  notes: string | null;
+  contact: { name: string; email: string; phone: string | null; title: string | null } | null;
+}
+
+/**
+ * What was typed once on "New project" - the merchant's name (the title of
+ * every project page), store, and who to talk to. Empty optional fields are
+ * saved as cleared.
+ */
+export function MerchantDetailsForm({
+  code,
+  merchant,
+  sharedWithOtherProjects,
+}: {
+  code: string;
+  merchant: MerchantDetails;
+  sharedWithOtherProjects: boolean;
+}) {
+  const [form, setForm] = useState({
+    name: merchant.name,
+    website: merchant.website ?? '',
+    shoplineStoreId: merchant.shoplineStoreId ?? '',
+    currentPlatform: merchant.currentPlatform ?? '',
+    country: merchant.country ?? '',
+    industry: merchant.industry ?? '',
+    notes: merchant.notes ?? '',
+    contactName: merchant.contact?.name ?? '',
+    contactEmail: merchant.contact?.email ?? '',
+    contactPhone: merchant.contact?.phone ?? '',
+    contactTitle: merchant.contact?.title ?? '',
+  });
+  const set = (key: keyof typeof form) => (value: string) => setForm({ ...form, [key]: value });
+  const action = useAction(updateMerchantAction);
+  const error = (key: string) => action.fieldErrors[key] ?? null;
+
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader
+        title="Merchant details"
+        description={
+          sharedWithOtherProjects
+            ? 'The name and details every page shows for this merchant. This merchant has other projects too - they change everywhere.'
+            : 'The name and details every page shows for this merchant.'
+        }
+      />
+      <CardBody className="space-y-4">
+        {action.error && Object.keys(action.fieldErrors).length === 0 && (
+          <Alert tone="danger" dense>
+            {action.error}
+          </Alert>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="Merchant name" htmlFor="merchantName" required error={error('name')}>
+            <Input
+              id="merchantName"
+              value={form.name}
+              onChange={(event) => set('name')(event.target.value)}
+            />
+          </Field>
+          <Field label="Website" htmlFor="merchantWebsite" error={error('website')}>
+            <Input
+              id="merchantWebsite"
+              type="url"
+              placeholder="https://"
+              value={form.website}
+              onChange={(event) => set('website')(event.target.value)}
+            />
+          </Field>
+          <Field
+            label="SHOPLINE store ID"
+            htmlFor="shoplineStoreId"
+            error={error('shoplineStoreId')}
+          >
+            <Input
+              id="shoplineStoreId"
+              value={form.shoplineStoreId}
+              onChange={(event) => set('shoplineStoreId')(event.target.value)}
+            />
+          </Field>
+          <Field label="Moving from" htmlFor="currentPlatform" error={error('currentPlatform')}>
+            <Input
+              id="currentPlatform"
+              placeholder="Shopify, WooCommerce..."
+              value={form.currentPlatform}
+              onChange={(event) => set('currentPlatform')(event.target.value)}
+            />
+          </Field>
+          <Field label="Country" htmlFor="merchantCountry" error={error('country')}>
+            <Input
+              id="merchantCountry"
+              value={form.country}
+              onChange={(event) => set('country')(event.target.value)}
+            />
+          </Field>
+          <Field label="Industry" htmlFor="merchantIndustry" error={error('industry')}>
+            <Input
+              id="merchantIndustry"
+              value={form.industry}
+              onChange={(event) => set('industry')(event.target.value)}
+            />
+          </Field>
+        </div>
+
+        <div className="border-line border-t pt-4">
+          <p className="text-ink mb-3 text-[13px] font-medium">Primary contact</p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Name" htmlFor="contactName" required error={error('contact.name')}>
+              <Input
+                id="contactName"
+                value={form.contactName}
+                onChange={(event) => set('contactName')(event.target.value)}
+              />
+            </Field>
+            <Field label="Email" htmlFor="contactEmail" required error={error('contact.email')}>
+              <Input
+                id="contactEmail"
+                type="email"
+                value={form.contactEmail}
+                onChange={(event) => set('contactEmail')(event.target.value)}
+              />
+            </Field>
+            <Field label="Phone" htmlFor="contactPhone" error={error('contact.phone')}>
+              <Input
+                id="contactPhone"
+                type="tel"
+                value={form.contactPhone}
+                onChange={(event) => set('contactPhone')(event.target.value)}
+              />
+            </Field>
+            <Field label="Job title" htmlFor="contactTitle" error={error('contact.title')}>
+              <Input
+                id="contactTitle"
+                value={form.contactTitle}
+                onChange={(event) => set('contactTitle')(event.target.value)}
+              />
+            </Field>
+          </div>
+        </div>
+
+        <Field label="Notes" htmlFor="merchantNotes" error={error('notes')}>
+          <Textarea
+            id="merchantNotes"
+            rows={2}
+            value={form.notes}
+            onChange={(event) => set('notes')(event.target.value)}
+          />
+        </Field>
+
+        <FormActions>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={action.pending}
+            disabled={form.name.trim().length < 2}
+            onClick={() =>
+              action.run({
+                code,
+                name: form.name,
+                website: form.website,
+                shoplineStoreId: form.shoplineStoreId,
+                currentPlatform: form.currentPlatform,
+                country: form.country,
+                industry: form.industry,
+                notes: form.notes,
+                contact: {
+                  name: form.contactName,
+                  email: form.contactEmail,
+                  phone: form.contactPhone,
+                  title: form.contactTitle,
+                },
+              })
+            }
+          >
+            <Save className="size-3.5" />
+            Save merchant details
+          </Button>
+        </FormActions>
+      </CardBody>
+    </Card>
+  );
 }
 
 export function ProjectDetailsForm({

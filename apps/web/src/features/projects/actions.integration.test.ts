@@ -12,8 +12,10 @@ import {
   advanceStageAction,
   assignPeopleAction,
   setNextActionAction,
+  updateMerchantAction,
   updateProjectAction,
 } from './actions';
+import { createProjectAction } from './create';
 
 /**
  * Automated approvals (Phase 2): only the *request* step is automatic - the
@@ -384,5 +386,130 @@ describe('setNextActionAction - multiple owning teams', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');
     expect(result.fieldErrors?.ownerTeam).toBeTruthy();
+  });
+});
+
+describe('updateMerchantAction - basic details', () => {
+  let pm: TestUser;
+  let developer: TestUser;
+  let projectCode: string;
+  let merchantId: string;
+
+  const details = {
+    name: 'Renamed Merchant Co',
+    website: 'https://renamed.example.com',
+    shoplineStoreId: 'store-123',
+    currentPlatform: 'Shopify',
+    country: 'Vietnam',
+    industry: 'Fashion',
+    notes: '',
+    contact: { name: 'New Contact', email: 'New.Contact@Example.com', phone: '', title: 'Owner' },
+  };
+
+  beforeAll(async () => {
+    pm = await createTestUser('AHN_PROJECT_MANAGER');
+    developer = await createTestUser('AHN_DEVELOPER');
+    const project = await createTestProject({ as: pm, ahnProjectManagerId: pm.id });
+    projectCode = project.code;
+    ({ merchantId } = await db.project.findUniqueOrThrow({
+      where: { id: project.id },
+      select: { merchantId: true },
+    }));
+  });
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('renames the merchant and updates the primary contact in place', async () => {
+    await signInAs(pm);
+    const result = await updateMerchantAction({ code: projectCode, ...details });
+    expect(result.ok).toBe(true);
+
+    const merchant = await db.merchant.findUniqueOrThrow({
+      where: { id: merchantId },
+      include: { contacts: true },
+    });
+    expect(merchant.name).toBe('Renamed Merchant Co');
+    expect(merchant.website).toBe('https://renamed.example.com');
+    expect(merchant.notes).toBeNull();
+    // Updated, not duplicated, and the email normalised as on create.
+    expect(merchant.contacts).toHaveLength(1);
+    expect(merchant.contacts[0]).toMatchObject({
+      name: 'New Contact',
+      email: 'new.contact@example.com',
+      phone: null,
+      isPrimary: true,
+    });
+  });
+
+  it('clears an optional field sent empty', async () => {
+    await signInAs(pm);
+    const result = await updateMerchantAction({ code: projectCode, ...details, website: '' });
+    expect(result.ok).toBe(true);
+    const merchant = await db.merchant.findUniqueOrThrow({ where: { id: merchantId } });
+    expect(merchant.website).toBeNull();
+  });
+
+  it('reports a bad website and contact email against their own fields', async () => {
+    await signInAs(pm);
+    const result = await updateMerchantAction({
+      code: projectCode,
+      ...details,
+      website: 'not a url',
+      contact: { ...details.contact, email: 'nope' },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.fieldErrors?.website).toBeTruthy();
+    expect(result.fieldErrors?.['contact.email']).toBeTruthy();
+  });
+
+  it('refuses a role without merchant:manage', async () => {
+    await signInAs(developer);
+    const result = await updateMerchantAction({ code: projectCode, ...details, name: 'Hijack' });
+    expect(result.ok).toBe(false);
+    const merchant = await db.merchant.findUniqueOrThrow({ where: { id: merchantId } });
+    expect(merchant.name).not.toBe('Hijack');
+  });
+});
+
+describe('target launch date before the start date', () => {
+  let pm: TestUser;
+  let projectCode: string;
+
+  beforeAll(async () => {
+    pm = await createTestUser('AHN_PROJECT_MANAGER');
+    const project = await createTestProject({ as: pm, ahnProjectManagerId: pm.id });
+    projectCode = project.code;
+  });
+
+  afterAll(async () => {
+    await cleanupFixtures();
+  });
+
+  it('is a field error on create, not a database constraint failure', async () => {
+    await signInAs(pm);
+    const result = await createProjectAction({
+      merchantName: 'Past Target Merchant',
+      contactName: 'Test Contact',
+      contactEmail: 'past-target@relay.test',
+      targetLaunchDate: '2020-01-01',
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.fieldErrors?.targetLaunchDate).toBeTruthy();
+  });
+
+  it('is a field error when moving the start date past the target', async () => {
+    await signInAs(pm);
+    expect(
+      (await updateProjectAction({ code: projectCode, startDate: '2026-01-01', targetLaunchDate: '2026-06-01' }))
+        .ok,
+    ).toBe(true);
+    const result = await updateProjectAction({ code: projectCode, startDate: '2026-07-01' });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.fieldErrors?.targetLaunchDate).toBeTruthy();
   });
 });
