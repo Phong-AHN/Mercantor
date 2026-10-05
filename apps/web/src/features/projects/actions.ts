@@ -33,6 +33,7 @@ import {
   resolveProject,
   revalidateProject,
 } from './mutations';
+import { updateMerchantInput } from './merchant-schema';
 
 /**
  * Stage advancement. The state machine in `@relay/core` decides what is legal;
@@ -442,14 +443,6 @@ export const updateProjectAction = defineAction({
   },
 });
 
-const optionalText = (max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max)
-    .optional()
-    .transform((value) => value || null);
-
 /**
  * The merchant's basic details and primary contact - the name every page
  * shows as the project's title, and the rest of what was typed once on
@@ -460,28 +453,7 @@ const optionalText = (max: number) =>
 export const updateMerchantAction = defineAction({
   name: 'project.update_merchant',
   permission: 'merchant:manage',
-  input: z.object({
-    code: z.string().min(1),
-    name: z.string().trim().min(2, 'Enter the merchant name.').max(200),
-    website: z
-      .string()
-      .trim()
-      .url('Enter a valid website URL, starting with https://.')
-      .optional()
-      .or(z.literal(''))
-      .transform((value) => value || null),
-    shoplineStoreId: optionalText(60),
-    currentPlatform: optionalText(80),
-    country: optionalText(80),
-    industry: optionalText(80),
-    notes: optionalText(4000),
-    contact: z.object({
-      name: z.string().trim().min(2, 'Enter the contact name.').max(120),
-      email: z.string().trim().email('Enter a valid email address.'),
-      phone: optionalText(40),
-      title: optionalText(80),
-    }),
-  }),
+  input: updateMerchantInput,
   async handler(input, ctx) {
     const project = await resolveProject(ctx.principal, input.code);
 
