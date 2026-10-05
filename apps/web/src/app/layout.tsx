@@ -1,17 +1,17 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { Geist, Geist_Mono } from 'next/font/google';
 import { ToastProvider } from '@relay/ui';
 import './globals.css';
 
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
+const sans = Geist({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-geist',
   display: 'swap',
 });
 
-const mono = JetBrains_Mono({
+const mono = Geist_Mono({
   subsets: ['latin'],
-  variable: '--font-mono-family',
+  variable: '--font-geist-mono',
   display: 'swap',
 });
 
@@ -27,8 +27,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f8fafc' },
-    { media: '(prefers-color-scheme: dark)', color: '#101828' },
+    { media: '(prefers-color-scheme: light)', color: '#f9fafb' },
+    { media: '(prefers-color-scheme: dark)', color: '#121316' },
   ],
   width: 'device-width',
   initialScale: 1,
@@ -52,14 +52,14 @@ const THEME_SCRIPT = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${mono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${sans.variable} ${mono.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="bg-canvas text-ink min-h-dvh antialiased">
         <a
           href="#main"
-          className="focus:bg-accent sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-[var(--radius-sm)] focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+          className="focus:bg-primary focus:text-on-primary sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-[var(--radius-sm)] focus:px-3 focus:py-2 focus:text-sm focus:font-medium"
         >
           Skip to content
         </a>

@@ -24,6 +24,16 @@ unlabelled six months from now.
 
 ## 2. Tokens
 
+**Visual language (October 2026 overhaul).**
+
+- **Surfaces** are near-neutral and separated by hairlines. Shadows only lift what floats, such as menus and dialogs.
+- **Primary actions** are ink: `bg-primary` / `text-on-primary`.
+- **Accent:** one restrained teal, `accent`, used for focus, selection, links and the AHN team colour. It is kept clear of success green and info blue. Text on a solid accent uses `on-accent`, never `text-white`.
+- **Shape:** 8px for controls, 12px for panels, full radius for pills.
+- **Type:** Geist, with Geist Mono for codes and figures.
+- **Stat strips:** stat tiles inside `.stat-group` join into one hairline-divided strip. Keep the tile count equal to the column count.
+
+
 `packages/ui/src/tokens.css`. The palette is OKLCH — perceptually even, so a "warning" and a
 "danger" chip carry the same visual weight, and the dark theme is derived by moving lightness
 rather than by hand-picking a second palette.

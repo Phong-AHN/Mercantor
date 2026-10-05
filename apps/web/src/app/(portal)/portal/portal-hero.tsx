@@ -51,8 +51,8 @@ export function PortalHero(props: PortalHeroProps) {
   return (
     <header
       className={cn(
-        'border-line relative isolate overflow-hidden rounded-[var(--radius-lg)] border',
-        onImage ? 'bg-[#0b0d12]' : 'from-accent-soft via-surface-1 to-surface-1 bg-gradient-to-br',
+        'border-line relative isolate overflow-hidden rounded-[var(--radius-2xl)] border',
+        onImage ? 'bg-[#0b0d12]' : 'bg-surface-1',
       )}
     >
       {props.image && (
@@ -61,11 +61,11 @@ export function PortalHero(props: PortalHeroProps) {
           <img
             src={props.image.src}
             alt=""
-            className="absolute inset-0 -z-20 size-full object-cover object-top"
+            className="absolute inset-0 -z-20 size-full scale-105 object-cover object-top blur-[3px]"
           />
           {/* Fixed dark tones in both themes, so white text clears contrast on any image. */}
           <div
-            className="absolute inset-0 -z-10 bg-gradient-to-t from-black/90 via-black/60 to-black/25 sm:bg-gradient-to-r sm:from-black/85 sm:via-black/65 sm:to-black/20"
+            className="sm:via-black/78 absolute inset-0 -z-10 bg-gradient-to-t from-black/90 via-black/75 to-black/50 sm:bg-gradient-to-r sm:from-black/90 sm:to-black/45"
             aria-hidden
           />
         </>

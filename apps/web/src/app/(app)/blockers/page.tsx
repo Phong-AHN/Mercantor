@@ -64,7 +64,7 @@ export default async function BlockersPage({
         description="Everything currently stopping a migration, oldest first. Each one is charged to whoever owns it right now."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stat-group grid sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Open"
           value={all.length}

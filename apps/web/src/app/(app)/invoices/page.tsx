@@ -68,7 +68,7 @@ export default async function InvoicesPage() {
         description="Milestone billing across the portfolio. This is the answer to 'has AHN been paid' on every project at once."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stat-group grid sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Invoiced"
           value={formatMoney(invoiced, currency, { compact: true })}

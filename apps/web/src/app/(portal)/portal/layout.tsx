@@ -26,19 +26,22 @@ export default async function PortalLayout({ children }: { children: React.React
       <header className="border-line bg-canvas/85 sticky top-0 z-30 border-b backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 sm:px-6">
           <Link href="/portal" className="flex items-center gap-2.5">
-            <span className="bg-accent grid size-8 place-items-center rounded-[10px]" aria-hidden>
-              <svg viewBox="0 0 24 24" className="size-4.5" fill="none">
+            <span
+              className="bg-primary text-on-primary grid size-7 place-items-center rounded-[var(--radius-sm)]"
+              aria-hidden
+            >
+              <svg viewBox="0 0 24 24" className="size-4" fill="none">
                 <path
                   d="M5 17V9.5A4.5 4.5 0 0 1 9.5 5H12"
-                  stroke="white"
-                  strokeWidth="2.2"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
                   strokeLinecap="round"
                 />
                 <path
                   d="M19 7v7.5a4.5 4.5 0 0 1-4.5 4.5H12"
-                  stroke="white"
-                  strokeOpacity="0.6"
-                  strokeWidth="2.2"
+                  stroke="currentColor"
+                  strokeOpacity="0.55"
+                  strokeWidth="2.4"
                   strokeLinecap="round"
                 />
               </svg>
@@ -75,6 +78,7 @@ export default async function PortalLayout({ children }: { children: React.React
               label={item.label}
               icon={item.icon}
               badge={item.badge ? badges[item.badge] : undefined}
+              exact={item.href === '/portal'}
             />
           ))}
         </nav>

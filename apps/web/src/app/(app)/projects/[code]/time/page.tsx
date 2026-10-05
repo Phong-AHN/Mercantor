@@ -71,7 +71,7 @@ export default async function ProjectTimePage({ params }: { params: Promise<{ co
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stat-group grid sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Project age"
           value={formatDuration(time.ageMs, { compact: true })}

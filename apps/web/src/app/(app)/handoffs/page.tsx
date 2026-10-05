@@ -35,7 +35,7 @@ export default async function HandoffsPage() {
         description="Packages AHN has submitted for deployment approval, and what SHOPLINE decided."
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="stat-group grid sm:grid-cols-3">
         <Stat
           label="Awaiting a decision"
           value={pending.length}

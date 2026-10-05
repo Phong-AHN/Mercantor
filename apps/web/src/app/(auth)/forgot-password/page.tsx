@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
+import { AuthMark } from '../auth-mark';
 import { landingPathFor } from '@relay/rbac';
 import { getPrincipal } from '@/server/session';
 import { ForgotPasswordForm } from './forgot-password-form';
@@ -13,6 +14,9 @@ export default async function ForgotPasswordPage() {
   return (
     <main id="main" className="grid min-h-dvh place-items-center px-5 py-12 sm:px-10">
       <div className="w-full max-w-sm">
+        <div className="mb-10">
+          <AuthMark tone="onCanvas" />
+        </div>
         <h1 className="text-ink text-[22px] font-semibold leading-7 tracking-tight">
           Forgot your password?
         </h1>

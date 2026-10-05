@@ -27,7 +27,7 @@ export default async function ProjectAccessPage({ params }: { params: Promise<{ 
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="stat-group grid sm:grid-cols-3">
         <Stat
           label="Verified"
           value={`${verified} / ${items.length}`}

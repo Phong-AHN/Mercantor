@@ -82,7 +82,7 @@ export function StageRail({
                               'grid size-6 place-items-center rounded-full border-2 text-[10px] font-bold transition-colors',
                               isCurrent &&
                                 !onHold &&
-                                'border-accent bg-accent pulse-ring text-white',
+                                'border-accent bg-accent pulse-ring text-on-accent',
                               isCurrent && onHold && 'border-warning bg-warning text-white',
                               isDone && 'border-accent/60 bg-accent/15 text-accent-ink',
                               !isDone &&

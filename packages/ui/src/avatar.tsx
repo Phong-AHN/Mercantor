@@ -2,10 +2,15 @@ import * as React from 'react';
 import { initials, type Team } from '@relay/core';
 import { cn } from './cn';
 
+/* Opaque tints (mixed into surface-1, not alpha) so stacked avatars never
+   show each other's initials through, and -ink text so every team clears
+   contrast - the amber merchant colour alone does not on a light tint. */
 const TEAM_RING: Record<Team, string> = {
-  AHN: 'ring-team-ahn/45 bg-team-ahn/12 text-team-ahn',
-  SHOPLINE: 'ring-team-shopline/45 bg-team-shopline/12 text-team-shopline',
-  MERCHANT: 'ring-team-merchant/45 bg-team-merchant/14 text-team-merchant',
+  AHN: 'ring-team-ahn/40 bg-[color-mix(in_oklch,var(--team-ahn)_16%,var(--surface-1))] text-accent-ink',
+  SHOPLINE:
+    'ring-team-shopline/40 bg-[color-mix(in_oklch,var(--team-shopline)_16%,var(--surface-1))] text-info-ink',
+  MERCHANT:
+    'ring-team-merchant/45 bg-[color-mix(in_oklch,var(--team-merchant)_20%,var(--surface-1))] text-warning-ink',
   OTHER: 'ring-line-strong bg-surface-2 text-muted',
 };
 
@@ -59,7 +64,7 @@ export function AvatarStack({
   const shown = people.slice(0, max);
   const overflow = people.length - shown.length;
   return (
-    <div className={cn('flex items-center -space-x-1.5', className)}>
+    <div className={cn('flex items-center -space-x-1', className)}>
       {shown.map((person, index) => (
         <Avatar
           key={`${person.name}-${index}`}

@@ -1,19 +1,14 @@
 import { redirect } from 'next/navigation';
+import Image from 'next/image';
 import type { Metadata } from 'next';
-import { CircleCheck } from 'lucide-react';
 import { landingPathFor } from '@relay/rbac';
 import { getPrincipal } from '@/server/session';
+import { AuthMark } from '../auth-mark';
 import { SignInForm } from './sign-in-form';
 import { DemoAccounts } from './demo-accounts';
+import portfolio from '../../../../public/sign-in/portfolio-dark.png';
 
 export const metadata: Metadata = { title: 'Sign in' };
-
-const PROMISES = [
-  'Where every migration stands, without asking.',
-  'Who owns the next step, and how long they have owned it.',
-  'What is blocking launch, with the clock running on it.',
-  'Whether the merchant approved, and whether AHN has been paid.',
-];
 
 export default async function SignInPage({
   searchParams,
@@ -26,73 +21,44 @@ export default async function SignInPage({
   const { next } = await searchParams;
 
   return (
-    <main id="main" className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      {/* Brand panel. Hidden on small screens - it is atmosphere, not content. */}
-      <section className="bg-ink relative hidden overflow-hidden text-white lg:flex lg:flex-col lg:justify-between">
-        <div className="bg-grid absolute inset-0 opacity-[0.18]" aria-hidden />
-        <div
-          className="absolute -left-32 -top-40 size-[540px] rounded-full opacity-40 blur-3xl"
-          style={{ background: 'radial-gradient(circle, oklch(0.55 0.2 275), transparent 68%)' }}
-          aria-hidden
-        />
-        <div
-          className="absolute -bottom-48 -right-32 size-[520px] rounded-full opacity-30 blur-3xl"
-          style={{ background: 'radial-gradient(circle, oklch(0.62 0.15 245), transparent 70%)' }}
-          aria-hidden
-        />
-
-        <div className="relative p-12">
-          <div className="flex items-center gap-3">
-            <Wordmark />
-            <div>
-              <p className="text-[15px] font-semibold leading-5 tracking-tight">Mercantor</p>
-              <p className="text-[12px] leading-4 text-white/55">AHN &times; SHOPLINE</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="relative max-w-lg p-12">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">
-            Migration project portal
-          </p>
-          <h1 className="mt-4 text-balance text-[38px] font-semibold leading-[1.1] tracking-tight">
-            One merchant. One project record. One source of truth.
+    <main id="main" className="grid min-h-dvh lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+      {/* The product itself, not decoration: the real portfolio dashboard,
+          bleeding off the bottom-right of the panel. Fixed dark tones in both
+          themes. Hidden below lg - on a phone the form is the page. */}
+      <section className="border-white/8 relative hidden overflow-hidden border-r bg-[oklch(0.165_0.005_260)] text-white lg:flex lg:flex-col">
+        <div className="relative px-12 pt-12">
+          <AuthMark tone="onDark" />
+          <h1 className="mt-16 max-w-md text-balance text-[40px] font-semibold leading-[1.08] tracking-[-0.035em]">
+            Every migration, one shared record.
           </h1>
-          <ul className="mt-8 space-y-3">
-            {PROMISES.map((promise) => (
-              <li key={promise} className="flex items-start gap-3 text-[14px] text-white/75">
-                <CircleCheck className="mt-0.5 size-4 shrink-0 text-white/45" />
-                {promise}
-              </li>
-            ))}
-          </ul>
+          <p className="mt-4 max-w-sm text-[15px] leading-6 text-white/65">
+            Where each SHOPLINE move stands, who owns the next step, and what is blocking launch.
+          </p>
         </div>
 
-        <div className="relative p-12">
-          <p className="text-[12px] text-white/40">
-            Slack, ClickUp and email are integrations around this record - not separate places where
-            project status lives.
-          </p>
+        <div className="relative mt-12 flex-1">
+          <div className="border-white/12 absolute left-12 top-0 w-[1100px] overflow-hidden rounded-tl-[var(--radius-2xl)] border-l border-t shadow-[0_-24px_80px_-24px_oklch(0_0_0/0.8)]">
+            <Image
+              src={portfolio}
+              alt="The Mercantor portfolio dashboard: projects by stage, health and ageing."
+              sizes="1100px"
+              placeholder="blur"
+              className="block h-auto w-full"
+            />
+          </div>
         </div>
       </section>
 
-      {/* Form panel */}
       <section className="flex items-center justify-center px-5 py-12 sm:px-10">
         <div className="w-full max-w-sm">
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <Wordmark tone="dark" />
-            <div>
-              <p className="text-ink text-[15px] font-semibold leading-5 tracking-tight">
-                Mercantor
-              </p>
-              <p className="text-muted text-[12px] leading-4">AHN &times; SHOPLINE</p>
-            </div>
+          <div className="mb-10 lg:hidden">
+            <AuthMark tone="onCanvas" />
           </div>
 
-          <h2 className="text-ink text-[22px] font-semibold leading-7 tracking-tight">
-            Sign in to the portal
+          <h2 className="text-ink text-[24px] font-semibold leading-8 tracking-[-0.025em]">
+            Sign in
           </h2>
-          <p className="text-muted mb-7 mt-1.5 text-[13.5px]">
+          <p className="text-muted mb-8 mt-1.5 text-[13.5px]">
             Use the account your project lead issued you.
           </p>
 
@@ -101,33 +67,5 @@ export default async function SignInPage({
         </div>
       </section>
     </main>
-  );
-}
-
-function Wordmark({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
-  return (
-    <span
-      className={`grid size-9 place-items-center rounded-[11px] ${
-        tone === 'light' ? 'bg-white/10 ring-1 ring-white/20' : 'bg-accent'
-      }`}
-      aria-hidden
-    >
-      <svg viewBox="0 0 24 24" className="size-5" fill="none">
-        <path
-          d="M5 17V9.5A4.5 4.5 0 0 1 9.5 5H12"
-          stroke="currentColor"
-          strokeWidth="2.1"
-          strokeLinecap="round"
-          className={tone === 'light' ? 'text-white' : 'text-white'}
-        />
-        <path
-          d="M19 7v7.5a4.5 4.5 0 0 1-4.5 4.5H12"
-          stroke="currentColor"
-          strokeWidth="2.1"
-          strokeLinecap="round"
-          className={tone === 'light' ? 'text-white/55' : 'text-white/60'}
-        />
-      </svg>
-    </span>
   );
 }

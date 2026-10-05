@@ -3,10 +3,10 @@ import { ChevronDown } from 'lucide-react';
 import { cn } from './cn';
 
 const CONTROL = cn(
-  'w-full rounded-[var(--radius-md)] border border-line bg-surface-1 px-3 text-[13.5px] text-ink',
-  'placeholder:text-faint',
-  'transition-[border-color,box-shadow] outline-none',
-  'focus:border-accent focus:ring-2 focus:ring-accent/20 focus-visible:outline-none',
+  'w-full rounded-[var(--radius-sm)] border border-line bg-surface-1 px-3 text-[13.5px] text-ink',
+  'placeholder:text-muted/70 hover:border-line-strong',
+  'transition-[border-color,box-shadow] duration-150 outline-none',
+  'focus:border-accent focus:ring-[3px] focus:ring-accent/15 focus-visible:outline-none',
   'disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted',
   'aria-[invalid=true]:border-danger aria-[invalid=true]:ring-danger/20',
 );
@@ -151,7 +151,7 @@ export function RadioCards<T extends string>({
           <label
             key={option.value}
             className={cn(
-              'cursor-pointer rounded-[var(--radius-md)] border p-3 transition-colors',
+              'cursor-pointer rounded-[var(--radius-sm)] border p-3 transition-colors',
               checked
                 ? 'border-accent bg-accent-soft'
                 : 'border-line bg-surface-1 hover:border-line-strong hover:bg-surface-2',

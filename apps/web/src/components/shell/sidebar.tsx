@@ -24,12 +24,10 @@ function NavGroups({
   onNavigate?: () => void;
 }) {
   return (
-    <nav className="space-y-5 px-3 py-4" aria-label="Main">
+    <nav className="space-y-6 px-3 py-4" aria-label="Main">
       {groups.map((group) => (
         <div key={group.id}>
-          <p className="text-faint mb-1.5 px-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em]">
-            {group.label}
-          </p>
+          <p className="text-faint mb-1 px-2.5 text-[11.5px] font-medium">{group.label}</p>
           <div className="space-y-0.5">
             {group.items.map((item) => (
               <NavLink
@@ -59,7 +57,7 @@ export function Sidebar({
   footer: React.ReactNode;
 }) {
   return (
-    <aside className="border-line bg-surface-2/55 sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r lg:flex">
+    <aside className="border-line bg-canvas sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r lg:flex">
       <div className="border-line flex h-14 items-center gap-2.5 border-b px-4">
         <Wordmark />
       </div>
@@ -127,25 +125,28 @@ export function MobileNav({
 export function Wordmark() {
   return (
     <Link href="/" className="flex items-center gap-2.5">
-      <span className="bg-accent grid size-8 place-items-center rounded-[10px]" aria-hidden>
-        <svg viewBox="0 0 24 24" className="size-4.5" fill="none">
+      <span
+        className="bg-primary text-on-primary grid size-7 place-items-center rounded-[var(--radius-sm)]"
+        aria-hidden
+      >
+        <svg viewBox="0 0 24 24" className="size-4" fill="none">
           <path
             d="M5 17V9.5A4.5 4.5 0 0 1 9.5 5H12"
-            stroke="white"
-            strokeWidth="2.2"
+            stroke="currentColor"
+            strokeWidth="2.4"
             strokeLinecap="round"
           />
           <path
             d="M19 7v7.5a4.5 4.5 0 0 1-4.5 4.5H12"
-            stroke="white"
-            strokeOpacity="0.6"
-            strokeWidth="2.2"
+            stroke="currentColor"
+            strokeOpacity="0.55"
+            strokeWidth="2.4"
             strokeLinecap="round"
           />
         </svg>
       </span>
       <span className="min-w-0">
-        <span className="text-ink block text-[14px] font-semibold leading-4 tracking-tight">
+        <span className="text-ink block text-[14px] font-semibold leading-4 tracking-[-0.02em]">
           Mercantor
         </span>
         <span className="text-muted block text-[10.5px] leading-4">AHN &times; SHOPLINE</span>

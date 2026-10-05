@@ -5,18 +5,16 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'subt
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
 const VARIANT: Record<ButtonVariant, string> = {
-  primary:
-    'bg-accent text-white shadow-card hover:brightness-110 active:brightness-95 disabled:bg-accent/50',
-  secondary:
-    'bg-surface-1 text-ink border border-line-strong shadow-card hover:bg-surface-2 active:bg-surface-3',
-  subtle: 'bg-surface-2 text-ink-soft hover:bg-surface-3 active:bg-line',
-  ghost: 'text-ink-soft hover:bg-surface-2 active:bg-surface-3',
-  danger: 'bg-danger text-white shadow-card hover:brightness-110 active:brightness-95',
+  primary: 'bg-primary text-on-primary hover:bg-primary-hover',
+  secondary: 'bg-surface-1 text-ink border border-line hover:border-line-strong hover:bg-surface-2',
+  subtle: 'bg-surface-2 text-ink-soft hover:bg-surface-3 hover:text-ink',
+  ghost: 'text-ink-soft hover:bg-surface-2 hover:text-ink',
+  danger: 'bg-danger text-white hover:brightness-110',
   link: 'text-accent-ink underline-offset-4 hover:underline p-0 h-auto',
 };
 
 const SIZE: Record<ButtonSize, string> = {
-  xs: 'h-7 px-2.5 text-xs gap-1.5 rounded-[var(--radius-xs)]',
+  xs: 'h-7 px-2.5 text-xs gap-1.5 rounded-[var(--radius-sm)]',
   sm: 'h-8 px-3 text-[13px] gap-1.5 rounded-[var(--radius-sm)]',
   md: 'h-9.5 px-4 text-sm gap-2 rounded-[var(--radius-md)]',
   lg: 'h-11 px-5 text-[15px] gap-2 rounded-[var(--radius-md)]',
@@ -29,8 +27,8 @@ export function buttonStyles(
   className?: string,
 ): string {
   return cn(
-    'relative inline-flex items-center justify-center font-medium whitespace-nowrap transition-[background,box-shadow,filter,transform] duration-150',
-    'disabled:pointer-events-none disabled:opacity-55 active:translate-y-px',
+    'relative inline-flex items-center justify-center font-medium whitespace-nowrap transition-[background,border-color,color,filter,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]',
+    'disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]',
     VARIANT[variant],
     variant !== 'link' && SIZE[size],
     className,
@@ -64,9 +62,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(
-        'relative inline-flex items-center justify-center whitespace-nowrap font-medium transition-[background,box-shadow,filter,transform] duration-150',
-        'disabled:pointer-events-none disabled:opacity-55',
-        'active:translate-y-px',
+        'relative inline-flex items-center justify-center whitespace-nowrap font-medium transition-[background,border-color,color,filter,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]',
+        'disabled:pointer-events-none disabled:opacity-50',
+        'active:scale-[0.98]',
         VARIANT[variant],
         variant !== 'link' && SIZE[size],
         fullWidth && 'w-full',
@@ -113,8 +111,8 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex items-center justify-center rounded-[var(--radius-sm)] transition-colors',
-        'disabled:pointer-events-none disabled:opacity-55',
+        'inline-flex items-center justify-center rounded-[var(--radius-sm)] transition-[background,color,transform] duration-150 active:scale-[0.96]',
+        'disabled:pointer-events-none disabled:opacity-50',
         VARIANT[variant],
         size === 'sm' ? 'size-7' : 'size-9',
         className,

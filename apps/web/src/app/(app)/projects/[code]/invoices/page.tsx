@@ -60,7 +60,7 @@ export default async function ProjectInvoicesPage({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stat-group grid sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Contract value"
           value={formatMoney(project.contractTotalMinor || rollup.totalMinor, currency)}

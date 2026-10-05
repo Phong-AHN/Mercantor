@@ -24,7 +24,7 @@ export function Badge({
     <span
       className={cn(
         'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-medium',
-        size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs',
+        size === 'sm' ? 'px-2 py-0.5 text-[11px] leading-4' : 'px-2.5 py-0.5 text-xs leading-5',
         variant === 'soft' && TONE_SOFT[tone],
         variant === 'solid' && TONE_SOLID[tone],
         variant === 'outline' && cn('border bg-transparent', TONE_BORDER[tone]),
@@ -46,7 +46,7 @@ export function StatusPill({
   descriptor,
   size = 'md',
   variant = 'soft',
-  dot = true,
+  dot = false,
   className,
 }: {
   descriptor: Descriptor;

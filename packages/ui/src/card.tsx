@@ -45,27 +45,25 @@ export function CardHeader({
   return (
     <div
       className={cn(
-        'border-line flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4',
+        'border-line flex flex-wrap items-start justify-between gap-3 border-b px-5 py-3.5',
         className,
       )}
       {...rest}
     >
       <div className="flex min-w-0 items-start gap-3">
         {icon && (
-          <span className="bg-surface-2 text-muted mt-0.5 grid size-8 shrink-0 place-items-center rounded-[var(--radius-sm)]">
-            {icon}
-          </span>
+          <span className="text-muted mt-0.5 grid size-6 shrink-0 place-items-center">{icon}</span>
         )}
         <div className="min-w-0">
-          <h2 className="text-ink flex items-center gap-2 text-[15px] font-semibold leading-6">
+          <h2 className="text-ink flex items-center gap-2 text-[14.5px] font-semibold leading-6 tracking-[-0.01em]">
             <span className="truncate">{title}</span>
             {count !== undefined && (
-              <span className="tabular bg-surface-2 text-muted rounded-full px-2 py-0.5 text-xs font-medium">
-                {count}
-              </span>
+              <span className="tabular text-faint font-mono text-[12px] font-normal">{count}</span>
             )}
           </h2>
-          {description && <p className="text-muted mt-0.5 text-[13px]">{description}</p>}
+          {description && (
+            <p className="text-muted mt-0.5 max-w-[65ch] text-[12.5px] leading-5">{description}</p>
+          )}
         </div>
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}

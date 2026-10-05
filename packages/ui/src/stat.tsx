@@ -1,7 +1,7 @@
 import * as React from 'react';
 import type { Tone } from '@relay/core';
 import { cn } from './cn';
-import { TONE_DOT, TONE_SOFT, TONE_TEXT } from './tone';
+import { TONE_TEXT } from './tone';
 
 export interface StatProps {
   label: string;
@@ -15,7 +15,13 @@ export interface StatProps {
   className?: string;
 }
 
-/** The dashboard tile. Big number, small context, one tone. */
+/**
+ * The dashboard tile: label, big number, one supporting fact. The tone colours
+ * the small glyph beside the label and, when something is wrong (danger or
+ * warning), the number itself - colour only where it means something.
+ * Inside a `.stat-group` wrapper the tiles join into one hairline-divided
+ * strip instead of floating as separate cards.
+ */
 export function Stat({
   label,
   value,
@@ -25,28 +31,33 @@ export function Stat({
   trend,
   className,
 }: StatProps) {
+  const alarming = tone === 'danger' || tone === 'warning';
   return (
     <div
       className={cn(
-        'border-line bg-surface-1 shadow-card hover:shadow-raised group relative overflow-hidden rounded-[var(--radius-lg)] border p-4 transition-shadow',
+        'border-line bg-surface-1 relative rounded-[var(--radius-lg)] border px-4 py-3.5',
+        '[.stat-group_&]:rounded-none [.stat-group_&]:border-0',
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-muted text-[12.5px] font-medium leading-4">{label}</p>
+      <p className="text-muted flex items-center gap-1.5 text-[12.5px] font-medium leading-4">
         {icon && (
-          <span
-            className={cn('grid size-7 shrink-0 place-items-center rounded-full', TONE_SOFT[tone])}
-          >
+          <span className={cn('shrink-0 [&_svg]:size-3.5', TONE_TEXT[tone])} aria-hidden>
             {icon}
           </span>
         )}
-      </div>
-      <p className="tabular text-ink mt-3 text-[28px] font-semibold leading-8 tracking-tight">
+        <span className="truncate">{label}</span>
+      </p>
+      <p
+        className={cn(
+          'tabular mt-2.5 text-[26px] font-semibold leading-8 tracking-[-0.03em]',
+          alarming ? TONE_TEXT[tone] : 'text-ink',
+        )}
+      >
         {value}
       </p>
       {(detail || trend) && (
-        <div className="text-muted mt-1.5 flex items-center gap-2 text-[12.5px]">
+        <div className="text-muted mt-1 flex items-center gap-2 text-[12.5px]">
           {trend && (
             <span
               className={cn(
@@ -65,7 +76,6 @@ export function Stat({
           {detail && <span className="min-w-0 truncate">{detail}</span>}
         </div>
       )}
-      <span className={cn('absolute inset-x-0 bottom-0 h-0.5 opacity-70', TONE_DOT[tone])} />
     </div>
   );
 }
@@ -125,7 +135,7 @@ export function AnswerTile({
   );
 
   const shell = cn(
-    'relative block h-full rounded-[var(--radius-md)] border border-line bg-surface-1 text-left transition-colors',
+    'relative block h-full rounded-[var(--radius-md)] border border-line bg-surface-1 text-left transition-colors duration-150',
     compact ? 'px-3 py-2.5' : 'p-3.5',
     href &&
       'hover:border-line-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',

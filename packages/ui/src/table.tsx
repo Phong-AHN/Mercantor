@@ -12,7 +12,7 @@ export function TableScroller({ className, ...rest }: React.HTMLAttributes<HTMLD
   return (
     <div
       className={cn(
-        'scrollbar-slim border-line bg-surface-1 shadow-card w-full overflow-x-auto rounded-[var(--radius-lg)] border',
+        'scrollbar-slim border-line bg-surface-1 w-full overflow-x-auto rounded-[var(--radius-lg)] border',
         className,
       )}
       {...rest}
@@ -29,7 +29,7 @@ export function Table({ className, ...rest }: React.TableHTMLAttributes<HTMLTabl
 export function THead({ className, ...rest }: React.HTMLAttributes<HTMLTableSectionElement>) {
   return (
     <thead
-      className={cn('bg-surface-2/85 sticky top-0 z-10 backdrop-blur-sm', className)}
+      className={cn('bg-surface-1/90 sticky top-0 z-10 backdrop-blur-sm', className)}
       {...rest}
     />
   );
@@ -49,7 +49,7 @@ export function TH({
     <th
       scope="col"
       className={cn(
-        'border-line text-muted whitespace-nowrap border-b px-3.5 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide',
+        'border-line text-muted whitespace-nowrap border-b px-3.5 py-2.5 text-[12px] font-medium',
         align === 'right' && 'text-right',
         align === 'center' && 'text-center',
         numeric && 'tabular',
@@ -95,7 +95,7 @@ export function TD({
   return (
     <td
       className={cn(
-        'text-ink px-3.5 py-3 align-middle',
+        'text-ink px-3.5 py-2.5 align-middle',
         align === 'right' && 'text-right',
         align === 'center' && 'text-center',
         numeric && 'tabular',

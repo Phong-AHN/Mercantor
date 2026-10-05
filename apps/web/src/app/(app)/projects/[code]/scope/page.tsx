@@ -56,7 +56,7 @@ export default async function ProjectScopePage({ params }: { params: Promise<{ c
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stat-group grid sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Migration type"
           value={MIGRATION_TYPE_LABEL[project.migrationType].label}

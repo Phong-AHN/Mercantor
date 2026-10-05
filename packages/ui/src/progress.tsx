@@ -165,13 +165,13 @@ export function TargetMeter({
   const over = ratio > 1;
   return (
     <div className={className}>
-      <div className="mb-1 flex items-baseline justify-between gap-2 text-[12.5px]">
+      <div className="mb-1 flex items-baseline gap-1.5 whitespace-nowrap text-[12.5px]">
         <span className={cn('tabular font-medium', over ? 'text-danger-ink' : 'text-ink')}>
           {format(value)}
         </span>
-        <span className="tabular text-faint">target {format(target)}</span>
+        <span className="tabular text-faint text-[11.5px]">/ {format(target)}</span>
       </div>
-      <div className="bg-surface-3 h-1.5 w-full overflow-hidden rounded-full">
+      <div className="bg-surface-3 h-1 w-full overflow-hidden rounded-full">
         <div
           className={cn(
             'h-full rounded-full transition-[width] duration-500',

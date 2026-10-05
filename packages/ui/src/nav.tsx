@@ -26,7 +26,7 @@ export function PageHeader({
             {eyebrow}
           </div>
         )}
-        <h1 className="text-ink text-[22px] font-semibold leading-7 tracking-tight sm:text-[26px] sm:leading-8">
+        <h1 className="text-ink text-[22px] font-semibold leading-7 tracking-[-0.025em] sm:text-[26px] sm:leading-8">
           {title}
         </h1>
         {description && (
@@ -106,9 +106,9 @@ export function Tabs({
               href={item.href}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'relative flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-[13px] font-medium transition-colors',
+                'relative flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors',
                 isActive
-                  ? 'border-accent text-ink'
+                  ? 'border-ink text-ink'
                   : 'text-muted hover:border-line-strong hover:text-ink-soft border-transparent',
               )}
             >
@@ -117,7 +117,7 @@ export function Tabs({
                 <span
                   className={cn(
                     'tabular rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold leading-4',
-                    isActive ? 'bg-accent-soft text-accent-ink' : 'bg-surface-2 text-muted',
+                    isActive ? 'bg-surface-3 text-ink' : 'bg-surface-2 text-muted',
                   )}
                 >
                   {item.count}
@@ -184,7 +184,7 @@ export function FilterPills({
           className={cn(
             'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition-colors',
             item.active
-              ? 'border-accent bg-accent-soft text-accent-ink'
+              ? 'border-ink bg-ink text-canvas'
               : 'border-line bg-surface-1 text-muted hover:border-line-strong hover:text-ink',
           )}
         >

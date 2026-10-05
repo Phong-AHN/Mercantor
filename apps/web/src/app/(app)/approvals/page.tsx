@@ -26,7 +26,7 @@ export default async function ApprovalsPage() {
         description="Design, development, QA, merchant and deployment sign-off across every project. Each checkpoint is decided by one side of the table."
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="stat-group grid sm:grid-cols-3">
         <Stat
           label="Waiting on you"
           value={mine.length}

@@ -37,11 +37,15 @@ export default async function MyWorkPage() {
         description={
           total === 0
             ? 'Nothing is waiting on you right now.'
-            : `${total} thing${total === 1 ? '' : 's'} are waiting on you across ${work.assignedProjects.length} project${work.assignedProjects.length === 1 ? '' : 's'}.`
+            : `${total === 1 ? '1 thing is' : `${total} things are`} waiting on you${
+                work.assignedProjects.length > 0
+                  ? ` across ${work.assignedProjects.length} project${work.assignedProjects.length === 1 ? '' : 's'}`
+                  : ''
+              }.`
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stat-group grid sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Your projects"
           value={work.assignedProjects.length}

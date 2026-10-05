@@ -86,7 +86,7 @@ export default async function AnalyticsPage() {
         description={`The last ${trends.monthsCount} months, across the whole portfolio.`}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stat-group grid sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Started"
           value={trends.totalStarted}

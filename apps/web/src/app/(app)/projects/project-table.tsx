@@ -54,11 +54,11 @@ export function ProjectTable({
       <Table>
         <THead>
           <tr>
-            <TH className="w-[16%] min-w-[12rem]">Merchant</TH>
+            <TH className="w-[18%] min-w-[14rem]">Merchant</TH>
             <TH>Stage</TH>
             <TH>Health</TH>
             <TH numeric>Age</TH>
-            <TH className="w-[10%] min-w-[8rem]">In stage</TH>
+            <TH className="w-[9%] min-w-[7.5rem]">In stage</TH>
             <TH className="w-[20%] min-w-[11rem]">Blocked on</TH>
             <TH className="w-[20%] min-w-[11rem]">Next step</TH>
             <TH>Launch</TH>
@@ -91,7 +91,7 @@ export function ProjectTable({
                   <div className="flex items-center gap-2.5">
                     <ProjectLink code={project.code} name={project.merchant.name} />
                   </div>
-                  <p className="text-faint mt-0.5 truncate text-[11.5px]">
+                  <p className="text-muted mt-0.5 truncate text-[11.5px]">
                     {project.merchant.platform ?? 'Platform unknown'}
                     {project.merchant.storeId ? ` - ${project.merchant.storeId}` : ''}
                   </p>

@@ -31,7 +31,7 @@ export default async function ProjectAssetsPage({ params }: { params: Promise<{ 
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="stat-group grid sm:grid-cols-3">
         <Stat
           label="Approved"
           value={`${approved} / ${items.length}`}

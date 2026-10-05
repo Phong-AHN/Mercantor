@@ -274,7 +274,7 @@ function AnswerStrip({ answers, code }: { answers: Answer[]; code: string }) {
     <section aria-label="Project status at a glance">
       {/* A swipeable strip until there is room for a 5-across grid; the fade
           on the right edge says there is more to scroll to. */}
-      <ul className="scrollbar-slim -mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] sm:mx-0 sm:px-0 xl:grid xl:snap-none xl:grid-cols-5 xl:overflow-visible xl:pb-0 xl:[mask-image:none]">
+      <ul className="scrollbar-slim xl:border-line xl:bg-line -mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)] sm:mx-0 sm:px-0 xl:grid xl:snap-none xl:grid-cols-5 xl:gap-px xl:overflow-hidden xl:rounded-[var(--radius-lg)] xl:border xl:pb-0 xl:[mask-image:none]">
         {answers.map((answer) => (
           <li key={answer.id} className="w-[12.5rem] shrink-0 snap-start xl:w-auto">
             <AnswerTile
@@ -285,6 +285,7 @@ function AnswerStrip({ answers, code }: { answers: Answer[]; code: string }) {
               href={answerHref(code, answer.id)}
               density="compact"
               linkAs={Link}
+              className="xl:rounded-none xl:border-0"
             />
           </li>
         ))}

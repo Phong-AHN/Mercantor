@@ -95,12 +95,12 @@ export function ProjectHero(props: ProjectHeroProps) {
           <img
             src={props.image.src}
             alt=""
-            className="absolute inset-0 -z-20 size-full object-cover object-top"
+            className="absolute inset-0 -z-20 size-full scale-105 object-cover object-top blur-[3px]"
           />
           {/* Legibility scrim: fixed dark tones, the same in both themes, so the
               white text always clears contrast whatever the image is. */}
           <div
-            className="absolute inset-0 -z-10 bg-gradient-to-r from-black/85 via-black/70 to-black/35 max-sm:bg-black/80 max-sm:bg-none"
+            className="via-black/78 absolute inset-0 -z-10 bg-gradient-to-r from-black/90 to-black/50 max-sm:bg-black/85 max-sm:bg-none"
             aria-hidden
           />
         </>
@@ -168,7 +168,17 @@ export function ProjectHero(props: ProjectHeroProps) {
               )}
             </div>
           </div>
-          <div className="flex max-w-full flex-wrap items-center gap-2">{props.actions}</div>
+          {/* On a photo the ink primary button would vanish; flip it to light
+              for this cluster only by re-pointing the colour tokens. */}
+          <div
+            className={cn(
+              'flex max-w-full flex-wrap items-center gap-2',
+              onImage &&
+                '[--color-on-primary:oklch(0.205_0.01_260)] [--color-primary-hover:oklch(0.9_0.004_260)] [--color-primary:oklch(0.985_0.002_260)]',
+            )}
+          >
+            {props.actions}
+          </div>
         </div>
 
         <div className="grid items-end gap-x-8 gap-y-4 sm:grid-cols-[minmax(0,1fr)_auto]">
