@@ -25,6 +25,8 @@ pnpm verify              # format:check + lint + typecheck + test (no infrastruc
 pnpm test:integration    # real Postgres, real server actions - needs `pnpm infra:up`
 pnpm build               # production build of every workspace
 node scripts/e2e-smoke.mjs             # real browser, real sign-in, cross-role boundaries
+pnpm test:e2e                          # every browser smoke in sequence (dev server + infra up;
+                                       # RELAY_URL to point elsewhere, CHROME_PATH off Windows)
 node scripts/upload-smoke.mjs          # real browser, real MinIO round trip for a file attachment
 node scripts/change-request-smoke.mjs  # real browser: price, approve, invoice line created
 node scripts/thread-smoke.mjs          # real browser: reply to a reply, the portal pipeline view

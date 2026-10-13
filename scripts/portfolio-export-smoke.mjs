@@ -10,7 +10,7 @@
 import { chromium } from 'playwright-core';
 
 const BASE = process.env.RELAY_URL ?? 'http://localhost:3000';
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const CHROME = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const PASSWORD = 'relay-demo-password';
 
 const results = [];
@@ -53,7 +53,7 @@ try {
     'Response is a CSV attachment',
     (pmResponse.headers()['content-type'] ?? '').includes('text/csv') &&
       (pmResponse.headers()['content-disposition'] ?? '').includes(
-        'attachment; filename="relay-portfolio-',
+        'attachment; filename="mercantor-portfolio-',
       ),
     JSON.stringify(pmResponse.headers()),
   );
@@ -73,7 +73,10 @@ try {
   // --- Filters in the URL flow straight into the export -------------------
   await page.fill('input[placeholder="Merchant, project code or store ID"]', 'zzz-no-such-project');
   await page.keyboard.press('Enter');
-  await page.waitForTimeout(600);
+  // The filter lives in the URL; wait for the navigation, not a fixed delay.
+  await page.waitForURL((url) => url.searchParams.get('q') === 'zzz-no-such-project', {
+    timeout: 60000,
+  });
   const filteredHref = await page.getByRole('link', { name: 'Export CSV' }).getAttribute('href');
   check('Export link carries the active filter', filteredHref?.includes('q=zzz-no-such-project'));
 

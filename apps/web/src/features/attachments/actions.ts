@@ -10,7 +10,7 @@ import {
   ForbiddenError,
   ValidationError,
 } from '@relay/core';
-import { transaction } from '@relay/db';
+import { db, transaction } from '@relay/db';
 import {
   deleteObject,
   deriveAttachmentKey,
@@ -23,6 +23,7 @@ import {
 import { actionOk, defineAction } from '@/server/action';
 import { audit, recordActivity } from '@/server/record';
 import { resolveProject, revalidateProject } from '@/features/projects/mutations';
+import { assertAttachmentTargets } from './targets';
 
 /**
  * A file attachment lands in the bucket in two steps, never one:
@@ -104,6 +105,15 @@ export const confirmUploadAction = defineAction({
     const declaredType = attachmentTypeFor(input.contentType);
     if (!declaredType) throw new ValidationError('That file type is not accepted.');
 
+    // Before any storage call: an attachment pointed at a record outside this
+    // project is refused without reading, or deleting, anything. A file
+    // attached to a comment inherits that comment's visibility for the
+    // activity row - otherwise "File attached: ..." is written as EVERYONE,
+    // and a file on an INTERNAL_AHN note (D-009's boundary) would announce
+    // its existence and label to SHOPLINE and the merchant.
+    const activityVisibility =
+      (await assertAttachmentTargets(db, ctx.principal, project.id, input)) ?? 'EVERYONE';
+
     const head = await headObject(input.key);
     if (!head) throw new ConflictError('The upload did not complete. Try again.');
     if (head.sizeBytes > MAX_ATTACHMENT_BYTES) {
@@ -125,23 +135,6 @@ export const confirmUploadAction = defineAction({
     }
 
     const attachment = await transaction(async (tx) => {
-      // A file attached to a comment inherits that comment's own visibility
-      // for the activity row - otherwise "File attached: ..." is written as
-      // EVERYONE regardless, and a file dropped onto an INTERNAL_AHN note
-      // (D-009's boundary) would announce its existence and label to
-      // SHOPLINE and the merchant even though the note itself stays hidden.
-      let activityVisibility: 'INTERNAL_AHN' | 'AHN_SHOPLINE' | 'EVERYONE' = 'EVERYONE';
-      if (input.commentId) {
-        const comment = await tx.comment.findUnique({
-          where: { id: input.commentId },
-          select: { projectId: true, visibility: true },
-        });
-        if (!comment || comment.projectId !== project.id) {
-          throw new ForbiddenError('That comment does not belong to this project.');
-        }
-        activityVisibility = comment.visibility;
-      }
-
       const created = await tx.attachment.create({
         data: {
           projectId: project.id,

@@ -16,7 +16,6 @@ import {
   formatDate,
   formatDuration,
   formatRelative,
-  isAppError,
   TEAM_LABEL,
 } from '@relay/core';
 import {
@@ -28,15 +27,15 @@ import {
   DetailList,
   DetailRow,
   Empty,
-  NotFoundState,
   ProgressBar,
   Timeline,
   TimelineItem,
 } from '@relay/ui';
 import { ShowcaseCard } from '@/components/qa/showcase-card';
-import { getPortalProject } from '@/features/portal/queries';
+import { findPortalProject } from '@/features/portal/queries';
 import { captureSrc, listShowcase } from '@/features/qa/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import { NoPortalProject } from './no-project';
 import { PortalHero } from './portal-hero';
 
 export const metadata: Metadata = { title: 'Your migration' };
@@ -52,20 +51,8 @@ export const dynamic = 'force-dynamic';
 export default async function PortalOverviewPage() {
   const principal = await requirePrincipalOrRedirect('/portal');
 
-  let project: Awaited<ReturnType<typeof getPortalProject>>;
-  try {
-    project = await getPortalProject(principal);
-  } catch (error) {
-    if (isAppError(error) && error.code === 'NOT_FOUND') {
-      return (
-        <NotFoundState
-          title="No migration project yet"
-          description="Once SHOPLINE and AHN set your project up, it will appear here."
-        />
-      );
-    }
-    throw error;
-  }
+  const project = await findPortalProject(principal);
+  if (!project) return <NoPortalProject />;
 
   const [showcase] = await listShowcase(principal, project.code);
   const sharedPair = showcase?.comparisons[0] ?? null;
@@ -244,7 +231,9 @@ export default async function PortalOverviewPage() {
               <ImageOff className="size-6" aria-hidden />
             </div>
             <div>
-              <p className="text-ink text-[13.5px] font-medium">Your before and after is on its way</p>
+              <p className="text-ink text-[13.5px] font-medium">
+                Your before and after is on its way
+              </p>
               <p className="text-muted mt-1 max-w-prose text-[12.5px] leading-5">
                 As your new SHOPLINE store takes shape, your AHN team will share side-by-side
                 comparisons of your current site and the new one here, with the results they

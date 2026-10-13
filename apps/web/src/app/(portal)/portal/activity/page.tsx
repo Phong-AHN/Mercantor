@@ -4,8 +4,9 @@ import { can, writableVisibilities } from '@relay/rbac';
 import { Card, CardBody, CardHeader, Empty, Timeline, TimelineItem } from '@relay/ui';
 import { CommentComposer } from '@/app/(app)/projects/[code]/activity/activity-controls';
 import { CommentThread } from '@/app/(app)/projects/[code]/activity/comment-thread';
-import { getPortalProject } from '@/features/portal/queries';
+import { findPortalProject } from '@/features/portal/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import { NoPortalProject } from '../no-project';
 
 export const metadata: Metadata = { title: 'Activity' };
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,8 @@ export const dynamic = 'force-dynamic';
  */
 export default async function PortalActivityPage() {
   const principal = await requirePrincipalOrRedirect('/portal/activity');
-  const project = await getPortalProject(principal);
+  const project = await findPortalProject(principal);
+  if (!project) return <NoPortalProject />;
   const now = project.snapshot.time.now;
   const visibilities = writableVisibilities(principal);
   const canComment = can(principal, 'comment:create');

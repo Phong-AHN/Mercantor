@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { httpUrl } from '@/server/url-schema';
 
 /**
  * The input of `updateMerchantAction`. Lives outside `actions.ts` because
@@ -20,10 +21,7 @@ function optionalText(max: number) {
 export const updateMerchantInput = z.object({
   code: z.string().min(1),
   name: z.string().trim().min(2, 'Enter the merchant name.').max(200),
-  website: z
-    .string()
-    .trim()
-    .url('Enter a valid website URL, starting with https://.')
+  website: httpUrl('Enter a valid website URL, starting with https://.')
     .optional()
     .or(z.literal(''))
     .transform((value) => value || null),

@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { NotFoundError } from '@relay/core';
+import { isAppError, NotFoundError } from '@relay/core';
 import type { Principal } from '@relay/rbac';
 import { getProject, listProjects } from '@/features/projects/queries';
 
@@ -16,6 +16,22 @@ export const getPortalProject = cache(async (principal: Principal) => {
     throw new NotFoundError('You are not attached to a migration project yet.');
   }
   return getProject(principal, first.code);
+});
+
+/**
+ * The same, for pages: `null` when this merchant is not attached to a
+ * project yet, so every portal page can show the "no project yet" state
+ * rather than crash. A merchant account exists before its `ProjectMember`
+ * row does whenever someone creates the login first, so this is a normal
+ * state, not an error. Anything other than "not found" still throws.
+ */
+export const findPortalProject = cache(async (principal: Principal) => {
+  try {
+    return await getPortalProject(principal);
+  } catch (error) {
+    if (isAppError(error) && error.code === 'NOT_FOUND') return null;
+    throw error;
+  }
 });
 
 export const listPortalProjects = cache(async (principal: Principal) =>

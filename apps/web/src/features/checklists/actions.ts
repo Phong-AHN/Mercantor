@@ -19,6 +19,8 @@ import {
 import { transaction } from '@relay/db';
 import { can } from '@relay/rbac';
 import { actionOk, defineAction } from '@/server/action';
+import { httpUrl } from '@/server/url-schema';
+import { assertAttachmentTargets } from '@/features/attachments/targets';
 import { audit, recordActivity } from '@/server/record';
 import {
   fanOut,
@@ -289,7 +291,7 @@ export const attachLinkAction = defineAction({
   input: z.object({
     code: z.string().min(1),
     label: z.string().trim().min(1, 'Give the link a label.').max(200),
-    url: z.string().trim().url('That is not a valid URL.'),
+    url: httpUrl('Enter a web link, starting with https://.'),
     assetItemId: z.string().uuid().optional(),
     accessItemId: z.string().uuid().optional(),
     issueId: z.string().uuid().optional(),
@@ -298,6 +300,7 @@ export const attachLinkAction = defineAction({
     const project = await resolveProject(ctx.principal, input.code);
 
     await transaction(async (tx) => {
+      await assertAttachmentTargets(tx, ctx.principal, project.id, input);
       const attachment = await tx.attachment.create({
         data: {
           projectId: project.id,

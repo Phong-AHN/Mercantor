@@ -4,6 +4,40 @@ import type { NextConfig } from 'next';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * The bucket origins the browser uploads to. Attachments go straight from
+ * the browser to object storage on a presigned POST (the bytes never pass
+ * through this server), so `connect-src` must name the bucket - with only
+ * `'self'`, every upload in the app was blocked by the browser. Derived from
+ * the same variables `packages/storage` builds its S3 client from: an
+ * explicit `S3_ENDPOINT` (MinIO, R2...) path-style or virtual-hosted, or AWS
+ * itself. Read when the config loads, so on Vercel these must be set for the
+ * build as well as at runtime (they are by default).
+ */
+function storageOrigins(): string[] {
+  // Locally the variables live in the repository-root .env, which
+  // packages/config loads at runtime - after this file has already run.
+  // loadEnvFile never overrides a variable that is already set, so a
+  // platform's own environment (Vercel's) still wins.
+  try {
+    process.loadEnvFile(path.join(here, '..', '..', '.env'));
+  } catch {
+    // No .env file (production): the platform environment is all there is.
+  }
+  const bucket = process.env.S3_BUCKET || 'relay-media-dev';
+  const region = process.env.S3_REGION || 'us-east-1';
+  const endpoint = process.env.S3_ENDPOINT;
+  if (endpoint) {
+    try {
+      const url = new URL(endpoint);
+      return [url.origin, `${url.protocol}//${bucket}.${url.host}`];
+    } catch {
+      return [];
+    }
+  }
+  return [`https://${bucket}.s3.${region}.amazonaws.com`, `https://${bucket}.s3.amazonaws.com`];
+}
+
 const config: NextConfig = {
   reactStrictMode: true,
   // The default bottom-left dev badge sits on top of the user menu.
@@ -141,7 +175,7 @@ const config: NextConfig = {
             // minted by this page itself, never loaded from another origin.
             "img-src 'self' data: blob:",
             "font-src 'self' data:",
-            "connect-src 'self'",
+            `connect-src 'self' ${storageOrigins().join(' ')}`,
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",

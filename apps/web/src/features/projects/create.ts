@@ -15,6 +15,7 @@ import { projectCode } from '@relay/core/server';
 import { db, transaction } from '@relay/db';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, notify, recordActivity } from '@/server/record';
+import { httpUrl } from '@/server/url-schema';
 import { assertTargetAfterStart, parseDate, revalidateProject } from './mutations';
 
 /**
@@ -27,7 +28,9 @@ export const createProjectAction = defineAction({
   permission: 'project:create',
   input: z.object({
     merchantName: z.string().trim().min(2, 'Enter the merchant name.').max(200),
-    website: z.string().trim().url('Enter a valid website URL.').optional().or(z.literal('')),
+    website: httpUrl('Enter a valid website URL, starting with https://.')
+      .optional()
+      .or(z.literal('')),
     shoplineStoreId: z.string().trim().max(60).optional(),
     currentPlatform: z.string().trim().max(80).optional(),
     country: z.string().trim().max(80).optional(),

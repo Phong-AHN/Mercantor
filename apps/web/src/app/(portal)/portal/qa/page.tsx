@@ -4,15 +4,15 @@ import {
   clock,
   formatDate,
   formatRelative,
-  isAppError,
   PERF_TEMPLATE_LABEL,
 } from '@relay/core';
 import { BeforeAfter, Badge, Card, CardBody, CardHeader, Empty, Table, TBody, TD, TH, THead, TR } from '@relay/ui';
 import { FindingsList } from '@/components/qa/findings-list';
 import { ShowcaseCard } from '@/components/qa/showcase-card';
-import { getPortalProject } from '@/features/portal/queries';
+import { findPortalProject } from '@/features/portal/queries';
 import { captureSrc, getSiteQa, listFindings, listShowcase } from '@/features/qa/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import { NoPortalProject } from '../no-project';
 
 export const metadata: Metadata = { title: 'Site review' };
 export const dynamic = 'force-dynamic';
@@ -20,15 +20,8 @@ export const dynamic = 'force-dynamic';
 export default async function PortalSiteReviewPage() {
   const principal = await requirePrincipalOrRedirect('/portal/qa');
 
-  let project;
-  try {
-    project = await getPortalProject(principal);
-  } catch (error) {
-    if (isAppError(error) && error.code === 'NOT_FOUND') {
-      return <Empty title="No project yet" description={error.message} className="py-16" />;
-    }
-    throw error;
-  }
+  const project = await findPortalProject(principal);
+  if (!project) return <NoPortalProject />;
 
   const [qa, showcase, findings] = await Promise.all([
     getSiteQa(principal, project.code),

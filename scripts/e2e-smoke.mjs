@@ -11,7 +11,7 @@
 import { chromium } from 'playwright-core';
 
 const BASE = process.env.RELAY_URL ?? 'http://localhost:3000';
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const CHROME = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const PASSWORD = 'relay-demo-password';
 
 const results = [];
@@ -32,6 +32,9 @@ async function signIn(page, email) {
 
 const browser = await chromium.launch({ executablePath: CHROME });
 const context = await browser.newContext({ viewport: { width: 1560, height: 1000 } });
+// The dev server compiles a route on its first visit, which can take well
+// over Playwright's 30s default on a cold start.
+context.setDefaultTimeout(120000);
 const page = await context.newPage();
 page.on('pageerror', (err) => console.log('PAGEERROR', err.message));
 
@@ -50,7 +53,11 @@ try {
     .count();
   check('The ten answers render on the project header', answerCount === 10, `${answerCount} tiles`);
 
-  const blockerBanner = await page.getByText('Current blocker').first().isVisible();
+  // The status band's "Is anything stuck?" panel names the open blocker.
+  const blockerBanner = await page
+    .locator('[aria-label="Project status"]')
+    .getByRole('link', { name: 'Manage blocker' })
+    .isVisible();
   check('The open blocker is banner-prominent', blockerBanner);
 
   // Log an update, and send it to Slack as well.
@@ -66,6 +73,7 @@ try {
 
   // --- SHOPLINE account manager -------------------------------------------
   const shopline = await browser.newContext({ viewport: { width: 1560, height: 1000 } });
+  shopline.setDefaultTimeout(120000);
   const slPage = await shopline.newPage();
   await signIn(slPage, 'priya.raman@shopline.example');
 
@@ -73,8 +81,15 @@ try {
   const internalLeak = await slPage.getByText('Internal: the design rework cost us 3 days').count();
   check('SHOPLINE cannot see the AHN-internal note', internalLeak === 0, `${internalLeak} matches`);
 
-  const sharedNote = await slPage.getByText(body).count();
-  check('SHOPLINE can see the shared update', sharedNote > 0);
+  // An update an AHN principal posts is forced to INTERNAL_AHN whatever was
+  // asked for (RUNBOOK "AHN's own project updates stay internal"), so the
+  // one the PM just posted must stay out of SHOPLINE's feed.
+  const ahnUpdateSeen = await slPage.getByText(body).count();
+  check(
+    'SHOPLINE cannot see an update AHN posted',
+    ahnUpdateSeen === 0,
+    `${ahnUpdateSeen} matches`,
+  );
 
   await slPage.goto(`${BASE}/settings`, { waitUntil: 'domcontentloaded' });
   const deniedSettings = await slPage.getByText('do not have access').count();
@@ -86,6 +101,7 @@ try {
 
   // --- merchant ------------------------------------------------------------
   const merchant = await browser.newContext({ viewport: { width: 1560, height: 1000 } });
+  merchant.setDefaultTimeout(120000);
   const mPage = await merchant.newPage();
   await signIn(mPage, 'owner@sunrisecoffee.example');
   check('Merchant lands on the merchant portal', mPage.url().includes('/portal'), mPage.url());

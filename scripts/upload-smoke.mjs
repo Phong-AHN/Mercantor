@@ -10,7 +10,7 @@ import { chromium } from 'playwright-core';
 import { writeFileSync } from 'node:fs';
 
 const BASE = process.env.RELAY_URL ?? 'http://localhost:3000';
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const CHROME = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const PASSWORD = 'relay-demo-password';
 
 const results = [];
@@ -70,10 +70,12 @@ try {
   await dialog.waitFor({ state: 'hidden', timeout: 15000 });
   check('Upload completes and the dialog closes', true);
 
-  await page.waitForTimeout(1000); // router.refresh()
-
+  // Wait for router.refresh() to bring the new row in, rather than a fixed sleep.
   const link = page.getByRole('link', { name: 'upload-smoke.png' }).first();
-  const linkVisible = await link.isVisible().catch(() => false);
+  const linkVisible = await link
+    .waitFor({ state: 'visible', timeout: 30000 })
+    .then(() => true)
+    .catch(() => false);
   check('The uploaded file appears as a link on the page', linkVisible);
 
   if (linkVisible) {

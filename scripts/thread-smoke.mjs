@@ -9,7 +9,7 @@
 import { chromium } from 'playwright-core';
 
 const BASE = process.env.RELAY_URL ?? 'http://localhost:3000';
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const CHROME = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const PASSWORD = 'relay-demo-password';
 
 const results = [];

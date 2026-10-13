@@ -8,8 +8,9 @@ import {
 import { canDecideApproval } from '@relay/rbac';
 import { Alert, Card, CardBody, CardHeader, StatusPill } from '@relay/ui';
 import { ApprovalControls } from '@/app/(app)/projects/[code]/approvals/approval-controls';
-import { getPortalProject } from '@/features/portal/queries';
+import { findPortalProject } from '@/features/portal/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import { NoPortalProject } from '../no-project';
 
 export const metadata: Metadata = { title: 'Approvals' };
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,8 @@ const PIPELINE_DESCRIPTION: Record<ApprovalType, string> = {
 
 export default async function PortalApprovalsPage() {
   const principal = await requirePrincipalOrRedirect('/portal/approvals');
-  const project = await getPortalProject(principal);
+  const project = await findPortalProject(principal);
+  if (!project) return <NoPortalProject />;
 
   const byType = new Map(project.approvals.map((approval) => [approval.type, approval]));
   const mine = byType.get('MERCHANT_FINAL');

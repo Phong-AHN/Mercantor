@@ -14,7 +14,7 @@ import {
   sessionCookieOptions,
 } from '@relay/auth';
 import { env } from '@relay/config';
-import { renderPasswordResetEmail } from '@relay/core';
+import { clock, renderPasswordResetEmail } from '@relay/core';
 import { db } from '@relay/db';
 import { integrationsFor } from '@relay/integrations';
 import { logger } from '@relay/observability';
@@ -27,6 +27,15 @@ import { requestMeta } from '@/server/session';
  */
 
 const GENERIC_RESET_MESSAGE = 'If that email has an account, a reset link is on its way.';
+
+/**
+ * Reset emails per account per hour. The form is public and needs only an
+ * address, so without a cap anyone could flood a person's inbox with
+ * genuine-looking reset emails (and the organization's email quota with
+ * them). Keyed by account, not IP, so rotating addresses does not help; the
+ * response stays the generic one either way, so the cap reveals nothing.
+ */
+const RESET_EMAILS_PER_HOUR = 3;
 
 const requestResetInput = z.object({
   email: z
@@ -62,7 +71,18 @@ export async function requestPasswordResetAction(
       select: { id: true, name: true, email: true, organizationId: true },
     });
 
-    if (user) {
+    const recentResets = user
+      ? await db.passwordToken.count({
+          where: {
+            userId: user.id,
+            purpose: 'RESET',
+            createdAt: { gt: new Date(clock.now().getTime() - 60 * 60 * 1000) },
+          },
+        })
+      : 0;
+    if (user && recentResets >= RESET_EMAILS_PER_HOUR) {
+      logger.warn({ userId: user.id }, 'password reset requests throttled');
+    } else if (user) {
       const { token } = await createPasswordToken(user.id, 'RESET');
       const rendered = renderPasswordResetEmail({
         recipientName: user.name,

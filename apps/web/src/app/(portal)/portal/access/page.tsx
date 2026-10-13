@@ -6,8 +6,9 @@ import {
   AttachLinkButton,
   FileUploadButton,
 } from '@/app/(app)/projects/[code]/access/access-controls';
-import { getPortalProject } from '@/features/portal/queries';
+import { findPortalProject } from '@/features/portal/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import { NoPortalProject } from '../no-project';
 
 export const metadata: Metadata = { title: 'Access' };
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,8 @@ export const dynamic = 'force-dynamic';
  */
 export default async function PortalAccessPage() {
   const principal = await requirePrincipalOrRedirect('/portal/access');
-  const project = await getPortalProject(principal);
+  const project = await findPortalProject(principal);
+  if (!project) return <NoPortalProject />;
 
   const items = project.accessItems;
   const verified = items.filter((item) => item.status === 'VERIFIED').length;

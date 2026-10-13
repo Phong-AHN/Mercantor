@@ -8,15 +8,17 @@ import {
 } from '@/app/(app)/projects/[code]/access/access-controls';
 import { AssetRequirementsSummary } from '@/app/(app)/projects/[code]/assets/asset-requirements';
 import { DueDate } from '@/components/domain';
-import { getPortalProject } from '@/features/portal/queries';
+import { findPortalProject } from '@/features/portal/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import { NoPortalProject } from '../no-project';
 
 export const metadata: Metadata = { title: 'Assets' };
 export const dynamic = 'force-dynamic';
 
 export default async function PortalAssetsPage() {
   const principal = await requirePrincipalOrRedirect('/portal/assets');
-  const project = await getPortalProject(principal);
+  const project = await findPortalProject(principal);
+  if (!project) return <NoPortalProject />;
   const now = project.snapshot.time.now;
 
   const items = project.assetItems;

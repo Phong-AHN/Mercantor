@@ -13,6 +13,7 @@ import {
 import { landingPathFor } from '@relay/rbac';
 import { isAppError, ValidationError } from '@relay/core';
 import { logger } from '@relay/observability';
+import { safeNextPath } from '@/server/safe-redirect';
 import { requestMeta } from '@/server/session';
 import { actionError, type ActionResult } from '@/server/action';
 
@@ -60,12 +61,10 @@ export async function signInAction(_prev: unknown, form: FormData): Promise<Acti
     // request on this session will use.
     const resolved = await requireSession(session.token);
 
-    const fallback = landingPathFor(resolved.principal);
     // Only same-origin paths are honoured, so `?next=` cannot become an open
-    // redirect to somebody else's site.
-    const requested = parsed.data.next;
-    destination =
-      requested && requested.startsWith('/') && !requested.startsWith('//') ? requested : fallback;
+    // redirect to somebody else's site - see `safeNextPath` for why a
+    // prefix check is not enough.
+    destination = safeNextPath(parsed.data.next) ?? landingPathFor(resolved.principal);
   } catch (error) {
     if (error instanceof ValidationError) {
       return actionError(error.userMessage, error.fieldErrors);

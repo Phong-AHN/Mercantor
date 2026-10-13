@@ -34,11 +34,20 @@ export async function requirePrincipalOrRedirect(returnTo?: string): Promise<Pri
   redirect(target);
 }
 
+/**
+ * The client's address, as the hosting edge saw it. `x-real-ip` is set by
+ * the platform (Vercel) from the TCP connection and cannot be supplied by the
+ * client; the first `x-forwarded-for` entry can be, so it is only the
+ * fallback. This matters because sign-in throttling is keyed by this value -
+ * a spoofable address would let an attacker reset their own throttle with
+ * every request.
+ */
 export async function requestMeta(): Promise<{ ip: string | null; userAgent: string | null }> {
   const list = await headers();
-  const forwarded = list.get('x-forwarded-for');
+  const realIp = list.get('x-real-ip')?.trim();
+  const forwarded = list.get('x-forwarded-for')?.split(',')[0]?.trim();
   return {
-    ip: forwarded ? (forwarded.split(',')[0]?.trim() ?? null) : null,
+    ip: realIp || forwarded || null,
     userAgent: list.get('user-agent'),
   };
 }
