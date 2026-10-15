@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Save, UserPlus } from 'lucide-react';
+import { Pencil, Save, UserMinus, UserPlus } from 'lucide-react';
 import {
   MIGRATION_TYPE_LABEL,
   MIGRATION_TYPES,
@@ -16,6 +16,7 @@ import {
   Card,
   CardBody,
   CardHeader,
+  Dialog,
   Empty,
   Field,
   FormActions,
@@ -27,7 +28,9 @@ import { useAction } from '@/components/use-action';
 import {
   assignPeopleAction,
   inviteMerchantAction,
+  removeMerchantMemberAction,
   updateMerchantAction,
+  updateMerchantMemberAction,
   updateProjectAction,
 } from '@/features/projects/actions';
 
@@ -526,13 +529,7 @@ export function MerchantAccessForm({ code, members }: { code: string; members: M
         ) : (
           <ul className="space-y-2">
             {members.map((member) => (
-              <li key={member.id} className="flex items-center gap-2.5">
-                <Avatar name={member.name} team="MERCHANT" size="sm" />
-                <div className="min-w-0">
-                  <p className="text-ink truncate text-[13px] font-medium">{member.name}</p>
-                  <p className="text-faint truncate text-[11.5px]">{member.email}</p>
-                </div>
-              </li>
+              <MerchantMemberRow key={member.id} code={code} member={member} />
             ))}
           </ul>
         )}
@@ -578,5 +575,134 @@ export function MerchantAccessForm({ code, members }: { code: string; members: M
         </div>
       </CardBody>
     </Card>
+  );
+}
+
+/** One merchant on the project, with the two things you can do to their access. */
+function MerchantMemberRow({ code, member }: { code: string; member: MerchantMember }) {
+  const [editing, setEditing] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [form, setForm] = useState({ name: member.name, email: member.email });
+  const update = useAction(updateMerchantMemberAction, { onSuccess: () => setEditing(false) });
+  const remove = useAction(removeMerchantMemberAction, { onSuccess: () => setRemoving(false) });
+  const nameId = `merchant-${member.id}-name`;
+  const emailId = `merchant-${member.id}-email`;
+
+  return (
+    <li className="flex items-center gap-2.5">
+      <Avatar name={member.name} team="MERCHANT" size="sm" />
+      <div className="min-w-0 flex-1">
+        <p className="text-ink truncate text-[13px] font-medium">{member.name}</p>
+        <p className="text-faint truncate text-[11.5px]">{member.email}</p>
+      </div>
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={() => {
+          setForm({ name: member.name, email: member.email });
+          update.reset();
+          setEditing(true);
+        }}
+        aria-label={`Edit ${member.name}`}
+      >
+        <Pencil className="size-3.5" />
+        Edit
+      </Button>
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={() => {
+          remove.reset();
+          setRemoving(true);
+        }}
+        aria-label={`Remove ${member.name}`}
+        className="text-danger-ink"
+      >
+        <UserMinus className="size-3.5" />
+        Remove
+      </Button>
+
+      <Dialog
+        open={editing}
+        onClose={() => setEditing(false)}
+        title="Edit merchant"
+        description="Their name and the email they sign in with. A new email takes effect at their next sign-in; their password stays the same."
+        size="sm"
+        busy={update.pending}
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={update.pending}
+              disabled={!form.name.trim() || !form.email.trim()}
+              onClick={() => update.run({ code, userId: member.id, ...form })}
+            >
+              <Save className="size-3.5" />
+              Save
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {update.error && Object.keys(update.fieldErrors).length === 0 && (
+            <Alert tone="danger" dense>
+              {update.error}
+            </Alert>
+          )}
+          <Field label="Name" htmlFor={nameId} error={update.fieldErrors.name ?? null}>
+            <Input
+              id={nameId}
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+            />
+          </Field>
+          <Field label="Email" htmlFor={emailId} error={update.fieldErrors.email ?? null}>
+            <Input
+              id={emailId}
+              type="email"
+              value={form.email}
+              onChange={(event) => setForm({ ...form, email: event.target.value })}
+            />
+          </Field>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={removing}
+        onClose={() => setRemoving(false)}
+        title={`Remove ${member.name}?`}
+        description="They will no longer see this project in the merchant portal. Their account is kept, and you can invite them again at any time."
+        size="sm"
+        busy={remove.pending}
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setRemoving(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={remove.pending}
+              onClick={() => remove.run({ code, userId: member.id })}
+            >
+              <UserMinus className="size-3.5" />
+              Remove access
+            </Button>
+          </>
+        }
+      >
+        {remove.error ? (
+          <Alert tone="danger" dense>
+            {remove.error}
+          </Alert>
+        ) : (
+          <p className="text-muted text-[13px]">{member.email}</p>
+        )}
+      </Dialog>
+    </li>
   );
 }

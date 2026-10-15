@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import {
   checkTransition,
+  ConflictError,
+  ForbiddenError,
   IllegalTransitionError,
   PreconditionFailedError,
   PROJECT_STAGES,
@@ -650,5 +652,141 @@ export const inviteMerchantAction = defineAction({
     }
 
     return actionOk(undefined, `Invited ${user.name}.`);
+  },
+});
+
+/**
+ * The merchant row a member action is about, checked against this project:
+ * a `ProjectMember` here, and a merchant account. Anything else - another
+ * project's member, an AHN or SHOPLINE user - is refused the same way, so
+ * an id from elsewhere tells the caller nothing.
+ */
+async function merchantMemberOf(projectId: string, userId: string) {
+  const membership = await db.projectMember.findUnique({
+    where: { projectId_userId: { projectId, userId } },
+    select: {
+      user: { select: { id: true, name: true, email: true, role: true, deletedAt: true } },
+    },
+  });
+  if (!membership || membership.user.role !== 'MERCHANT' || membership.user.deletedAt !== null) {
+    throw new ConflictError('That person is not a merchant on this project.');
+  }
+  return membership.user;
+}
+
+/**
+ * Corrects a merchant's name or sign-in email from the project's Settings.
+ *
+ * A merchant account is not owned by one organization - it can be a member
+ * of projects run by different agencies. Changing its email changes where
+ * password resets go, so one organization editing an account that also
+ * reaches another organization's project could take that access over. The
+ * edit is only allowed when every project this account can open belongs to
+ * this project's organization.
+ */
+export const updateMerchantMemberAction = defineAction({
+  name: 'project.update_merchant_member',
+  permission: 'merchant:manage',
+  input: z.object({
+    code: z.string().min(1),
+    userId: z.string().uuid(),
+    name: z.string().trim().min(1, 'Enter a name.').max(200),
+    email: z
+      .string()
+      .trim()
+      .min(1, 'Enter an email address.')
+      .email('Enter a valid email address.'),
+  }),
+  async handler(input, ctx) {
+    const project = await resolveProject(ctx.principal, input.code);
+    const member = await merchantMemberOf(project.id, input.userId);
+    const email = input.email.toLowerCase();
+
+    const elsewhere = await db.projectMember.count({
+      where: { userId: member.id, project: { organizationId: { not: project.organizationId } } },
+    });
+    if (elsewhere > 0) {
+      throw new ForbiddenError(
+        'This merchant account is shared with another organization, so it can only be changed by the people who manage it there.',
+      );
+    }
+
+    if (email !== member.email) {
+      const taken = await db.user.findFirst({
+        where: { email, id: { not: member.id } },
+        select: { id: true },
+      });
+      if (taken) {
+        throw new ValidationError('Another account already uses that email.', {
+          email: ['Another account already uses that email.'],
+        });
+      }
+    }
+
+    await transaction(async (tx) => {
+      await tx.user.update({ where: { id: member.id }, data: { name: input.name, email } });
+      await recordActivity(tx, {
+        projectId: project.id,
+        type: 'ASSIGNMENT_CHANGED',
+        actorId: ctx.principal.id,
+        summary: `Merchant contact ${input.name} updated.`,
+      });
+      await audit(tx, {
+        principal: ctx.principal,
+        projectId: project.id,
+        action: 'project.update_merchant_member',
+        entityType: 'User',
+        entityId: member.id,
+        before: { name: member.name, email: member.email },
+        after: { name: input.name, email },
+        ip: ctx.ip,
+      });
+    });
+
+    revalidateProject(input.code);
+    return actionOk(undefined, `${input.name} updated.`);
+  },
+});
+
+/**
+ * Takes a merchant off this project's portal. Only the membership goes: the
+ * account stays (it may be on other projects, and can be invited back), and
+ * because every portal request re-checks membership, access ends on their
+ * next page load. Left with no project, they see "No migration project yet".
+ */
+export const removeMerchantMemberAction = defineAction({
+  name: 'project.remove_merchant_member',
+  permission: 'merchant:manage',
+  input: z.object({
+    code: z.string().min(1),
+    userId: z.string().uuid(),
+  }),
+  async handler(input, ctx) {
+    const project = await resolveProject(ctx.principal, input.code);
+    const member = await merchantMemberOf(project.id, input.userId);
+
+    await transaction(async (tx) => {
+      await tx.projectMember.delete({
+        where: { projectId_userId: { projectId: project.id, userId: member.id } },
+      });
+      await recordActivity(tx, {
+        projectId: project.id,
+        type: 'ASSIGNMENT_CHANGED',
+        actorId: ctx.principal.id,
+        summary: `${member.name} removed from the merchant portal.`,
+      });
+      await audit(tx, {
+        principal: ctx.principal,
+        projectId: project.id,
+        action: 'project.remove_merchant_member',
+        entityType: 'User',
+        entityId: member.id,
+        before: { email: member.email },
+        ip: ctx.ip,
+      });
+    });
+
+    revalidateProject(input.code);
+    return actionOk(undefined, `${member.name} no longer has access to this project.`);
   },
 });
