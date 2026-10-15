@@ -32,7 +32,13 @@ export function EditRoleButton({
 
   return (
     <>
-      <Button variant="ghost" size="xs" onClick={() => setOpen(true)} title={`Edit ${name}`}>
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={() => setOpen(true)}
+        title={`Edit ${name}`}
+        aria-label={`Edit ${name}`}
+      >
         <Pencil className="size-3.5" />
       </Button>
 
@@ -80,7 +86,11 @@ export function EditRoleButton({
             </Select>
           </Field>
 
-          <Field label="Title" htmlFor="edit-role-title" hint="Optional - shown next to their role.">
+          <Field
+            label="Title"
+            htmlFor="edit-role-title"
+            hint="Optional - shown next to their role."
+          >
             <Input
               id="edit-role-title"
               value={form.title}

@@ -20,7 +20,13 @@ export function RemovePersonButton({ userId, name }: { userId: string; name: str
 
   return (
     <>
-      <Button variant="ghost" size="xs" onClick={() => setOpen(true)} title={`Remove ${name}`}>
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={() => setOpen(true)}
+        title={`Remove ${name}`}
+        aria-label={`Remove ${name}`}
+      >
         <Trash2 className="size-3.5" />
       </Button>
 

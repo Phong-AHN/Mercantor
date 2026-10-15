@@ -21,7 +21,8 @@ import { logger } from '@relay/observability';
 import type { Principal } from '@relay/rbac';
 import type { ActionResult } from '@/server/action';
 import { actionOk, defineAction } from '@/server/action';
-import { audit } from '@/server/record';
+import { audit, recordActivity } from '@/server/record';
+import { assertEmailFree, assertMerchantOnlyIn, merchantInOrganization } from './merchant-account';
 import { INVITABLE_ROLES, PLATFORM_INVITABLE_ROLES } from './roles';
 
 /**
@@ -49,7 +50,10 @@ async function resolveOrganizationForRole(
     });
   }
 
-  const org = await db.organization.findUnique({ where: { id: organizationId }, select: { id: true } });
+  const org = await db.organization.findUnique({
+    where: { id: organizationId },
+    select: { id: true },
+  });
   if (!org) {
     throw new ValidationError('That organization no longer exists.', {
       organizationId: ['That organization no longer exists.'],
@@ -142,12 +146,15 @@ async function createInvitedUser(
  * then `.env`, before mocking (see that function's own comment), so this
  * still delivers for a `PLATFORM_ADMIN` invite with no organization at all.
  */
-async function deliverInviteEmail(user: {
-  id: string;
-  name: string;
-  email: string;
-  organizationId: string | null;
-}, invitedByName: string): Promise<ActionResult<undefined>> {
+async function deliverInviteEmail(
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    organizationId: string | null;
+  },
+  invitedByName: string,
+): Promise<ActionResult<undefined>> {
   const { token } = await createPasswordToken(user.id, 'INVITE');
   const rendered = renderAccountInviteEmail({
     recipientName: user.name,
@@ -482,7 +489,10 @@ export const platformSetUserActiveAction = defineAction({
       throw new ConflictError('That account no longer exists.');
     }
     if (target.isActive === input.isActive) {
-      return actionOk(undefined, `${target.name} is already ${input.isActive ? 'active' : 'deactivated'}.`);
+      return actionOk(
+        undefined,
+        `${target.name} is already ${input.isActive ? 'active' : 'deactivated'}.`,
+      );
     }
 
     await transaction(async (tx) => {
@@ -563,9 +573,110 @@ export const platformResendInviteAction = defineAction({
 
     if (!result.ok) {
       logger.error({ userId: user.id, error: result.error }, 'resend link email failed to send');
-      return actionOk(undefined, `Link created, but the email could not be sent - check /integrations.`);
+      return actionOk(
+        undefined,
+        `Link created, but the email could not be sent - check /integrations.`,
+      );
     }
 
-    return actionOk(undefined, `Sent ${user.name} a new ${everSignedIn ? 'reset' : 'invite'} link.`);
+    return actionOk(
+      undefined,
+      `Sent ${user.name} a new ${everSignedIn ? 'reset' : 'invite'} link.`,
+    );
+  },
+});
+
+/**
+ * The People-page edit for a merchant row: name and sign-in email. The same
+ * rules as editing them from a project's Settings - including refusing an
+ * account that another organization's project also uses (see
+ * `merchant-account.ts`).
+ */
+export const updateOrgMerchantAction = defineAction({
+  name: 'people.update_merchant',
+  permission: 'merchant:manage',
+  input: z.object({
+    userId: z.string().uuid(),
+    name: z.string().trim().min(1, 'Enter a name.').max(200),
+    email: z
+      .string()
+      .trim()
+      .min(1, 'Enter an email address.')
+      .email('Enter a valid email address.'),
+  }),
+  async handler(input, ctx) {
+    const organizationId = ctx.principal.organizationId;
+    if (!organizationId) {
+      throw new ForbiddenError('Platform admins manage organizations, not their merchants.');
+    }
+    const merchant = await merchantInOrganization(organizationId, input.userId);
+    const email = input.email.toLowerCase();
+    await assertMerchantOnlyIn(organizationId, merchant.id);
+    if (email !== merchant.email) await assertEmailFree(email, merchant.id);
+
+    await transaction(async (tx) => {
+      await tx.user.update({ where: { id: merchant.id }, data: { name: input.name, email } });
+      await audit(tx, {
+        principal: ctx.principal,
+        action: 'people.update_merchant',
+        entityType: 'User',
+        entityId: merchant.id,
+        before: { name: merchant.name, email: merchant.email },
+        after: { name: input.name, email },
+        ip: ctx.ip,
+      });
+    });
+
+    revalidatePath('/people');
+    return actionOk(undefined, `${input.name} updated.`);
+  },
+});
+
+/**
+ * The People-page remove for a merchant row: takes them off every project of
+ * this organization. Only those memberships go - the account stays, as do
+ * its memberships on any other organization's projects - and each project
+ * records it in its own history. Left with no project, they see "No
+ * migration project yet" in the portal.
+ */
+export const removeOrgMerchantAction = defineAction({
+  name: 'people.remove_merchant',
+  permission: 'merchant:manage',
+  input: z.object({ userId: z.string().uuid() }),
+  async handler(input, ctx) {
+    const organizationId = ctx.principal.organizationId;
+    if (!organizationId) {
+      throw new ForbiddenError('Platform admins manage organizations, not their merchants.');
+    }
+    const merchant = await merchantInOrganization(organizationId, input.userId);
+
+    await transaction(async (tx) => {
+      await tx.projectMember.deleteMany({
+        where: { userId: merchant.id, projectId: { in: merchant.projectIds } },
+      });
+      for (const projectId of merchant.projectIds) {
+        await recordActivity(tx, {
+          projectId,
+          type: 'ASSIGNMENT_CHANGED',
+          actorId: ctx.principal.id,
+          summary: `${merchant.name} removed from the merchant portal.`,
+        });
+      }
+      await audit(tx, {
+        principal: ctx.principal,
+        action: 'people.remove_merchant',
+        entityType: 'User',
+        entityId: merchant.id,
+        before: { email: merchant.email, projectIds: merchant.projectIds },
+        ip: ctx.ip,
+      });
+    });
+
+    revalidatePath('/people');
+    const count = merchant.projectIds.length;
+    return actionOk(
+      undefined,
+      `${merchant.name} no longer has access to ${count === 1 ? 'your project' : `${count} of your projects`}.`,
+    );
   },
 });

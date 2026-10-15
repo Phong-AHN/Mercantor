@@ -309,6 +309,9 @@ export async function listPeople(principal: Principal) {
           designedProjects: true,
           accountManagedProject: true,
           engineeredProjects: true,
+          // A merchant's projects are memberships, not assignments; only the
+          // ones this reader can see are counted.
+          projectMemberships: { where: { project: scope(principal) } },
         },
       },
     },

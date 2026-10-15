@@ -1,5 +1,12 @@
 import type { Metadata } from 'next';
-import { clock, formatRelative, TEAM_LABEL, USER_ROLE_LABEL, type Descriptor, type Team } from '@relay/core';
+import {
+  clock,
+  formatRelative,
+  TEAM_LABEL,
+  USER_ROLE_LABEL,
+  type Descriptor,
+  type Team,
+} from '@relay/core';
 import { can, permissionsForRole } from '@relay/rbac';
 import {
   Badge,
@@ -19,8 +26,10 @@ import {
 } from '@relay/ui';
 import { listPeople } from '@/features/workspace/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
+import { EditMerchantButton } from './edit-merchant-button';
 import { EditRoleButton } from './edit-role-button';
 import { InvitePersonButton } from './invite-person-button';
+import { RemoveMerchantButton } from './remove-merchant-button';
 import { RemovePersonButton } from './remove-person-button';
 
 export const metadata: Metadata = { title: 'People' };
@@ -52,7 +61,10 @@ export default async function PeoplePage() {
   const now = clock.now();
   const canManage = can(principal, 'user:manage');
   const canRemove = can(principal, 'user:remove');
-  const canAct = canManage || canRemove;
+  // Merchant rows are managed by whoever manages merchants on projects -
+  // a project manager, not only an admin.
+  const canManageMerchants = can(principal, 'merchant:manage') && !!principal.organizationId;
+  const canAct = canManage || canRemove || canManageMerchants;
 
   return (
     <div className="space-y-5">
@@ -89,12 +101,14 @@ export default async function PeoplePage() {
                 </THead>
                 <TBody>
                   {members.map((person) => {
-                    const projects =
-                      person._count.managedProjects +
-                      person._count.developedProjects +
-                      person._count.designedProjects +
-                      person._count.accountManagedProject +
-                      person._count.engineeredProjects;
+                    const isMerchant = person.team === 'MERCHANT';
+                    const projects = isMerchant
+                      ? person._count.projectMemberships
+                      : person._count.managedProjects +
+                        person._count.developedProjects +
+                        person._count.designedProjects +
+                        person._count.accountManagedProject +
+                        person._count.engineeredProjects;
                     const permissions = permissionsForRole(person.role);
                     const highlights = permissions
                       .filter((permission) =>
@@ -157,7 +171,21 @@ export default async function PeoplePage() {
                         </TD>
                         {canAct && (
                           <TD>
-                            {person.team !== 'MERCHANT' && person.id !== principal.id && (
+                            {isMerchant && canManageMerchants && (
+                              <div className="flex items-center gap-1">
+                                <EditMerchantButton
+                                  userId={person.id}
+                                  name={person.name}
+                                  email={person.email}
+                                />
+                                <RemoveMerchantButton
+                                  userId={person.id}
+                                  name={person.name}
+                                  projects={projects}
+                                />
+                              </div>
+                            )}
+                            {!isMerchant && person.id !== principal.id && (
                               <div className="flex items-center gap-1">
                                 {canManage && (
                                   <EditRoleButton

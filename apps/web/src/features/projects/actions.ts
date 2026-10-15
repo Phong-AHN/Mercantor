@@ -5,7 +5,6 @@ import { z } from 'zod';
 import {
   checkTransition,
   ConflictError,
-  ForbiddenError,
   IllegalTransitionError,
   PreconditionFailedError,
   PROJECT_STAGES,
@@ -35,6 +34,7 @@ import {
   resolveProject,
   revalidateProject,
 } from './mutations';
+import { assertEmailFree, assertMerchantOnlyIn } from '@/features/people/merchant-account';
 import { updateMerchantInput } from './merchant-schema';
 
 /**
@@ -702,26 +702,8 @@ export const updateMerchantMemberAction = defineAction({
     const member = await merchantMemberOf(project.id, input.userId);
     const email = input.email.toLowerCase();
 
-    const elsewhere = await db.projectMember.count({
-      where: { userId: member.id, project: { organizationId: { not: project.organizationId } } },
-    });
-    if (elsewhere > 0) {
-      throw new ForbiddenError(
-        'This merchant account is shared with another organization, so it can only be changed by the people who manage it there.',
-      );
-    }
-
-    if (email !== member.email) {
-      const taken = await db.user.findFirst({
-        where: { email, id: { not: member.id } },
-        select: { id: true },
-      });
-      if (taken) {
-        throw new ValidationError('Another account already uses that email.', {
-          email: ['Another account already uses that email.'],
-        });
-      }
-    }
+    await assertMerchantOnlyIn(project.organizationId, member.id);
+    if (email !== member.email) await assertEmailFree(email, member.id);
 
     await transaction(async (tx) => {
       await tx.user.update({ where: { id: member.id }, data: { name: input.name, email } });
