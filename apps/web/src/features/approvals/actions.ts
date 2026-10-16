@@ -11,8 +11,8 @@ import {
   PreconditionFailedError,
   ValidationError,
 } from '@relay/core';
-import { transaction } from '@relay/db';
-import { canDecideApproval } from '@relay/rbac';
+import { db, transaction } from '@relay/db';
+import { canDecideApproval, isConfinedToOwnProjects } from '@relay/rbac';
 import { actionOk, defineAction } from '@/server/action';
 import { audit, notify, recordActivity } from '@/server/record';
 import {
@@ -145,6 +145,23 @@ export const decideApprovalAction = defineAction({
 
     const project = await resolveProject(ctx.principal, input.code);
     const now = clock.now();
+
+    // In the portal, the go-live sign-off is the merchant's answer to a
+    // request, never a decision they can take on their own: approving before
+    // AHN has asked would sign off a store nobody has finished testing. (A
+    // project manager can still record a decision the merchant gave by email
+    // or on a call, which is why this is the merchant's rule only.)
+    if (input.type === 'MERCHANT_FINAL' && isConfinedToOwnProjects(ctx.principal)) {
+      const current = await db.approval.findUnique({
+        where: { projectId_type: { projectId: project.id, type: input.type } },
+        select: { status: true },
+      });
+      if (current?.status !== 'PENDING') {
+        throw new ConflictError(
+          'Your sign-off has not been requested yet. Your team will ask once the store is ready.',
+        );
+      }
+    }
 
     const outboxIds = await transaction(async (tx) => {
       await tx.approval.upsert({

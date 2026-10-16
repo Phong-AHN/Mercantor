@@ -31,11 +31,14 @@ export function AccessStatusPicker({
   itemId,
   status,
   options,
+  labels,
 }: {
   code: string;
   itemId: string;
   status: AccessStatus;
   options: AccessStatus[];
+  /** Words for the merchant portal, in place of the team's status names. */
+  labels?: Partial<Record<AccessStatus, string>>;
 }) {
   const action = useAction(setAccessStatusAction, { toastOnSuccess: true });
 
@@ -56,7 +59,7 @@ export function AccessStatusPicker({
                 : 'text-muted hover:bg-surface-2 hover:text-ink',
             )}
           >
-            {ACCESS_STATUS_LABEL[option].label}
+            {labels?.[option] ?? ACCESS_STATUS_LABEL[option].label}
           </button>
         );
       })}
@@ -70,11 +73,14 @@ export function AssetStatusPicker({
   itemId,
   status,
   options,
+  labels,
 }: {
   code: string;
   itemId: string;
   status: AssetStatus;
   options: AssetStatus[];
+  /** Words for the merchant portal, in place of the team's status names. */
+  labels?: Partial<Record<AssetStatus, string>>;
 }) {
   const action = useAction(setAssetStatusAction, { toastOnSuccess: true });
 
@@ -95,7 +101,7 @@ export function AssetStatusPicker({
                 : 'text-muted hover:bg-surface-2 hover:text-ink',
             )}
           >
-            {ASSET_STATUS_LABEL[option].label}
+            {labels?.[option] ?? ASSET_STATUS_LABEL[option].label}
           </button>
         );
       })}

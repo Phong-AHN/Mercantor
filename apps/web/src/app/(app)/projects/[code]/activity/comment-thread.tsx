@@ -89,6 +89,7 @@ export function CommentThread({
   canReply,
   canManage,
   canUploadFiles,
+  simpleComposer = false,
 }: {
   code: string;
   comments: ThreadComment[];
@@ -98,6 +99,8 @@ export function CommentThread({
   canReply: boolean;
   canManage: boolean;
   canUploadFiles: boolean;
+  /** Merchant portal: plain reply box, and attachments only through it. */
+  simpleComposer?: boolean;
 }) {
   if (comments.length === 0) {
     return (
@@ -125,6 +128,7 @@ export function CommentThread({
             canReply={canReply}
             canManage={canManage}
             canUploadFiles={canUploadFiles}
+            simpleComposer={simpleComposer}
           />
         </li>
       ))}
@@ -149,6 +153,7 @@ function CommentRow({
   canReply,
   canManage,
   canUploadFiles,
+  simpleComposer,
 }: {
   code: string;
   comment: ThreadComment;
@@ -159,6 +164,7 @@ function CommentRow({
   canReply: boolean;
   canManage: boolean;
   canUploadFiles: boolean;
+  simpleComposer?: boolean;
 }) {
   const replies = repliesByParent.get(comment.id) ?? [];
   const [replying, setReplying] = useState(false);
@@ -266,7 +272,10 @@ function CommentRow({
               Reply
             </button>
           )}
-          {canUploadFiles && <FileUploadButton code={code} commentId={comment.id} />}
+          {/* In the simple (portal) view, files go in through the reply box. */}
+          {canUploadFiles && !simpleComposer && (
+            <FileUploadButton code={code} commentId={comment.id} />
+          )}
           {canManage && (
             <EditCommentButton code={code} commentId={comment.id} body={comment.body} />
           )}
@@ -285,6 +294,7 @@ function CommentRow({
               compact
               autoFocus
               canAttachImages={canUploadFiles}
+              simple={simpleComposer}
               onPosted={() => setReplying(false)}
             />
           </div>
@@ -304,6 +314,7 @@ function CommentRow({
                   canReply={canReply}
                   canManage={canManage}
                   canUploadFiles={canUploadFiles}
+                  simpleComposer={simpleComposer}
                 />
               </li>
             ))}

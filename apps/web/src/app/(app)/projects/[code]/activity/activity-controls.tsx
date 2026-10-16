@@ -69,6 +69,7 @@ export function CommentComposer({
   compact = false,
   autoFocus = false,
   canAttachImages = false,
+  simple = false,
   onPosted,
 }: {
   code: string;
@@ -78,6 +79,13 @@ export function CommentComposer({
   compact?: boolean;
   autoFocus?: boolean;
   canAttachImages?: boolean;
+  /**
+   * A plain chat box for the merchant portal: message, attachments, Send.
+   * The team's options (update type, visibility, needs-an-answer, Slack,
+   * mentions) are not theirs to set - the defaults are what the server would
+   * pick for them anyway.
+   */
+  simple?: boolean;
   onPosted?: () => void;
 }) {
   const [body, setBody] = useState('');
@@ -235,9 +243,15 @@ export function CommentComposer({
         }}
         rows={compact ? 2 : 3}
         placeholder={
-          compact ? 'Write a reply.' : 'Post an update, ask a question, or record feedback.'
+          simple
+            ? compact
+              ? 'Write a reply.'
+              : 'Write a message to your team.'
+            : compact
+              ? 'Write a reply.'
+              : 'Post an update, ask a question, or record feedback.'
         }
-        aria-label={compact ? 'Write a reply' : 'Write an update'}
+        aria-label={compact ? 'Write a reply' : simple ? 'Write a message' : 'Write an update'}
         autoFocus={autoFocus}
         className={cn(internal && 'border-danger/40 bg-danger-soft/30')}
       />
@@ -264,7 +278,7 @@ export function CommentComposer({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        {!compact && (
+        {!compact && !simple && (
           <Select
             aria-label="Update type"
             value={category}
@@ -279,20 +293,22 @@ export function CommentComposer({
           </Select>
         )}
 
-        <Select
-          aria-label="Visibility"
-          value={visibility}
-          onChange={(event) => setVisibility(event.target.value as CommentVisibility)}
-          className="w-auto min-w-[10rem]"
-        >
-          {visibilities.map((value) => (
-            <option key={value} value={value}>
-              {COMMENT_VISIBILITY_LABEL[value].label}
-            </option>
-          ))}
-        </Select>
+        {!simple && (
+          <Select
+            aria-label="Visibility"
+            value={visibility}
+            onChange={(event) => setVisibility(event.target.value as CommentVisibility)}
+            className="w-auto min-w-[10rem]"
+          >
+            {visibilities.map((value) => (
+              <option key={value} value={value}>
+                {COMMENT_VISIBILITY_LABEL[value].label}
+              </option>
+            ))}
+          </Select>
+        )}
 
-        {people.length > 0 && (
+        {people.length > 0 && !simple && (
           <Button variant="subtle" size="sm" onClick={() => setShowMentions(true)}>
             <AtSign className="size-3.5" />
             Mention
@@ -326,7 +342,7 @@ export function CommentComposer({
         )}
 
         <div className="ml-auto flex items-center gap-3">
-          {!compact && (
+          {!compact && !simple && (
             <Checkbox
               id="needsAnswer"
               label="Needs an answer"
@@ -334,7 +350,7 @@ export function CommentComposer({
               onChange={(event) => setNeedsAnswer(event.target.checked)}
             />
           )}
-          {!compact && !internal && (
+          {!compact && !simple && !internal && (
             <Checkbox
               id="alsoSlack"
               label="Post to Slack"
@@ -350,7 +366,7 @@ export function CommentComposer({
             onClick={() => void post()}
           >
             <Send className="size-3.5" />
-            {compact ? 'Reply' : 'Post'}
+            {compact ? 'Reply' : simple ? 'Send message' : 'Post'}
           </Button>
         </div>
       </div>

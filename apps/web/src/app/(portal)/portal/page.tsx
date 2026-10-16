@@ -32,6 +32,15 @@ import {
   TimelineItem,
 } from '@relay/ui';
 import { ShowcaseCard } from '@/components/qa/showcase-card';
+import {
+  accessWaitingOnMerchant,
+  assetWaitingOnMerchant,
+  plainAccessItem,
+  isMerchantFacingActivity,
+  plainAssetItem,
+  REPLY_COMMITMENT,
+  shownOnPortalAssets,
+} from '@/features/portal/merchant-copy';
 import { findPortalProject } from '@/features/portal/queries';
 import { captureSrc, listShowcase } from '@/features/qa/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
@@ -72,10 +81,14 @@ export default async function PortalOverviewPage() {
       ? { src: captureSrc(sharedAfter.id) }
       : null;
 
-  const accessOutstanding = project.accessItems.filter((item) => item.status !== 'VERIFIED');
-  const assetsOutstanding = project.assetItems.filter(
-    (item) => item.required && item.status !== 'APPROVED',
-  );
+  // The same rules the Access and Assets pages count by, so the numbers here
+  // always match what the merchant finds when they click through.
+  const accessOutstanding = project.accessItems
+    .filter(accessWaitingOnMerchant)
+    .sort((a, b) => Number(b.blocking) - Number(a.blocking));
+  const portalAssets = project.assetItems.filter(shownOnPortalAssets);
+  const assetsOutstanding = portalAssets.filter(assetWaitingOnMerchant);
+  const updates = project.activities.filter(isMerchantFacingActivity);
   const merchantBlockers = project.blockers.filter(
     (blocker) => blocker.resolvedAt === null && blocker.ownerTeam === 'MERCHANT',
   );
@@ -83,7 +96,26 @@ export default async function PortalOverviewPage() {
     (approval) => approval.type === 'MERCHANT_FINAL' && approval.status === 'PENDING',
   );
 
+  const names = (titles: string[]) =>
+    titles.length <= 3
+      ? titles.join(', ')
+      : `${titles.slice(0, 3).join(', ')} and ${titles.length - 3} more`;
+
+  // Most urgent first: the go-live sign-off, then whatever is blocking the
+  // team, then access (what is needed to start first), then files.
   const todo: TodoItem[] = [
+    ...(pendingApprovals.length > 0
+      ? [
+          {
+            key: 'approval',
+            icon: <Stamp className="size-4" />,
+            title: 'Your final approval',
+            detail: 'Check your new store and sign it off so it can go live.',
+            href: '/portal/approvals',
+            cta: 'Review and approve',
+          },
+        ]
+      : []),
     ...merchantBlockers.map((blocker) => ({
       key: blocker.id,
       icon: <CircleAlert className="size-4" />,
@@ -92,28 +124,16 @@ export default async function PortalOverviewPage() {
       href: '/portal/activity',
       cta: 'Reply to the team',
     })),
-    ...(pendingApprovals.length > 0
-      ? [
-          {
-            key: 'approval',
-            icon: <Stamp className="size-4" />,
-            title: 'Your final approval',
-            detail: 'Review your new store and sign it off so it can go live.',
-            href: '/portal/approvals',
-            cta: 'Review and approve',
-          },
-        ]
-      : []),
     ...(accessOutstanding.length > 0
       ? [
           {
             key: 'access',
             icon: <KeyRound className="size-4" />,
-            title: `${accessOutstanding.length} access item${accessOutstanding.length === 1 ? '' : 's'} still needed`,
-            detail: accessOutstanding
-              .slice(0, 3)
-              .map((item) => item.label)
-              .join(', '),
+            title:
+              accessOutstanding.length === 1
+                ? plainAccessItem(accessOutstanding[0]!).title
+                : `${accessOutstanding.length} logins we still need`,
+            detail: names(accessOutstanding.map((item) => plainAccessItem(item).title)),
             href: '/portal/access',
             cta: 'Give access',
           },
@@ -124,17 +144,18 @@ export default async function PortalOverviewPage() {
           {
             key: 'assets',
             icon: <FolderOpen className="size-4" />,
-            title: `${assetsOutstanding.length} file${assetsOutstanding.length === 1 ? '' : 's'} still needed`,
-            detail: assetsOutstanding
-              .slice(0, 3)
-              .map((item) => item.label)
-              .join(', '),
+            title:
+              assetsOutstanding.length === 1
+                ? plainAssetItem(assetsOutstanding[0]!).title
+                : `${assetsOutstanding.length} files we still need`,
+            detail: names(assetsOutstanding.map((item) => plainAssetItem(item).title)),
             href: '/portal/assets',
-            cta: 'Upload files',
+            cta: 'Send files',
           },
         ]
       : []),
   ];
+  const [nextTodo, ...laterTodos] = todo;
 
   const nextStepWithYou = project.nextActionOwnerTeam.includes('MERCHANT');
   const nextStepOwner = nextStepWithYou
@@ -143,12 +164,14 @@ export default async function PortalOverviewPage() {
       ? project.nextActionOwnerTeam.map((team) => TEAM_LABEL[team].label).join(' & ')
       : null;
 
+  // The two people a merchant actually talks to. Developers and designers
+  // work through the project manager, so listing them (often "Not assigned
+  // yet") only raises the question of who to contact.
   const team = [
-    { label: 'Project manager', person: project.people.ahnPm },
-    { label: 'Developer', person: project.people.ahnDev },
-    { label: 'Designer', person: project.people.ahnDesigner },
-    { label: 'SHOPLINE account manager', person: project.people.shoplineAm },
+    { label: 'Your project manager, AHN Media', person: project.people.ahnPm },
+    { label: 'Your account manager, SHOPLINE', person: project.people.shoplineAm },
   ];
+  const contacts = team.flatMap(({ label, person }) => (person ? [{ label, person }] : []));
 
   return (
     <div className="space-y-6">
@@ -161,14 +184,14 @@ export default async function PortalOverviewPage() {
         targetLaunchDate={project.targetLaunchDate}
         actualLaunchDate={project.actualLaunchDate}
         daysToTarget={project.snapshot.time.daysToTarget}
-        people={team.flatMap(({ person }) => (person ? [person] : []))}
+        people={contacts.map(({ person }) => person)}
         image={heroImage}
       />
 
       <section aria-labelledby="todo-heading" className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="todo-heading" className="text-ink text-[16px] font-semibold tracking-tight">
-            {todo.length > 0 ? 'What we need from you' : 'Nothing is waiting on you'}
+            {nextTodo ? 'Your next step' : 'Nothing is waiting on you'}
           </h2>
           {project.nextAction && (
             <p className="text-muted flex items-center gap-1.5 text-[12.5px]">
@@ -178,14 +201,36 @@ export default async function PortalOverviewPage() {
             </p>
           )}
         </div>
-        {todo.length > 0 ? (
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {todo.map((item) => (
-              <li key={item.key}>
-                <TodoCard item={item} />
-              </li>
-            ))}
-          </ul>
+        {nextTodo ? (
+          <div className="space-y-3">
+            <TodoCard item={nextTodo} />
+            {laterTodos.length > 0 && (
+              <div className="border-line bg-surface-1 rounded-[var(--radius-lg)] border">
+                <p className="text-muted border-line border-b px-4 py-2.5 text-[12.5px] font-medium">
+                  Also on your list
+                </p>
+                <ul className="divide-line divide-y">
+                  {laterTodos.map((item) => (
+                    <li key={item.key}>
+                      <Link
+                        href={item.href}
+                        className="hover:bg-surface-2 flex items-center gap-3 px-4 py-2.5 transition-colors"
+                      >
+                        <span className="text-muted shrink-0">{item.icon}</span>
+                        <span className="text-ink min-w-0 flex-1 truncate text-[13px]">
+                          {item.title}
+                        </span>
+                        <span className="text-accent-ink inline-flex shrink-0 items-center gap-1 text-[12.5px] font-medium">
+                          {item.cta}
+                          <ArrowRight className="size-3.5" />
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="border-success/30 bg-success-soft/50 flex items-start gap-3 rounded-[var(--radius-lg)] border p-4">
             <span className="bg-success-soft text-success-ink grid size-9 shrink-0 place-items-center rounded-full">
@@ -257,8 +302,8 @@ export default async function PortalOverviewPage() {
           href="/portal/assets"
           icon={<FolderOpen className="size-4" />}
           label="Files and assets"
-          done={project.assetItems.filter((item) => item.status === 'APPROVED').length}
-          total={project.assetItems.length}
+          done={portalAssets.filter((item) => item.status === 'APPROVED').length}
+          total={portalAssets.length}
           outstanding={assetsOutstanding.length}
         />
         <div className="border-line bg-surface-1 shadow-card rounded-[var(--radius-lg)] border p-4">
@@ -293,11 +338,11 @@ export default async function PortalOverviewPage() {
             }
           />
           <CardBody>
-            {project.activities.length === 0 ? (
+            {updates.length === 0 ? (
               <Empty title="Nothing to report yet" className="py-8" />
             ) : (
               <Timeline>
-                {project.activities.slice(0, 6).map((event, index, list) => (
+                {updates.slice(0, 6).map((event, index, list) => (
                   <TimelineItem
                     key={event.id}
                     tone={ACTIVITY_TYPE_LABEL[event.type].tone}
@@ -317,26 +362,18 @@ export default async function PortalOverviewPage() {
           <Card>
             <CardHeader
               title="Your team"
-              description="Ask any of them - in the conversation, or however you usually reach them."
+              description={
+                REPLY_COMMITMENT ??
+                'Message them in Conversation - the whole team sees it, so nothing gets lost.'
+              }
             />
             <CardBody>
               <ul className="space-y-3">
-                {team.map(({ label, person }) => (
+                {contacts.map(({ label, person }) => (
                   <li key={label} className="flex items-center gap-3">
-                    {person ? (
-                      <Avatar name={person.name} team={person.team} size="md" />
-                    ) : (
-                      <span className="border-line bg-surface-2 size-8 shrink-0 rounded-full border border-dashed" />
-                    )}
+                    <Avatar name={person.name} team={person.team} size="md" />
                     <div className="min-w-0">
-                      <p
-                        className={cn(
-                          'truncate text-[13px] font-medium',
-                          person ? 'text-ink' : 'text-faint',
-                        )}
-                      >
-                        {person?.name ?? 'Not assigned yet'}
-                      </p>
+                      <p className="text-ink truncate text-[13px] font-medium">{person.name}</p>
                       <p className="text-muted text-[11.5px]">{label}</p>
                     </div>
                   </li>

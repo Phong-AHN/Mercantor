@@ -21,7 +21,7 @@ import { can } from '@relay/rbac';
 import { actionOk, defineAction } from '@/server/action';
 import { httpUrl } from '@/server/url-schema';
 import { assertAttachmentTargets } from '@/features/attachments/targets';
-import { audit, recordActivity } from '@/server/record';
+import { audit, notify, recordActivity } from '@/server/record';
 import {
   fanOut,
   nudgeWorker,
@@ -545,5 +545,81 @@ export const approveChangeRequestAction = defineAction({
     await nudgeWorker(outboxIds);
     revalidateProject(input.code);
     return actionOk(undefined, 'Change request approved. Invoice line created.');
+  },
+});
+
+/**
+ * The merchant's sign-off on the redirect list - the one asset AHN prepares
+ * and the merchant approves, rather than the other way round. Only that
+ * item, and only once AHN has shared something to approve (a file or link
+ * on it, or the item marked received). The project manager is notified so
+ * the blocker waiting on it can be cleared.
+ */
+export const approveRedirectMapAction = defineAction({
+  name: 'asset.approve_redirect_map',
+  permission: 'asset:upload',
+  input: z.object({
+    code: z.string().min(1),
+    itemId: z.string().uuid(),
+  }),
+  async handler(input, ctx) {
+    const project = await resolveProject(ctx.principal, input.code);
+    const now = clock.now();
+
+    await transaction(async (tx) => {
+      const item = await tx.assetItem.findFirst({
+        where: { id: input.itemId, projectId: project.id, kind: 'REDIRECT_MAP' },
+        select: {
+          id: true,
+          label: true,
+          status: true,
+          _count: { select: { attachments: true } },
+          project: { select: { ahnProjectManagerId: true } },
+        },
+      });
+      if (!item) throw new ConflictError('That redirect list is not on this project.');
+      if (item.status === 'APPROVED') throw new ConflictError('You have already approved it.');
+      if (item.status !== 'RECEIVED' && item._count.attachments === 0) {
+        throw new ConflictError('Your team has not shared the list with you yet.');
+      }
+
+      await tx.assetItem.update({
+        where: { id: item.id },
+        data: { status: 'APPROVED', approvedAt: now, receivedAt: now },
+      });
+      await recordActivity(tx, {
+        projectId: project.id,
+        type: 'ASSET_STATUS_CHANGED',
+        actorId: ctx.principal.id,
+        summary: `${ctx.principal.name} approved the redirect list.`,
+        visibility: 'EVERYONE',
+        payload: { itemId: item.id, from: item.status, to: 'APPROVED' },
+      });
+      if (item.project.ahnProjectManagerId) {
+        await notify(tx, {
+          userIds: [item.project.ahnProjectManagerId],
+          projectId: project.id,
+          type: 'MERCHANT_FEEDBACK',
+          title: `${project.merchantName} approved the redirect list`,
+          body: 'Any blocker waiting on it can be resolved.',
+          href: `/projects/${project.code}/assets`,
+          exceptUserId: ctx.principal.id,
+        });
+      }
+      await audit(tx, {
+        principal: ctx.principal,
+        projectId: project.id,
+        action: 'asset.approve_redirect_map',
+        entityType: 'AssetItem',
+        entityId: item.id,
+        before: { status: item.status },
+        after: { status: 'APPROVED' },
+        ip: ctx.ip,
+      });
+      await recomputeHealth(tx, project.id);
+    });
+
+    revalidateProject(input.code);
+    return actionOk(undefined, 'Thank you - the redirect list is approved.');
   },
 });

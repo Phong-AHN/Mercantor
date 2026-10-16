@@ -1,8 +1,7 @@
 import { CalendarClock, ExternalLink, PartyPopper } from 'lucide-react';
-import { formatDate, STAGES, type ProjectStage, type Team } from '@relay/core';
-import { AvatarStack, cn, StageProgress } from '@relay/ui';
-import { StagePill } from '@/components/domain';
-import { progressSteps } from '@/app/(app)/projects/[code]/project-hero';
+import { formatDate, type ProjectStage, type Team } from '@relay/core';
+import { AvatarStack, Badge, cn, StageProgress } from '@relay/ui';
+import { merchantMilestones } from '@/features/portal/merchant-copy';
 
 export interface PortalHeroProps {
   name: string;
@@ -28,11 +27,14 @@ export interface PortalHeroProps {
  */
 export function PortalHero(props: PortalHeroProps) {
   const onImage = props.image !== null;
-  const steps = progressSteps(props.stage, props.visitedStages);
-  const currentIndex = steps.findIndex((step) => step.state === 'current');
+  // Five milestones in the merchant's words, not the team's 17 stages.
+  const milestones = merchantMilestones(props.stage, props.visitedStages);
   const soft = onImage ? 'text-white/80' : 'text-muted';
   const strong = onImage ? 'text-white' : 'text-ink';
 
+  // daysToTarget is fractional (it is measured to the millisecond); a person
+  // counts whole days, and a target later today is still "today".
+  const days = props.daysToTarget === null ? null : Math.ceil(props.daysToTarget);
   const launch = props.actualLaunchDate
     ? { label: 'Live since', value: formatDate(props.actualLaunchDate), note: null }
     : props.targetLaunchDate
@@ -40,9 +42,9 @@ export function PortalHero(props: PortalHeroProps) {
           label: 'Target launch',
           value: formatDate(props.targetLaunchDate),
           note:
-            props.daysToTarget !== null && props.daysToTarget > 0
-              ? `in ${props.daysToTarget} day${props.daysToTarget === 1 ? '' : 's'}`
-              : props.daysToTarget === 0
+            days !== null && days > 0
+              ? `${days} day${days === 1 ? '' : 's'} left`
+              : days === 0
                 ? 'today'
                 : null,
         }
@@ -86,7 +88,23 @@ export function PortalHero(props: PortalHeroProps) {
               {props.name}
             </h1>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <StagePill stage={props.stage} showPhase />
+              {/* The milestone, not the team's internal stage name. */}
+              <Badge
+                tone={
+                  props.stage === 'ON_HOLD_BLOCKED'
+                    ? 'warning'
+                    : props.stage === 'COMPLETED'
+                      ? 'success'
+                      : 'accent'
+                }
+                dot
+              >
+                {props.stage === 'ON_HOLD_BLOCKED'
+                  ? 'Paused'
+                  : props.stage === 'COMPLETED'
+                    ? 'All done'
+                    : milestones.current.label}
+              </Badge>
               {props.currentPlatform && (
                 <span className={cn('text-[13px] font-medium', soft)}>
                   {props.currentPlatform} <span aria-hidden>→</span>
@@ -135,14 +153,23 @@ export function PortalHero(props: PortalHeroProps) {
           <div className="min-w-0">
             <p className={cn('mb-2 text-[13px]', soft)}>
               <span className={cn('font-semibold', strong)}>
-                {currentIndex >= 0
-                  ? `Step ${currentIndex + 1} of ${steps.length}`
-                  : STAGES[props.stage].label}
+                {props.stage === 'COMPLETED'
+                  ? 'All done'
+                  : `Step ${milestones.index + 1} of ${milestones.steps.length}`}
               </span>
-              {currentIndex >= 0 && <> · {STAGES[props.stage].label}</>}
-              <span className="max-sm:hidden"> - {STAGES[props.stage].description}</span>
+              {props.stage !== 'COMPLETED' && <> · {milestones.current.label}</>}
+              <span className="max-sm:hidden">
+                {props.stage === 'ON_HOLD_BLOCKED'
+                  ? ' - paused for now; your team will explain in Conversation.'
+                  : ` - ${milestones.current.description}`}
+              </span>
             </p>
-            <StageProgress steps={steps} onImage={onImage} className="max-w-2xl" />
+            <StageProgress
+              steps={milestones.steps}
+              onImage={onImage}
+              labelEach
+              className="max-w-2xl"
+            />
           </div>
           {props.people.length > 0 && (
             <div>

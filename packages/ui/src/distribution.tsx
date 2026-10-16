@@ -251,10 +251,13 @@ export interface StageProgressStep {
 export function StageProgress({
   steps,
   onImage = false,
+  labelEach = false,
   className,
 }: {
   steps: readonly StageProgressStep[];
   onImage?: boolean;
+  /** Name every step under its segment - for a short track (a handful of milestones). */
+  labelEach?: boolean;
   className?: string;
 }) {
   const current = steps.findIndex((step) => step.state === 'current');
@@ -285,17 +288,45 @@ export function StageProgress({
           />
         ))}
       </div>
-      {steps.length > 1 && (
-        <p
-          className={cn(
-            'mt-1.5 flex justify-between gap-3 text-[11px] font-medium',
-            onImage ? 'text-white/80' : 'text-muted',
-          )}
+      {labelEach ? (
+        <ol
+          className="mt-1.5 grid gap-0.5 text-[11px] font-medium leading-4"
+          style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
           aria-hidden
         >
-          <span className="truncate">{steps[0]!.label}</span>
-          <span className="truncate">{steps[steps.length - 1]!.label}</span>
-        </p>
+          {steps.map((step) => (
+            <li
+              key={step.key}
+              className={cn(
+                'truncate',
+                step.state === 'current'
+                  ? onImage
+                    ? 'text-white'
+                    : 'text-ink'
+                  : onImage
+                    ? 'text-white/70'
+                    : 'text-muted',
+                // On a phone only the current milestone keeps its name.
+                step.state !== 'current' && 'max-sm:invisible',
+              )}
+            >
+              {step.label}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        steps.length > 1 && (
+          <p
+            className={cn(
+              'mt-1.5 flex justify-between gap-3 text-[11px] font-medium',
+              onImage ? 'text-white/80' : 'text-muted',
+            )}
+            aria-hidden
+          >
+            <span className="truncate">{steps[0]!.label}</span>
+            <span className="truncate">{steps[steps.length - 1]!.label}</span>
+          </p>
+        )
       )}
     </div>
   );

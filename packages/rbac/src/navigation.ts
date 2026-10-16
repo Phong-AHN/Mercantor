@@ -217,7 +217,7 @@ const MERCHANT_GROUPS: readonly NavGroup[] = [
       },
       {
         href: '/portal/activity',
-        label: 'Activity',
+        label: 'Conversation',
         icon: 'MessagesSquare',
         permissions: ['activity:read'],
         description: 'Updates and conversation.',

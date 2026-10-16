@@ -98,6 +98,8 @@ export interface PersonRef {
   name: string;
   team: Team;
   role: string;
+  /** Present where the query selected it (the assigned team on a project). */
+  email?: string;
 }
 
 export interface ProjectListItem {
@@ -159,7 +161,7 @@ const TEAM_BY_ROLE: Record<string, Team> = {
 };
 
 function toPerson(
-  user: { id: string; name: string; role: string } | null | undefined,
+  user: { id: string; name: string; role: string; email?: string } | null | undefined,
 ): PersonRef | null {
   if (!user) return null;
   return {
@@ -167,6 +169,7 @@ function toPerson(
     name: user.name,
     team: TEAM_BY_ROLE[user.role] ?? 'OTHER',
     role: user.role,
+    email: user.email,
   };
 }
 
