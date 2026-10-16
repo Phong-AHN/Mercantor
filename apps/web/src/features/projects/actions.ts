@@ -567,18 +567,34 @@ export const inviteMerchantAction = defineAction({
       select: { id: true, role: true, deletedAt: true },
     });
     if (existing && existing.deletedAt === null && existing.role !== 'MERCHANT') {
-      throw new ValidationError('That email already has a non-merchant account.', {
-        email: ['That email already has a non-merchant account.'],
-      });
+      const message =
+        'That email belongs to a staff account. Use a different email for the merchant.';
+      throw new ValidationError(message, { email: [message] });
     }
+    // A live merchant account keeps its password and just gains this project.
+    // Anything else - no account, or a removed one (staff or merchant) - is
+    // set up as a brand-new merchant: a removed staff account must never come
+    // back with its old role and password by being invited as a merchant.
+    const activeMerchant = existing !== null && existing.deletedAt === null;
 
-    const placeholderHash = existing ? undefined : await hashPassword(randomToken(32));
+    const placeholderHash = activeMerchant ? undefined : await hashPassword(randomToken(32));
 
     const user = await transaction(async (tx) => {
       const row = existing
         ? await tx.user.update({
             where: { id: existing.id },
-            data: { deletedAt: null, isActive: true, name: input.name },
+            data: activeMerchant
+              ? { isActive: true, name: input.name }
+              : {
+                  deletedAt: null,
+                  isActive: true,
+                  name: input.name,
+                  role: 'MERCHANT',
+                  team: 'MERCHANT',
+                  title: null,
+                  organizationId: null,
+                  passwordHash: placeholderHash!,
+                },
           })
         : await tx.user.create({
             data: {
@@ -619,7 +635,7 @@ export const inviteMerchantAction = defineAction({
 
     // An existing merchant account already has a working password - grant
     // access to this project and stop, rather than force a reset on them.
-    if (existing) {
+    if (activeMerchant) {
       revalidateProject(input.code);
       return actionOk(undefined, `${user.name} now has access to this project.`);
     }

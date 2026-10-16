@@ -90,12 +90,29 @@ async function createInvitedUser(
 
   const existing = await tx.user.findFirst({
     where: { email },
-    select: { id: true, deletedAt: true },
+    select: {
+      id: true,
+      role: true,
+      deletedAt: true,
+      _count: { select: { projectMemberships: true } },
+    },
   });
-  if (existing && existing.deletedAt === null) {
-    throw new ValidationError('That email already has an account.', {
-      email: ['That email already has an account.'],
-    });
+  // A merchant whose projects have all removed them is an account nobody
+  // relies on any more - typically someone now joining as staff - so it is
+  // taken over like a removed account: new role, new password via the
+  // invite link, old sessions signed out (below). A merchant still on a
+  // project is someone's live portal login and is never converted.
+  const formerMerchant =
+    existing !== null &&
+    existing.deletedAt === null &&
+    existing.role === 'MERCHANT' &&
+    existing._count.projectMemberships === 0;
+  if (existing && existing.deletedAt === null && !formerMerchant) {
+    const message =
+      existing.role === 'MERCHANT'
+        ? "That email is a merchant on a project. To give them another project, invite them from that project's Settings, under Merchant portal access."
+        : 'That email already has an account.';
+    throw new ValidationError(message, { email: [message] });
   }
 
   const placeholderHash = await hashPassword(randomToken(32));
@@ -126,6 +143,15 @@ async function createInvitedUser(
           organizationId: input.organizationId,
         },
       });
+
+  if (formerMerchant) {
+    // Their old merchant password no longer works; sign out anything open
+    // so the new role starts from the invite link, not an old session.
+    await tx.session.updateMany({
+      where: { userId: row.id, revokedAt: null },
+      data: { revokedAt: clock.now() },
+    });
+  }
 
   await audit(tx, {
     principal: input.invitedBy,
