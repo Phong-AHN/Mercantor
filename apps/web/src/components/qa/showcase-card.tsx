@@ -50,7 +50,12 @@ export interface ShowcaseCardProps {
  */
 export function ShowcaseCard({ project, href, findingsHref, now, size = 'gallery' }: ShowcaseCardProps) {
   const profile = project.storefront!;
-  const pair = project.comparisons[0];
+  // The pair someone chose to lead the card; otherwise the desktop view, and
+  // a mobile pair only when that is all there is.
+  const pair =
+    project.comparisons.find((candidate) => candidate.featured) ??
+    project.comparisons.find((candidate) => candidate.beforeCapture.viewport === 'DESKTOP') ??
+    project.comparisons[0];
   const stage = stageChip(project.stage);
   const apps = Array.isArray(profile.detectedApps)
     ? (profile.detectedApps as Array<{ name?: string }>)

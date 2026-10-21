@@ -49,6 +49,7 @@ import {
   type ProfileFormValues,
 } from '@/components/qa/profile-controls';
 import { ShowcaseCard } from '@/components/qa/showcase-card';
+import { checkTargetFor } from '@/features/qa/check-target';
 import { StagePill } from '@/components/domain';
 import { getProject } from '@/features/projects/queries';
 import { getSiteQa, listShowcase } from '@/features/qa/queries';
@@ -416,6 +417,9 @@ export default async function SiteQaOverviewPage({
           description={
             <>
               {qa.lastRun ? `Last check ${formatRelative(qa.lastRun.createdAt, now)}. ` : ''}
+              {qa.profile?.destinationUrl
+                ? `Every check runs on the new store, ${qa.profile.destinationUrl.replace(/^https?:\/\//, '')}. `
+                : 'Checks run on the new store: add its address (the after link) to the profile to start. '}
               Checks read titles, descriptions, headings, alt text, placeholder copy, and the status
               of up to 25 links and 15 images per page.{' '}
               {spellingEnabled
@@ -428,7 +432,9 @@ export default async function SiteQaOverviewPage({
           actions={
             canManage ? (
               <>
-                <CheckAllButton code={code} pageIds={includedPages.map((page) => page.id)} />
+                {qa.profile?.destinationUrl && (
+                  <CheckAllButton code={code} pageIds={includedPages.map((page) => page.id)} />
+                )}
                 <AddPagesButton code={code} suggestions={TEMPLATE_PATHS} />
               </>
             ) : null
@@ -454,74 +460,82 @@ export default async function SiteQaOverviewPage({
                 </TR>
               </THead>
               <TBody>
-                {qa.pages.map((page) => (
-                  <TR key={page.id} className={page.includeInScans ? undefined : 'opacity-60'}>
-                    <TD className="max-w-[22rem]">
-                      <a
-                        href={page.url}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="text-ink block truncate font-medium underline-offset-4 hover:underline"
-                        title={page.url}
-                      >
-                        {page.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
-                      </a>
-                      {page.title && (
-                        <span className="text-muted block truncate text-[12px]">{page.title}</span>
-                      )}
-                    </TD>
-                    <TD>
-                      {canManage ? (
-                        <PageTypeSelect
-                          code={code}
-                          pageId={page.id}
-                          pageType={page.pageType}
-                          confirmed={page.pageTypeConfirmed}
-                        />
-                      ) : (
-                        page.pageType
-                      )}
-                    </TD>
-                    <TD>
-                      <span className="inline-flex items-center gap-2">
-                        <StatusPill descriptor={PAGE_STATE_LABEL[page.state]} size="sm" />
-                        {page.lastHttpStatus && (
-                          <span className="text-faint font-mono text-[11px]">
-                            {page.lastHttpStatus}
+                {qa.pages.map((page) => {
+                  // Opens and filters by the page on the new store - the one the checks read.
+                  const target = checkTargetFor(page.url, qa.profile?.destinationUrl ?? null);
+                  return (
+                    <TR key={page.id} className={page.includeInScans ? undefined : 'opacity-60'}>
+                      <TD className="max-w-[22rem]">
+                        <a
+                          href={target ?? page.url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="text-ink block truncate font-medium underline-offset-4 hover:underline"
+                          title={target ?? page.url}
+                        >
+                          {page.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                        </a>
+                        {page.title && (
+                          <span className="text-muted block truncate text-[12px]">
+                            {page.title}
                           </span>
                         )}
-                      </span>
-                    </TD>
-                    <TD align="right" className="tabular">
-                      {page.openFindings > 0 ? (
-                        <Link
-                          href={`${base}/findings?q=${encodeURIComponent(page.url)}`}
-                          className="text-accent-ink font-medium hover:underline"
-                        >
-                          {page.openFindings}
-                        </Link>
-                      ) : (
-                        <span className="text-faint">0</span>
-                      )}
-                    </TD>
-                    <TD className="text-muted whitespace-nowrap text-[12px]">
-                      {page.lastHttpStatus ? formatRelative(page.lastSeenAt, now) : 'Never'}
-                    </TD>
-                    {canManage && (
-                      <TD align="right">
-                        <span className="inline-flex items-center gap-2">
-                          <IncludeToggle
+                      </TD>
+                      <TD>
+                        {canManage ? (
+                          <PageTypeSelect
                             code={code}
                             pageId={page.id}
-                            included={page.includeInScans}
+                            pageType={page.pageType}
+                            confirmed={page.pageTypeConfirmed}
                           />
-                          {page.includeInScans && <CheckPageButton code={code} pageId={page.id} />}
-                          <RemovePageButton code={code} pageId={page.id} url={page.url} />
+                        ) : (
+                          page.pageType
+                        )}
+                      </TD>
+                      <TD>
+                        <span className="inline-flex items-center gap-2">
+                          <StatusPill descriptor={PAGE_STATE_LABEL[page.state]} size="sm" />
+                          {page.lastHttpStatus && (
+                            <span className="text-faint font-mono text-[11px]">
+                              {page.lastHttpStatus}
+                            </span>
+                          )}
                         </span>
                       </TD>
-                    )}
-                  </TR>
-                ))}
+                      <TD align="right" className="tabular">
+                        {page.openFindings > 0 ? (
+                          <Link
+                            href={`${base}/findings?q=${encodeURIComponent(target ?? page.url)}`}
+                            className="text-accent-ink font-medium hover:underline"
+                          >
+                            {page.openFindings}
+                          </Link>
+                        ) : (
+                          <span className="text-faint">0</span>
+                        )}
+                      </TD>
+                      <TD className="text-muted whitespace-nowrap text-[12px]">
+                        {page.lastHttpStatus ? formatRelative(page.lastSeenAt, now) : 'Never'}
+                      </TD>
+                      {canManage && (
+                        <TD align="right">
+                          <span className="inline-flex items-center gap-2">
+                            <IncludeToggle
+                              code={code}
+                              pageId={page.id}
+                              included={page.includeInScans}
+                            />
+                            {page.includeInScans && target && (
+                              <CheckPageButton code={code} pageId={page.id} />
+                            )}
+                            <RemovePageButton code={code} pageId={page.id} url={page.url} />
+                          </span>
+                        </TD>
+                      )}
+                    </TR>
+                  );
+                })}
               </TBody>
             </Table>
           </div>

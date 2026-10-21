@@ -5,23 +5,26 @@ import { cn } from './cn';
 import { TONE_SOLID } from './tone';
 
 /**
- * Two captures of the same page, one revealed over the other.
+ * Two captures of the same page, one wiped over the other, in one scrolling
+ * window.
  *
- * The slider exists because side-by-side at card width shows two illegible
- * thumbnails, while a wipe keeps both images full width and lets the eye
- * compare the same region. The reference page uses exactly this.
+ * Captures are full-page screenshots - thousands of pixels tall - so fitting
+ * either into the frame shows nothing legible. Instead both are drawn at the
+ * frame's full width and the frame scrolls: one scrollbar moves BOTH images,
+ * so the wipe always compares the same part of the page.
  *
- * Three things it has to get right, and a naive version of this gets all three
- * wrong:
+ * What it has to get right:
  *
- *   1. IT MUST WORK WITHOUT A MOUSE. The handle is a real slider input, so it
- *      is reachable by tab and moved by arrow keys, and a screen reader
- *      announces a position rather than nothing.
- *   2. IT MUST NOT LIE ABOUT SIZE. Both images are given the same aspect box.
- *      Letting each keep its own height makes the after image look longer or
- *      shorter than the before for reasons that have nothing to do with the
- *      work.
- *   3. IT MUST SAY WHAT THE AFTER IS. A design mockup and a live page are not
+ *   1. BOTH IMAGES ARE THE SAME WIDTH. Each is sized to the frame, never to its
+ *      own natural size, so they stay in register as the wipe moves.
+ *   2. ONE SCROLL, BOTH PAGES. The two pages are rarely the same height, so
+ *      the scroll is shared proportionally: the taller page scrolls 1:1 and the
+ *      shorter one is eased along, and both reach their top and bottom
+ *      together instead of one running out halfway down.
+ *   3. IT MUST WORK WITHOUT A MOUSE. The wipe is a real (visually hidden)
+ *      slider, reachable by tab and moved by arrow keys; the scroll area takes
+ *      focus too, so it scrolls from the keyboard.
+ *   4. IT MUST SAY WHAT THE AFTER IS. A design mockup and a live page are not
  *      the same claim, so the badge text is passed in rather than assumed.
  */
 
@@ -33,7 +36,7 @@ export interface BeforeAfterProps {
   beforeLabel?: string;
   /** Where the wipe starts, 0-100. */
   initial?: number;
-  /** Width ÷ height of the frame both images are fitted into. */
+  /** Width ÷ height of the window. Landscape (desktop) by default. */
   aspectRatio?: number;
   className?: string;
 }
@@ -44,14 +47,42 @@ export function BeforeAfter({
   afterLabel = 'AFTER',
   beforeLabel = 'BEFORE',
   initial = 50,
-  aspectRatio = 4 / 3,
+  aspectRatio = 16 / 10,
   className,
 }: BeforeAfterProps) {
   const [position, setPosition] = React.useState(clamp(initial));
+  const [focused, setFocused] = React.useState(false);
   const frameRef = React.useRef<HTMLDivElement>(null);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const beforeRef = React.useRef<HTMLImageElement>(null);
+  const afterRef = React.useRef<HTMLImageElement>(null);
 
-  // Dragging is handled on the frame rather than the handle so the whole image
-  // is a drag target — at card size the handle alone is a hard thing to grab.
+  // Eases the shorter page along so both scroll from top to bottom together.
+  // Written straight to the style: this runs on every scroll frame, and a
+  // React render per frame would be wasted work.
+  const sync = React.useCallback(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const view = scroller.clientHeight;
+    const range = scroller.scrollHeight - view;
+    const progress = range > 0 ? scroller.scrollTop / range : 0;
+    for (const image of [beforeRef.current, afterRef.current]) {
+      if (!image) continue;
+      const own = Math.max(0, image.offsetHeight - view);
+      image.style.transform = `translateY(${scroller.scrollTop - progress * own}px)`;
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(sync);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [sync]);
+
+  // Dragging is handled on the frame rather than a handle so the whole image
+  // is a drag target - at card size a handle alone is a hard thing to grab.
   const pointerTo = React.useCallback((clientX: number) => {
     const frame = frameRef.current;
     if (!frame) return;
@@ -61,47 +92,67 @@ export function BeforeAfter({
   }, []);
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    // A press on the scrollbar lands on the scroll area itself, not on an
+    // image: leave it to scroll.
+    if (event.target === scrollRef.current) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     pointerTo(event.clientX);
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.buttons !== 1) return;
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
     pointerTo(event.clientX);
   };
 
   return (
-    <div className={cn('group relative', className)}>
+    <div className={cn('relative', className)}>
       <div
         ref={frameRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         style={{ aspectRatio: String(aspectRatio) }}
-        className="border-line bg-surface-2 relative w-full touch-pan-y select-none overflow-hidden rounded-[var(--radius-lg)] border"
+        className={cn(
+          'border-line bg-surface-2 relative w-full touch-pan-y select-none overflow-hidden rounded-[var(--radius-lg)] border',
+          focused && 'ring-accent ring-2',
+        )}
       >
-        {/* The after image is the ground; the before is wiped over it, so the
-            result of the work is what remains when the handle is pushed away. */}
-        <img
-          src={after.src}
-          alt={after.alt}
-          draggable={false}
-          className="absolute inset-0 size-full object-cover object-top"
-        />
-        <div className="absolute inset-0 overflow-hidden" style={{ width: `${position}%` }}>
-          <img
-            src={before.src}
-            alt={before.alt}
-            draggable={false}
-            /* Sized to the FRAME, not to this clipped box, so the two images
-               stay in register as the wipe moves. */
-            style={{ width: frameRef.current?.clientWidth ?? undefined }}
-            className="absolute inset-y-0 left-0 h-full max-w-none object-cover object-top"
-          />
+        <div
+          ref={scrollRef}
+          onScroll={sync}
+          tabIndex={0}
+          aria-label="Scroll both pages"
+          className="scrollbar-slim focus-visible:ring-accent absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset"
+        >
+          {/* Both images share one grid cell, so the scroll height is the
+              taller page and neither pushes the other down. */}
+          <div className="grid">
+            <img
+              ref={afterRef}
+              src={after.src}
+              alt={after.alt}
+              draggable={false}
+              onLoad={sync}
+              className="col-start-1 row-start-1 block h-auto w-full max-w-none will-change-transform"
+            />
+            {/* The after page is the ground; the before is wiped over it, so
+                the result of the work is what remains when the wipe is pushed
+                away. */}
+            <img
+              ref={beforeRef}
+              src={before.src}
+              alt={before.alt}
+              draggable={false}
+              onLoad={sync}
+              style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}
+              className="col-start-1 row-start-1 block h-auto w-full max-w-none will-change-transform"
+            />
+          </div>
         </div>
 
         <span
           className={cn(
-            'absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide',
+            'pointer-events-none absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide',
             TONE_SOLID.neutral,
           )}
         >
@@ -109,7 +160,7 @@ export function BeforeAfter({
         </span>
         <span
           className={cn(
-            'absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide',
+            'pointer-events-none absolute right-5 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide',
             TONE_SOLID.accent,
           )}
         >
@@ -127,8 +178,9 @@ export function BeforeAfter({
         </div>
       </div>
 
-      {/* The real control. Visually minimal, fully operable: the frame above is
-          a convenience, this is what keyboards and screen readers use. */}
+      {/* The keyboard and screen-reader control for the wipe. Hidden from
+          sight - the frame is the visible control - and outlines the frame
+          while focused, so a keyboard user can see where they are. */}
       <input
         type="range"
         min={0}
@@ -136,9 +188,11 @@ export function BeforeAfter({
         step={1}
         value={position}
         onChange={(event) => setPosition(clamp(Number(event.target.value)))}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         aria-label={`Reveal ${beforeLabel.toLowerCase()} or ${afterLabel.toLowerCase()}`}
         aria-valuetext={`${Math.round(position)}% ${beforeLabel.toLowerCase()}`}
-        className="accent-accent focus-visible:ring-accent mt-3 w-full cursor-ew-resize focus-visible:outline-none focus-visible:ring-2"
+        className="sr-only"
       />
     </div>
   );

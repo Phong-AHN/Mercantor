@@ -22,6 +22,7 @@ import {
   TrendLineChart,
 } from '@relay/ui';
 import { RunPerfButton } from '@/components/qa/page-controls';
+import { checkTargetFor } from '@/features/qa/check-target';
 import { regressionOf } from '@/features/qa/perf';
 import { getSiteQa, type PerfRow } from '@/features/qa/queries';
 import { requirePrincipalOrRedirect } from '@/server/session';
@@ -74,6 +75,7 @@ export default async function PerformancePage({ params }: { params: Promise<{ co
   const now = clock.now();
 
   const pages = qa.pages.filter((page) => perfTemplateFor(page.pageType) && page.includeInScans);
+  const destination = qa.profile?.destinationUrl ?? null;
 
   return (
     <div className="space-y-4">
@@ -84,6 +86,13 @@ export default async function PerformancePage({ params }: { params: Promise<{ co
         use it to spot changes over time. For client-facing numbers, add Lighthouse results as
         headline numbers on the overview.
       </Alert>
+
+      {!destination && (
+        <Alert tone="warning" title="Add the new store address to run checks">
+          Performance is measured on the new store (the after link), never the store being replaced.
+          Set it in the storefront profile on the Site QA overview.
+        </Alert>
+      )}
 
       {pages.length === 0 ? (
         <Card>
@@ -100,16 +109,16 @@ export default async function PerformancePage({ params }: { params: Promise<{ co
               title={PAGE_TYPE_LABEL[page.pageType].label}
               description={
                 <a
-                  href={page.url}
+                  href={checkTargetFor(page.url, destination) ?? page.url}
                   target="_blank"
                   rel="noreferrer noopener"
                   className="font-mono text-[12px] underline-offset-4 hover:underline"
                 >
-                  {page.url}
+                  {checkTargetFor(page.url, destination) ?? page.url}
                 </a>
               }
               actions={
-                canManage ? (
+                canManage && destination ? (
                   <>
                     <RunPerfButton
                       code={code}

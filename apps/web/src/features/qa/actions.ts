@@ -35,6 +35,7 @@ import {
   probeUrl,
   type Device,
 } from './fetch-page';
+import { checkTargetFor } from './check-target';
 import { assetUrls, extractDocument, measureHtml } from './html';
 import { PERF_METHOD } from './perf';
 import { encryptStorefrontPassword, passwordFor } from './storefront-auth';
@@ -85,6 +86,20 @@ async function loadProfile(projectId: string) {
     throw new ConflictError('Set the storefront URL for this project first.');
   }
   return profile;
+}
+
+/**
+ * The new-store address a page is checked at. Checks are about what we are
+ * delivering, so with no destination set there is nothing to check yet.
+ */
+function requireCheckTarget(pageUrl: string, destinationUrl: string | null): string {
+  const target = checkTargetFor(pageUrl, destinationUrl);
+  if (!target) {
+    throw new ConflictError(
+      'Add the new store address (the after link) to the storefront profile first. Checks run on the new store, not the current one.',
+    );
+  }
+  return target;
 }
 
 // ─── Storefront profile ─────────────────────────────────────────────────────
@@ -529,6 +544,7 @@ export const runPageCheckAction = defineAction({
       where: { id: input.pageId, projectId: project.id },
     });
     if (!page) throw new ConflictError('That page is not on this project.');
+    const target = requireCheckTarget(page.url, profile.destinationUrl);
 
     const run = await db.crawlRun.create({
       data: {
@@ -544,9 +560,9 @@ export const runPageCheckAction = defineAction({
 
     let fetched;
     try {
-      fetched = await fetchStorefrontPage(page.url, {
-        allowedHosts: allowedHostsFor([profile.storefrontUrl, profile.destinationUrl]),
-        password: passwordFor(page.url, profile),
+      fetched = await fetchStorefrontPage(target, {
+        allowedHosts: allowedHostsFor([profile.destinationUrl]),
+        password: passwordFor(target, profile),
         device: 'DESKTOP',
       });
     } catch (error) {
@@ -633,7 +649,7 @@ export const runPageCheckAction = defineAction({
           lastHttpStatus: fetched.status,
           title: doc.title?.slice(0, 300) ?? null,
           lastSeenAt: now,
-          ...(fetched.finalUrl !== page.url ? { canonicalUrl: fetched.finalUrl } : {}),
+          ...(fetched.finalUrl !== target ? { canonicalUrl: fetched.finalUrl } : {}),
         },
       });
 
@@ -707,7 +723,8 @@ export const runPageCheckAction = defineAction({
             projectId: project.id,
             reference: `FND-${count}`,
             pageId: page.id,
-            url: page.url,
+            // What to open to see the problem: the page on the new store.
+            url: target,
             pageType: page.pageType,
             category: result.category,
             severity: result.severity,
@@ -847,6 +864,7 @@ export const runPerfTestAction = defineAction({
     });
     if (!page) throw new ConflictError('That page is not on this project.');
 
+    const target = requireCheckTarget(page.url, profile.destinationUrl);
     const template = perfTemplateFor(page.pageType);
     if (!template) {
       throw new ConflictError(
@@ -863,16 +881,16 @@ export const runPerfTestAction = defineAction({
 
     let result: Prisma.PerfTestUncheckedCreateInput;
     try {
-      const fetched = await fetchStorefrontPage(page.url, {
-        allowedHosts: allowedHostsFor([profile.storefrontUrl, profile.destinationUrl]),
-        password: passwordFor(page.url, profile),
+      const fetched = await fetchStorefrontPage(target, {
+        allowedHosts: allowedHostsFor([profile.destinationUrl]),
+        password: passwordFor(target, profile),
         device,
       });
       const measured = measureHtml(fetched.html, fetched.finalUrl, fetched.bytes);
       result = {
         projectId: project.id,
         pageId: page.id,
-        url: page.url,
+        url: target,
         template,
         device,
         conditions,
@@ -896,7 +914,7 @@ export const runPerfTestAction = defineAction({
       result = {
         projectId: project.id,
         pageId: page.id,
-        url: page.url,
+        url: target,
         template,
         device,
         conditions,
@@ -912,7 +930,7 @@ export const runPerfTestAction = defineAction({
         action: 'qa.perf.run',
         entityType: 'PerfTest',
         entityId: row.id,
-        after: { url: page.url, device, error: row.error },
+        after: { url: target, device, error: row.error },
         ip: ctx.ip,
       });
       return row;
