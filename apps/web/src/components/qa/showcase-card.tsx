@@ -57,6 +57,7 @@ export function ShowcaseCard({ project, href, findingsHref, now, size = 'gallery
   );
   const pair =
     desktop.find((candidate) => candidate.featured) ?? desktop[0] ?? project.comparisons[0];
+  const mobile = pair?.beforeCapture.viewport === 'MOBILE';
   const stage = stageChip(project.stage);
   const apps = Array.isArray(profile.detectedApps)
     ? (profile.detectedApps as Array<{ name?: string }>)
@@ -86,8 +87,15 @@ export function ShowcaseCard({ project, href, findingsHref, now, size = 'gallery
               alt: `${project.merchant.name} ${pair.label} after`,
             }}
             afterLabel={pair.afterLabel}
-            // A desktop-shaped window, whichever capture fills it.
-            aspectRatio={16 / 10}
+            // Shaped like the screen it was captured on: a desktop window, or a
+            // phone - kept phone-width and centred, so it is not a full-column
+            // tower.
+            aspectRatio={mobile ? 9 / 19.5 : 16 / 10}
+            className={
+              mobile
+                ? cn('mx-auto w-full', size === 'hero' ? 'max-w-[20rem]' : 'max-w-[15rem]')
+                : undefined
+            }
           />
         ) : (
           <div className="border-line text-muted grid aspect-[16/10] place-items-center rounded-[var(--radius-lg)] border border-dashed text-center text-[12.5px]">

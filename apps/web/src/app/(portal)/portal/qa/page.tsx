@@ -71,8 +71,8 @@ export default async function PortalSiteReviewPage() {
                   before={{ src: captureSrc(pair.beforeCapture.id), alt: `${pair.label} before` }}
                   after={{ src: captureSrc(pair.afterCapture.id), alt: `${pair.label} after` }}
                   afterLabel={pair.afterLabel}
-                  aspectRatio={pair.beforeCapture.viewport === 'MOBILE' ? 9 / 16 : 16 / 10}
-                  className={pair.beforeCapture.viewport === 'MOBILE' ? 'mx-auto max-w-xs' : undefined}
+                  aspectRatio={pair.beforeCapture.viewport === 'MOBILE' ? 9 / 19.5 : 16 / 10}
+                  className={pair.beforeCapture.viewport === 'MOBILE' ? 'mx-auto w-full max-w-[17rem]' : undefined}
                 />
                 <figcaption className="text-[13px]">
                   <span className="text-ink font-semibold">{pair.label}</span>{' '}
