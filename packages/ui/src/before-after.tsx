@@ -52,7 +52,11 @@ export function BeforeAfter({
 }: BeforeAfterProps) {
   const [position, setPosition] = React.useState(clamp(initial));
   const [focused, setFocused] = React.useState(false);
-  const frameRef = React.useRef<HTMLDivElement>(null);
+  // The width the images are drawn at: the frame minus its scrollbar. The
+  // divider, the labels and the drag maths all use it, so the line sits
+  // exactly on the wipe edge rather than a scrollbar's width to the right.
+  const [contentWidth, setContentWidth] = React.useState<number | null>(null);
+  const overlayRef = React.useRef<HTMLDivElement>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const beforeRef = React.useRef<HTMLImageElement>(null);
   const afterRef = React.useRef<HTMLImageElement>(null);
@@ -76,7 +80,12 @@ export function BeforeAfter({
   React.useEffect(() => {
     const scroller = scrollRef.current;
     if (!scroller || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(sync);
+    const measure = () => {
+      setContentWidth(scroller.clientWidth);
+      sync();
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
     observer.observe(scroller);
     return () => observer.disconnect();
   }, [sync]);
@@ -84,9 +93,9 @@ export function BeforeAfter({
   // Dragging is handled on the frame rather than a handle so the whole image
   // is a drag target - at card size a handle alone is a hard thing to grab.
   const pointerTo = React.useCallback((clientX: number) => {
-    const frame = frameRef.current;
-    if (!frame) return;
-    const rect = frame.getBoundingClientRect();
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const rect = overlay.getBoundingClientRect();
     if (rect.width === 0) return;
     setPosition(clamp(((clientX - rect.left) / rect.width) * 100));
   }, []);
@@ -108,7 +117,6 @@ export function BeforeAfter({
   return (
     <div className={cn('relative', className)}>
       <div
-        ref={frameRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         style={{ aspectRatio: String(aspectRatio) }}
@@ -150,31 +158,37 @@ export function BeforeAfter({
           </div>
         </div>
 
-        <span
-          className={cn(
-            'pointer-events-none absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide',
-            TONE_SOLID.neutral,
-          )}
-        >
-          {beforeLabel}
-        </span>
-        <span
-          className={cn(
-            'pointer-events-none absolute right-5 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide',
-            TONE_SOLID.accent,
-          )}
-        >
-          {afterLabel}
-        </span>
-
         <div
-          className="bg-canvas pointer-events-none absolute inset-y-0 w-0.5"
-          style={{ left: `${position}%` }}
-          aria-hidden
+          ref={overlayRef}
+          className="pointer-events-none absolute inset-y-0 left-0"
+          style={{ width: contentWidth ?? '100%' }}
         >
-          <span className="bg-canvas text-ink shadow-raised absolute top-1/2 grid size-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-[13px]">
-            ↔
+          <span
+            className={cn(
+              'pointer-events-none absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide',
+              TONE_SOLID.neutral,
+            )}
+          >
+            {beforeLabel}
           </span>
+          <span
+            className={cn(
+              'pointer-events-none absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide',
+              TONE_SOLID.accent,
+            )}
+          >
+            {afterLabel}
+          </span>
+
+          <div
+            className="bg-canvas pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2"
+            style={{ left: `${position}%` }}
+            aria-hidden
+          >
+            <span className="bg-canvas text-ink shadow-raised absolute top-1/2 grid size-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-[13px]">
+              ↔
+            </span>
+          </div>
         </div>
       </div>
 

@@ -50,12 +50,13 @@ export interface ShowcaseCardProps {
  */
 export function ShowcaseCard({ project, href, findingsHref, now, size = 'gallery' }: ShowcaseCardProps) {
   const profile = project.storefront!;
-  // The pair someone chose to lead the card; otherwise the desktop view, and
-  // a mobile pair only when that is all there is.
+  // The card always leads with the desktop view - the featured desktop pair,
+  // else any desktop pair. A mobile pair only when no desktop one is shared.
+  const desktop = project.comparisons.filter(
+    (candidate) => candidate.beforeCapture.viewport === 'DESKTOP',
+  );
   const pair =
-    project.comparisons.find((candidate) => candidate.featured) ??
-    project.comparisons.find((candidate) => candidate.beforeCapture.viewport === 'DESKTOP') ??
-    project.comparisons[0];
+    desktop.find((candidate) => candidate.featured) ?? desktop[0] ?? project.comparisons[0];
   const stage = stageChip(project.stage);
   const apps = Array.isArray(profile.detectedApps)
     ? (profile.detectedApps as Array<{ name?: string }>)
@@ -85,7 +86,8 @@ export function ShowcaseCard({ project, href, findingsHref, now, size = 'gallery
               alt: `${project.merchant.name} ${pair.label} after`,
             }}
             afterLabel={pair.afterLabel}
-            aspectRatio={pair.beforeCapture.viewport === 'MOBILE' ? 9 / 16 : 16 / 10}
+            // A desktop-shaped window, whichever capture fills it.
+            aspectRatio={16 / 10}
           />
         ) : (
           <div className="border-line text-muted grid aspect-[16/10] place-items-center rounded-[var(--radius-lg)] border border-dashed text-center text-[12.5px]">
